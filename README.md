@@ -123,7 +123,7 @@
 <h2>· Credits ·</h2>
 
 <p>
-  Inspired by classic low-latency tablet driver projects.
+  Inspired by Devocub Tablet Driver.
   <br/>
   Device configuration ideas and tablet metadata were cross-checked against OpenTabletDriver.
 </p>
