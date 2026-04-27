@@ -21,9 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/main.png" width="48%" alt="Main"/>
-  <img src="assets/screenshots/filters.png" width="48%" alt="Filters"/>
-  <img src="assets/screenshots/misc.png" width="48%" alt="Misc"/>
+  <img src="assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
 </p>
 
 <br/>
