@@ -45,7 +45,10 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (tablet == NULL) {
 				tablet = new Tablet(vendorID, productID, usagePage, usage, inputReportLength);
 				if (tablet->isOpen) {
-					LOG_INFO("Tablet found!\n");
+					LOG_INFO("Tablet found! HID usage 0x%04X 0x%04X inputLen %d\n",
+						tablet->hidDevice->usagePage,
+						tablet->hidDevice->usage,
+						tablet->hidDevice->inputReportLength);
 				}
 				else {
 					if (inputReportLength > 0) {
@@ -260,6 +263,16 @@ bool ProcessCommand(CommandLine *cmd) {
 		// Wacom CTL-4100
 		else if (cmd->GetStringLower(0, "") == "wacom4100") {
 			tablet->settings.type = TabletSettings::TypeWacom4100;
+		}
+
+		// Wacom Bamboo / Graphire-style reports
+		else if (cmd->GetStringLower(0, "") == "wacombamboo") {
+			tablet->settings.type = TabletSettings::TypeWacomBamboo;
+		}
+
+		// Wacom Intuos4 / PTK series
+		else if (cmd->GetStringLower(0, "") == "wacomintuos4") {
+			tablet->settings.type = TabletSettings::TypeWacomIntuos4;
 		}
 
 		// Wacom Drivers

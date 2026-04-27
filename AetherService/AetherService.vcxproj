@@ -133,10 +133,10 @@
     </Link>
     <CustomBuildStep>
       <Command>rem Copy AetherService.exe next to AetherGUI.exe
-if not exist "$(SolutionDir)bin\Release" mkdir "$(SolutionDir)bin\Release"
-if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(SolutionDir)bin\Release\"
-if not exist "$(SolutionDir)bin\Debug" mkdir "$(SolutionDir)bin\Debug"
-if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(SolutionDir)bin\Debug\"
+if not exist "$(ProjectDir)..\bin\Release" mkdir "$(ProjectDir)..\bin\Release"
+if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\Release\"
+if not exist "$(ProjectDir)..\bin\Debug" mkdir "$(ProjectDir)..\bin\Debug"
+if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\Debug\"
 </Command>
       <Message>Copy AetherService to output</Message>
       <Outputs>copyfiles.txt</Outputs>
@@ -159,6 +159,11 @@ if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(SolutionDir)bin\Debug\"
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>if not exist "$(ProjectDir)..\bin\$(Configuration)" mkdir "$(ProjectDir)..\bin\$(Configuration)"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
+      <Message>Copy AetherService next to AetherGUI</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CommandLine.h" />

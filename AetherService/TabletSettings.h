@@ -6,6 +6,8 @@ public:
 		TabletNormal,
 		TypeWacomIntuos,
 		TypeWacom4100,
+		TypeWacomBamboo,
+		TypeWacomIntuos4,
 		TypeWacomDrivers
 	};
 
@@ -31,4 +33,3 @@ public:
 	TabletSettings();
 	~TabletSettings();
 };
-

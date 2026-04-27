@@ -140,7 +140,21 @@ Width 216.00
 Height 135.00
 InitFeature 0x02 0x02
 
+# Wacom CTL-480 (OpenTabletDriver match)
+Tablet 0x056a 0x030e 0x0000 0x0000 10
+Name "Wacom CTL-480"
+ReportId 0x02
+ReportLength 10
+DetectMask 0x40
+MaxX 15200
+MaxY 9500
+MaxPressure 1023
+Width 152.0
+Height 95.0
+InitFeature 0x02 0x02
+
 # Wacom CTL-480 (Wacom drivers installed)
+Tablet 0x056a 0x030e 0x0000 0x0000 11
 Tablet 0x056a 0x030e 0xFF00 0x000A
 Name "Wacom CTL-480 (Wacom drivers installed)"
 ReportId 0x02
@@ -166,7 +180,21 @@ Width 152.0
 Height 95.0
 InitFeature 0x02 0x02
 
+# Wacom CTH-480 (OpenTabletDriver match)
+Tablet 0x056a 0x0302 0x0000 0x0000 10
+Name "Wacom CTH-480"
+ReportId 0x02
+ReportLength 10
+DetectMask 0x40
+MaxX 15200
+MaxY 9500
+MaxPressure 1023
+Width 152.0
+Height 95.0
+InitFeature 0x02 0x02
+
 # Wacom CTH-480 (Wacom drivers installed)
+Tablet 0x056a 0x0302 0x0000 0x0000 11
 Tablet 0x056a 0x0302 0xFF00 0x000A
 Name "Wacom CTH-480 (Wacom drivers installed)"
 ReportId 0x02
@@ -710,6 +738,35 @@ Height 135.000
 InitFeature 0x02 0x02
 Type WacomIntuos
 
+# Wacom PTK-440
+Tablet 0x056A 0x00B8 0x0000 0x0000 10
+Tablet 0x056A 0x00B8 0x000D 0x0001
+Name "Wacom PTK-440"
+ReportId 0x02
+ReportLength 10
+DetectMask 0x20
+MaxX 31496
+MaxY 19685
+MaxPressure 2047
+Width 157.480
+Height 98.425
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+# Wacom PTK-440 (Wacom drivers installed)
+Tablet 0x056A 0x00B8 0x0000 0x0000 11
+Name "Wacom PTK-440 (Wacom drivers installed)"
+ReportId 0x02
+ReportLength 11
+DetectMask 0x20
+MaxX 31496
+MaxY 19685
+MaxPressure 2047
+Width 157.480
+Height 98.425
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
 # Wacom CTH-690
 Tablet 0x056A 0x033E 0xFF0D 0x0001
 Tablet 0x056A 0x033E 0x000D 0x0001
@@ -728,6 +785,7 @@ Type WacomIntuos
 Tablet 0x056A 0x0017 0xFF0D 0x0001
 Tablet 0x056A 0x0017 0x000D 0x0001
 Name "Wacom CTE-450"
+ReportId 0x02
 ReportLength 9
 DetectMask 0x00
 MaxX 14760
@@ -736,10 +794,13 @@ MaxPressure 511
 Width 147.600
 Height 92.250
 InitFeature 0x02 0x02
+Type WacomBamboo
 
 # Wacom CTE-650
 Tablet 0x056A 0x0018 0x0000 0x0000 9
+Tablet 0x056A 0x0018 0x0000 0x0000 10
 Name "Wacom CTE-650 (OpenTabletDriver match)"
+ReportId 0x02
 ReportLength 9
 DetectMask 0x00
 MaxX 21648
@@ -748,8 +809,10 @@ MaxPressure 511
 Width 216.480
 Height 135.300
 InitFeature 0x02 0x02
+Type WacomBamboo
 
 # Wacom CTE-650
+Tablet 0x056A 0x0018 0x0000 0x0000 11
 Tablet 0x056A 0x0018 0xFF00 0x000A
 Tablet 0x056A 0x0018 0xFF00 0x0001
 Tablet 0x056A 0x0018 0xFF00 0x0002
@@ -768,6 +831,7 @@ Type WacomDrivers
 Tablet 0x056A 0x0018 0xFF0D 0x0001
 Tablet 0x056A 0x0018 0x000D 0x0001
 Name "Wacom CTE-650"
+ReportId 0x02
 ReportLength 9
 DetectMask 0x00
 MaxX 21648
@@ -776,6 +840,7 @@ MaxPressure 511
 Width 216.480
 Height 135.300
 InitFeature 0x02 0x02
+Type WacomBamboo
 
 )CFG";
 

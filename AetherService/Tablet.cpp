@@ -255,6 +255,39 @@ int Tablet::ReadPosition() {
 		// Copy buffer to struct
 		//
 	}
+	else if (settings.type == TabletSettings::TypeWacomBamboo) {
+		reportData.reportId = data[0];
+		reportData.buttons = 0;
+		if (data[1] & 0x01) reportData.buttons |= 0x01;
+		if (data[1] & 0x02) reportData.buttons |= 0x02;
+		if (data[1] & 0x04) reportData.buttons |= 0x04;
+
+		reportData.x = data[2] | (data[3] << 8);
+		reportData.y = data[4] | (data[5] << 8);
+		reportData.pressure = (data[1] & 0x01) ? (data[6] | ((data[7] & 0x03) << 8)) : 0;
+		reportData.z = 0;
+
+		bool hasPosition =
+			(data[1] & 0x80) ||
+			reportData.x != 0 ||
+			reportData.y != 0 ||
+			reportData.pressure != 0;
+		if (!hasPosition) {
+			return Tablet::PacketPositionInvalid;
+		}
+	}
+	else if (settings.type == TabletSettings::TypeWacomIntuos4) {
+		if (settings.reportLength == 11) {
+			data = buffer + 1;
+		}
+
+		reportData.reportId = data[0];
+		reportData.buttons = data[1];
+		reportData.x = ((data[3] | (data[2] << 8)) << 1) | ((data[9] >> 1) & 1);
+		reportData.y = ((data[5] | (data[4] << 8)) << 1) | (data[9] & 1);
+		reportData.pressure = (data[6] << 3) | ((data[7] & 0xC0) >> 5) | (data[1] & 1);
+		reportData.z = data[9] >> 2;
+	}
 	else {
 		memcpy(&reportData, data, sizeof(reportData));
 	}
@@ -348,7 +381,11 @@ bool Tablet::Read(void *buffer, int length) {
 		status = usbDevice->Read(usbPipeId, buffer, length) > 0;
 	}
 	else if (hidDevice != NULL) {
-		status = hidDevice->Read(buffer, length);
+		int readLength = length;
+		if (hidDevice->inputReportLength > readLength) {
+			readLength = hidDevice->inputReportLength;
+		}
+		status = hidDevice->Read(buffer, readLength);
 	}
 	if (debugEnabled && status) {
 		LOG_DEBUGBUFFER(buffer, length, "Read: ");

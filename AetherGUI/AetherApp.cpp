@@ -1,9 +1,12 @@
 #include "AetherApp.h"
+#include "Version.h"
 
 #include <SetupAPI.h>
 #include <hidsdi.h>
+#include <winhttp.h>
 #pragma comment(lib, "hid.lib")
 #pragma comment(lib, "setupapi.lib")
+#pragma comment(lib, "winhttp.lib")
 
 static bool FileExists(const std::string& path) {
 	DWORD attrs = GetFileAttributesA(path.c_str());
@@ -31,6 +34,207 @@ static std::wstring Ellipsize(const std::wstring& text, size_t maxChars) {
 	if (maxChars <= 3)
 		return text.substr(0, maxChars);
 	return text.substr(0, maxChars - 3) + L"...";
+}
+
+static std::wstring Utf8ToWide(const std::string& text) {
+	if (text.empty())
+		return std::wstring();
+
+	int size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
+	if (size <= 0)
+		return std::wstring();
+
+	std::wstring result(size, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), &result[0], size);
+	return result;
+}
+
+static std::string JsonStringValue(const std::string& json, const char* key) {
+	std::string pattern = "\"";
+	pattern += key;
+	pattern += "\"";
+
+	size_t pos = json.find(pattern);
+	if (pos == std::string::npos)
+		return std::string();
+
+	pos = json.find(':', pos + pattern.size());
+	if (pos == std::string::npos)
+		return std::string();
+
+	pos = json.find('"', pos + 1);
+	if (pos == std::string::npos)
+		return std::string();
+
+	std::string result;
+	bool escaping = false;
+	for (size_t i = pos + 1; i < json.size(); i++) {
+		char ch = json[i];
+		if (escaping) {
+			switch (ch) {
+			case '"': result.push_back('"'); break;
+			case '\\': result.push_back('\\'); break;
+			case '/': result.push_back('/'); break;
+			case 'b': result.push_back('\b'); break;
+			case 'f': result.push_back('\f'); break;
+			case 'n': result.push_back('\n'); break;
+			case 'r': result.push_back('\r'); break;
+			case 't': result.push_back('\t'); break;
+			default: result.push_back(ch); break;
+			}
+			escaping = false;
+			continue;
+		}
+		if (ch == '\\') {
+			escaping = true;
+			continue;
+		}
+		if (ch == '"')
+			break;
+		result.push_back(ch);
+	}
+	return result;
+}
+
+static std::vector<int> ParseVersionNumbers(const std::string& version) {
+	std::vector<int> numbers;
+	int current = -1;
+	for (char ch : version) {
+		if (ch >= '0' && ch <= '9') {
+			if (current < 0)
+				current = 0;
+			current = current * 10 + (ch - '0');
+		}
+		else if (current >= 0) {
+			numbers.push_back(current);
+			current = -1;
+		}
+	}
+	if (current >= 0)
+		numbers.push_back(current);
+	return numbers;
+}
+
+static bool IsVersionNewer(const std::string& latest, const std::string& current) {
+	std::vector<int> latestNumbers = ParseVersionNumbers(latest);
+	std::vector<int> currentNumbers = ParseVersionNumbers(current);
+	if (latestNumbers.empty() || currentNumbers.empty())
+		return false;
+
+	size_t count = std::max(latestNumbers.size(), currentNumbers.size());
+	for (size_t i = 0; i < count; i++) {
+		int a = i < latestNumbers.size() ? latestNumbers[i] : 0;
+		int b = i < currentNumbers.size() ? currentNumbers[i] : 0;
+		if (a > b) return true;
+		if (a < b) return false;
+	}
+	return false;
+}
+
+struct ReleaseInfo {
+	std::string tag;
+	std::string htmlUrl;
+};
+
+static bool FetchLatestRelease(ReleaseInfo& info) {
+	bool ok = false;
+	HINTERNET session = WinHttpOpen(
+		L"AetherGUI/" AETHERGUI_VERSION_W,
+		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME,
+		WINHTTP_NO_PROXY_BYPASS,
+		0);
+	if (!session)
+		return false;
+
+	HINTERNET connect = WinHttpConnect(session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
+	if (connect) {
+		HINTERNET request = WinHttpOpenRequest(
+			connect,
+			L"GET",
+			AETHERGUI_GITHUB_LATEST_RELEASE_API_PATH,
+			nullptr,
+			WINHTTP_NO_REFERER,
+			WINHTTP_DEFAULT_ACCEPT_TYPES,
+			WINHTTP_FLAG_SECURE);
+
+		if (request) {
+			LPCWSTR headers =
+				L"User-Agent: AetherGUI/" AETHERGUI_VERSION_W L"\r\n"
+				L"Accept: application/vnd.github+json\r\n"
+				L"X-GitHub-Api-Version: 2022-11-28\r\n";
+
+			if (WinHttpSendRequest(request, headers, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+				WinHttpReceiveResponse(request, nullptr)) {
+
+				DWORD status = 0;
+				DWORD statusSize = sizeof(status);
+				WinHttpQueryHeaders(
+					request,
+					WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+					WINHTTP_HEADER_NAME_BY_INDEX,
+					&status,
+					&statusSize,
+					WINHTTP_NO_HEADER_INDEX);
+
+				if (status == 200) {
+					std::string body;
+					DWORD available = 0;
+					while (WinHttpQueryDataAvailable(request, &available) && available > 0) {
+						std::string chunk(available, '\0');
+						DWORD read = 0;
+						if (!WinHttpReadData(request, &chunk[0], available, &read) || read == 0)
+							break;
+						chunk.resize(read);
+						body += chunk;
+					}
+
+					info.tag = JsonStringValue(body, "tag_name");
+					info.htmlUrl = JsonStringValue(body, "html_url");
+					ok = !info.tag.empty();
+				}
+			}
+			WinHttpCloseHandle(request);
+		}
+		WinHttpCloseHandle(connect);
+	}
+
+	WinHttpCloseHandle(session);
+	return ok;
+}
+
+static void StartUpdateCheck(HWND hwnd) {
+	std::thread([hwnd]() {
+		Sleep(1500);
+
+		ReleaseInfo latest;
+		if (!FetchLatestRelease(latest))
+			return;
+		if (!IsVersionNewer(latest.tag, AETHERGUI_VERSION))
+			return;
+		if (!IsWindow(hwnd))
+			return;
+
+		std::wstring latestTag = Utf8ToWide(latest.tag);
+		std::wstring message =
+			L"A new AetherGUI update is available.\n\n"
+			L"Current version: " AETHERGUI_VERSION_W L"\n"
+			L"Latest version: " + latestTag + L"\n\n"
+			L"Open the GitHub release page?";
+
+		int result = MessageBoxW(
+			hwnd,
+			message.c_str(),
+			L"AetherGUI Update Available",
+			MB_ICONINFORMATION | MB_YESNO | MB_SETFOREGROUND);
+
+		if (result == IDYES) {
+			std::wstring url = latest.htmlUrl.empty()
+				? std::wstring(AETHERGUI_GITHUB_RELEASES_URL)
+				: Utf8ToWide(latest.htmlUrl);
+			ShellExecuteW(hwnd, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		}
+	}).detach();
 }
 
 struct MonitorEnumContext {
@@ -114,6 +318,7 @@ bool AetherApp::Initialize(HWND hwnd) {
 
 	InitControls();
 	AutoLoadConfig();
+	StartUpdateCheck(hWnd);
 
 	// Check if VMulti driver is installed
 	vmultiCheckDone = true;

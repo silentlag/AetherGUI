@@ -50,6 +50,87 @@
 
 <br/>
 
+<h2>· Supported Tablets ·</h2>
+
+<p>
+  AetherGUI includes an embedded tablet database for common Wacom, XP-Pen, Huion, and Gaomon devices.
+  Some Wacom models include extra matching rules for official Wacom-driver HID interfaces.
+</p>
+
+<table align="center">
+  <tr>
+    <th align="center">Brand</th>
+    <th align="center">Models</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>Wacom Bamboo / One / Graphire</strong></td>
+    <td align="center">
+      CTE-450 · CTE-650 · CTL-460 · CTL-470 · CTL-471 · CTL-472 · CTL-480 · CTL-490 · CTL-660 · CTL-671 · CTL-672 · CTL-680 · CTL-690<br/>
+      CTH-460 · CTH-460(A) · CTH-461 · CTH-461(A) · CTH-461SE · CTH-470 · CTH-480 · CTH-490 · CTH-661 · CTH-661(A) · CTH-661SE · CTH-670 · CTH-680 · CTH-690<br/>
+      CTT-460 · MTE-450
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Wacom Intuos / Intuos Pro</strong></td>
+    <td align="center">
+      CTL-4100 · PTK-440 · PTK-450 · PTK-650 · PTH-450 · PTH-451 · PTH-650 · PTH-651 · PTH-850 · PTH-851
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>XP-Pen</strong></td>
+    <td align="center">Deco 01 · G430 · G540 Pro · G640</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Huion</strong></td>
+    <td align="center">420 · H420 · H430P · H640P · osu!tablet</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Gaomon</strong></td>
+    <td align="center">S56K</td>
+  </tr>
+</table>
+
+<br/>
+
+<h2>· Feature Notes ·</h2>
+
+<table align="center">
+  <tr>
+    <th align="center">Feature</th>
+    <th align="center">Status / Notes</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>Absolute / Relative output</strong></td>
+    <td align="center">Primary supported modes for gameplay and desktop cursor control.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Windows Ink / Digitizer</strong></td>
+    <td align="center">Requires the optional <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a>.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>High polling / overclock</strong></td>
+    <td align="center">Targets up to 2000 Hz. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Pressure and pen buttons</strong></td>
+    <td align="center">Supported for configured report parsers. Button layout can vary by model and driver mode.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Touch, wheels, and auxiliary buttons</strong></td>
+    <td align="center">Model-specific. Pen input is the main compatibility target; extra controls may need per-device tuning.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Official vendor drivers</strong></td>
+    <td align="center">Some drivers expose different HID interfaces or block access. Check the Console tab for HID diagnostics if detection fails.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Unknown Wacom variants</strong></td>
+    <td align="center">The Console prints VID/PID, usage, and input report length so missing variants can be added quickly.</td>
+  </tr>
+</table>
+
+<br/>
+
 <h2>· Project Layout ·</h2>
 
 <table align="center">
