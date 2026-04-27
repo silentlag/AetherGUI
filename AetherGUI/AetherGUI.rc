@@ -1,0 +1,5 @@
+// Aether GUI Resource File
+#include "resource.h"
+
+// Application icon — must be the FIRST icon resource (lowest ID) to be used as default
+IDI_AETHER_ICON ICON "assets\\aether_logo.ico"
