@@ -20,6 +20,12 @@
   output modes, smoothing filters, profiles, and performance tuning.
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/main.png" width="48%" alt="Main"/>
+  <img src="assets/screenshots/filters.png" width="48%" alt="Filters"/>
+  <img src="assets/screenshots/misc.png" width="48%" alt="Misc"/>
+</p>
+
 <br/>
 
 <h2>· Highlights ·</h2>
