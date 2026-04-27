@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="AetherGUI/assets/aether_logo.png" width="49%" alt="AetherGUI logo"/>
+<img src="AetherGUI/assets/aether_logo.png" width="25%" alt="AetherGUI logo"/>
 
 <h1>AetherGUI</h1>
 
