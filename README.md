@@ -31,7 +31,7 @@
 
 <br/>
 
-<h2>· Highlights ·</h2>
+<h2>· Feautures ·</h2>
 
 <table align="center">
   <tr>
