@@ -20,10 +20,13 @@
   output modes, smoothing filters, profiles, and performance tuning.
 </p>
 
-<p align="center">
-  <img src="AetherGUI/assets/screenshots/main.png" width="48%" alt="Main"/>
-  <img src="AetherGUI/assets/screenshots/filters.png" width="48%" alt="Filters"/>
-  <img src="AetherGUI/assets/screenshots/misc.png" width="48%" alt="Misc"/>
+<p>
+  <img src="AetherGUI/assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
+</p>
+
+<p>
+  <img src="AetherGUI/assets/screenshots/filters.png" width="49%" alt="AetherGUI filters panel"/>
+  <img src="AetherGUI/assets/screenshots/misc.png" width="49%" alt="AetherGUI settings panel"/>
 </p>
 
 <br/>
@@ -75,7 +78,7 @@
 <p>
   Windows 10 / 11 · Visual Studio 2022 or newer · Windows SDK
   <br/>
-  Optional: VMulti driver for Windows Ink / Digitizer output
+  Optional: <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a> for Windows Ink / Digitizer output
 </p>
 
 <br/>
