@@ -754,6 +754,14 @@ void AetherApp::ClampScreenArea() {
 	area.screenY.value = Clamp(area.screenY.value, 0.0f, maxY);
 }
 
+void AetherApp::CenterScreenArea() {
+	float maxX = std::max(0.0f, detectedScreenW - area.screenWidth.value);
+	float maxY = std::max(0.0f, detectedScreenH - area.screenHeight.value);
+	area.screenX.value = maxX * 0.5f;
+	area.screenY.value = maxY * 0.5f;
+	ClampScreenArea();
+}
+
 void AetherApp::ClampTabletAreaToFull(float fullTabletW, float fullTabletH) {
 	area.tabletWidth.value = Clamp(area.tabletWidth.value, area.tabletWidth.minVal, fullTabletW);
 	area.tabletHeight.value = Clamp(area.tabletHeight.value, area.tabletHeight.minVal, fullTabletH);
@@ -1640,7 +1648,14 @@ void AetherApp::DrawAreaPanel() {
 
 	area.customValues.x = cx;
 	area.customValues.y = y;
-	area.customValues.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	bool customValuesChanged = area.customValues.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	if (customValuesChanged) {
+		if (!area.customValues.value) {
+			CenterScreenArea();
+			ApplyAllSettings();
+		}
+		AutoSaveConfig();
+	}
 	area.customValues.Draw(renderer);
 	valueControlStep = area.customValues.value ? 42.0f : 48.0f;
 	y += 36.0f;
@@ -1703,28 +1718,44 @@ void AetherApp::DrawAreaPanel() {
 			Theme::TextAccent(), renderer.pFontSmall, Renderer::AlignCenter);
 
 		bool screenChanged = false;
+		float oldScreenW = area.screenWidth.value;
+		float oldScreenH = area.screenHeight.value;
+		float oldScreenX = area.screenX.value;
+		float oldScreenY = area.screenY.value;
+		bool screenWidthChanged = false;
+		bool screenHeightChanged = false;
+		bool screenXChanged = false;
+		bool screenYChanged = false;
 		if (areaSingleColumn) {
 			y = previewY + previewH + 12;
-			screenChanged |= drawValueControl(area.screenWidth, cx, y, cw);
+			screenWidthChanged = drawValueControl(area.screenWidth, cx, y, cw);
+			screenChanged |= screenWidthChanged;
 			y += valueControlStep;
-			screenChanged |= drawValueControl(area.screenHeight, cx, y, cw);
+			screenHeightChanged = drawValueControl(area.screenHeight, cx, y, cw);
+			screenChanged |= screenHeightChanged;
 			y += valueControlStep;
 			if (area.customValues.value) {
-				screenChanged |= drawValueControl(area.screenX, cx, y, cw);
+				screenXChanged = drawValueControl(area.screenX, cx, y, cw);
+				screenChanged |= screenXChanged;
 				y += valueControlStep;
-				screenChanged |= drawValueControl(area.screenY, cx, y, cw);
+				screenYChanged = drawValueControl(area.screenY, cx, y, cw);
+				screenChanged |= screenYChanged;
 				y += valueControlStep;
 			}
 		} else {
 			float controlX = cx + hw + 8;
 			float controlW = hw - 8;
-			screenChanged |= drawValueControl(area.screenWidth, controlX, previewY, controlW);
-			screenChanged |= drawValueControl(area.screenHeight, controlX, previewY + valueControlStep, controlW);
+			screenWidthChanged = drawValueControl(area.screenWidth, controlX, previewY, controlW);
+			screenHeightChanged = drawValueControl(area.screenHeight, controlX, previewY + valueControlStep, controlW);
+			screenChanged |= screenWidthChanged;
+			screenChanged |= screenHeightChanged;
 
 			int screenRows = 2;
 			if (area.customValues.value) {
-				screenChanged |= drawValueControl(area.screenX, controlX, previewY + valueControlStep * 2.0f, controlW);
-				screenChanged |= drawValueControl(area.screenY, controlX, previewY + valueControlStep * 3.0f, controlW);
+				screenXChanged = drawValueControl(area.screenX, controlX, previewY + valueControlStep * 2.0f, controlW);
+				screenYChanged = drawValueControl(area.screenY, controlX, previewY + valueControlStep * 3.0f, controlW);
+				screenChanged |= screenXChanged;
+				screenChanged |= screenYChanged;
 				screenRows = 4;
 			}
 			float controlsH = valueControlStep * (float)screenRows - 6.0f;
@@ -1732,6 +1763,18 @@ void AetherApp::DrawAreaPanel() {
 		}
 
 		ClampScreenArea();
+		if ((screenWidthChanged || screenHeightChanged) && !screenXChanged && !screenYChanged && !isDraggingArea) {
+			if (area.customValues.value) {
+				float centerX = oldScreenX + oldScreenW * 0.5f;
+				float centerY = oldScreenY + oldScreenH * 0.5f;
+				area.screenX.value = centerX - area.screenWidth.value * 0.5f;
+				area.screenY.value = centerY - area.screenHeight.value * 0.5f;
+				ClampScreenArea();
+			}
+			else {
+				CenterScreenArea();
+			}
+		}
 		if (screenChanged) {
 			ApplyAspectLock(false);
 			ApplyAllSettings();
@@ -2047,6 +2090,7 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "ScreenHeight=" << area.screenHeight.value << "\n";
 	f << "ScreenX=" << area.screenX.value << "\n";
 	f << "ScreenY=" << area.screenY.value << "\n";
+	f << "CustomValues=" << (int)area.customValues.value << "\n";
 	f << "Rotation=" << area.rotation.value << "\n";
 	f << "OutputMode=" << outputMode.selected << "\n";
 	f << "ButtonTip=" << buttonTip.selected << "\n";
@@ -2139,6 +2183,7 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "ScreenHeight") area.screenHeight.value = val;
 		else if (key == "ScreenX") area.screenX.value = val;
 		else if (key == "ScreenY") area.screenY.value = val;
+		else if (key == "CustomValues") area.customValues.value = (val > 0.5f);
 		else if (key == "Rotation") area.rotation.value = val;
 		else if (key == "OutputMode") outputMode.selected = (int)val;
 		else if (key == "ButtonTip") buttonTip.selected = (int)val;
@@ -2206,6 +2251,8 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 	}
 	f.close();
 	ClampScreenArea();
+	if (!area.customValues.value)
+		CenterScreenArea();
 	ApplyAspectLock(false);
 	accentPicker.SetRGB(Theme::Custom::AccentR, Theme::Custom::AccentG, Theme::Custom::AccentB);
 	

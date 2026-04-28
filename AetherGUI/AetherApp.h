@@ -353,6 +353,8 @@ private:
 	
 	void ClampScreenArea();
 	
+	void CenterScreenArea();
+	
 	void ClampTabletAreaToFull(float fullTabletW, float fullTabletH);
 	
 	void ApplyAspectLock(bool preserveHeight);

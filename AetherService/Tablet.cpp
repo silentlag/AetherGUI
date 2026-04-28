@@ -368,6 +368,17 @@ int Tablet::ReadPosition() {
 		reportData.pressure = data[6] | (data[7] << 8);
 		reportData.z = 0;
 	}
+	else if (settings.type == TabletSettings::TypeInspiroy) {
+		if (data[1] == 0x00 || data[1] == 0xE0 || data[1] == 0xE3 || data[1] == 0xF1 || (data[1] & 0x80) == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & ~0x81;
+		reportData.x = data[2] | (data[3] << 8);
+		reportData.y = data[4] | (data[5] << 8);
+		reportData.pressure = data[6] | (data[7] << 8);
+		reportData.z = 0;
+	}
 	else if (settings.type == TabletSettings::TypeXPPen) {
 		if (data[1] == 0xC0 || (data[1] & 0x10)) {
 			return Tablet::PacketPositionInvalid;

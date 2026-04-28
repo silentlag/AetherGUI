@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <string>
 #include <vector>
 #include <sstream>
@@ -1575,13 +1575,14 @@ Height 76.20
 Tablet "{62F12D4C-3431-4EFD-8DD7-8E9AAB18D30C}" 201 HUION_T173
 Name "Huion H640P"
 ReportId 0x08
-ReportLength 8
+ReportLength 12
 DetectMask 0x80
 MaxX 31999
 MaxY 20000
 MaxPressure 8191
 Width 160.0
 Height 100.0
+Type UCLogic
 
 # Gaomon S56K
 Tablet "{62F12D4C-3431-4EFD-8DD7-8E9AAB18D30C}" 201 HUION_T156
@@ -1997,7 +1998,2470 @@ Type WacomBamboo
 
 )CFG";
 
-	const char* configDataGaomonExtended = R"CFG(
+	const char* configDataHuionHid = R"CFG(
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T173_\d{6}$"
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T173_\d{6}$"
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T203_\d{6}$"
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T203_\d{6}$"
+Name "Huion H640P"
+ReportId 0x08
+ReportLength 12
+DetectMask 0x80
+MaxX 32000
+MaxY 20000
+MaxPressure 8191
+Width 160.0
+Height 100.0
+InitString 200
+Type UCLogic
+
+)CFG";
+
+	const char* configDataParblo = R"CFG(
+Tablet 0x0B57 0x9091 0x0000 0x0000 10
+Name "Parblo A609"
+ReportLength 10
+DetectMask 0x20
+MaxX 44704
+MaxY 27940
+MaxPressure 2047
+Width 223.520
+Height 139.700
+InitFeature 0x02 0x02
+Type WacomIntuos
+
+Tablet 0x0483 0xA022 0x0000 0x0000 10
+Name "Parblo A610 Pro (Variant 2)"
+ReportLength 10
+MaxX 25200
+MaxY 15750
+MaxPressure 8191
+Width 252.000
+Height 157.500
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x1903 0x0000 0x0000 10
+Name "Parblo A610 Pro"
+ReportLength 10
+MaxX 51100
+MaxY 32000
+MaxPressure 8191
+Width 255.500
+Height 160.000
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x5543 0x0081 0x0000 0x0000 8 201 "F401-HK708-STD"
+Name "Parblo A610"
+ReportLength 8
+MaxX 40000
+MaxY 24000
+MaxPressure 2047
+Width 254.000
+Height 152.400
+InitString 100 123
+Type XPPenOffsetAux
+
+Tablet 0x0483 0xA640 0x0000 0x0000 10
+Name "Parblo A640 V2"
+ReportLength 10
+MaxX 31203
+MaxY 18730
+MaxPressure 8191
+Width 156.015
+Height 93.650
+InitReport 0x02 0xB0 0x04 0x00 0x00 0x00 0x00 0x00
+Type XPPen
+
+Tablet 0x5543 0x0061 0x0000 0x0000 10
+Name "Parblo A640"
+ReportLength 10
+MaxX 29616
+MaxY 17170
+MaxPressure 8191
+Width 148.080
+Height 85.850
+InitString 100
+
+Tablet 0x0483 0xA013 0x0000 0x0000 10
+Name "Parblo Intangbo M"
+ReportLength 10
+MaxX 26050
+MaxY 16000
+MaxPressure 8191
+Width 260.500
+Height 160.000
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA014 0x0000 0x0000 10
+Name "Parblo Intangbo S"
+ReportLength 10
+MaxX 17306
+MaxY 10045
+MaxPressure 8191
+Width 173.060
+Height 100.450
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA016 0x0000 0x0000 10
+Name "Parblo Intangbo SW"
+ReportLength 10
+MaxX 28800
+MaxY 16200
+MaxPressure 16383
+Width 182.880
+Height 102.869
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA005 0x0000 0x0000 10
+Name "Parblo Ninos M"
+ReportLength 10
+MaxX 20320
+MaxY 10160
+MaxPressure 8191
+Width 217.195
+Height 125.220
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA019 0x0000 0x0000 10
+Name "Parblo Ninos N4"
+ReportLength 10
+MaxX 21600
+MaxY 16200
+MaxPressure 8191
+Width 108.000
+Height 81.000
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA020 0x0000 0x0000 10
+Name "Parblo Ninos N7"
+ReportLength 10
+MaxX 25200
+MaxY 15745
+MaxPressure 8191
+Width 177.800
+Height 111.090
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA20B 0x0000 0x0000 10
+Name "Parblo Ninos N7B"
+ReportLength 10
+MaxX 28799
+MaxY 16199
+MaxPressure 8191
+Width 177.800
+Height 114.000
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x0483 0xA006 0x0000 0x0000 10
+Name "Parblo Ninos S"
+ReportLength 10
+MaxX 24743
+MaxY 16380
+MaxPressure 8191
+Width 157.118
+Height 104.013
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+)CFG";
+	
+
+
+	const char* configDataCompatibleExtended1 = R"CFG(
+Tablet 0x28BD 0x0910 0x0000 0x0000 10
+Name "Adesso Cybertablet K8"
+ReportLength 10
+MaxX 20320
+MaxY 11430
+MaxPressure 8191
+Width 203,2
+Height 114,3
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "OEM16_T206_\d{6}$"
+Name "Artisul A1201"
+ReportLength 12
+MaxX 51690
+MaxY 34310
+MaxPressure 8191
+Width 258,45
+Height 171,55
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "OEM16_T206_\d{6}$"
+Name "Artisul A1201"
+ReportLength 12
+MaxX 51690
+MaxY 34310
+MaxPressure 8191
+Width 258,45
+Height 171,55
+InitString 200
+Type UCLogic
+
+Tablet 0x5543 0x0054 0x0000 0x0000 64
+Name "Artisul AP604"
+ReportLength 64
+MaxX 15900
+MaxY 9930
+MaxPressure 2047
+Width 159
+Height 99,3
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "OEM16_M193_\d{6}$"
+Name "Artisul D16 Pro"
+ReportLength 12
+MaxX 68834
+MaxY 38714
+MaxPressure 8191
+Width 344,17
+Height 193,57
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "OEM16_M165_\d{6}$"
+Name "Artisul D22S"
+ReportLength 12
+MaxX 95352
+MaxY 53645
+MaxPressure 8191
+Width 476,76
+Height 268,225
+InitString 200
+Type Giano
+
+Tablet 0x5543 0x0081 0x0000 0x0000 10 201 "F610_M61P-T\d{4}$"
+Name "Artisul M0610 Pro"
+ReportLength 10
+MaxX 51475
+MaxY 32298
+MaxPressure 8191
+Width 257,375
+Height 161,49
+InitString 100
+
+Tablet 0x256C 0x006F 0x0000 0x0000 12 201 "OEM16_T205_\d{6}$"
+Name "Artisul M0610 Pro"
+ReportLength 12
+MaxX 51475
+MaxY 32298
+MaxPressure 8191
+Width 257,375
+Height 161,49
+InitString 100
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "OEM16_T205_\d{6}$"
+Name "Artisul M0610 Pro"
+ReportLength 12
+MaxX 51475
+MaxY 32298
+MaxPressure 8191
+Width 257,375
+Height 161,49
+InitString 100
+
+Tablet 0x256C 0x006E 0x0000 0x0000 16 6 "1060PRO" 121 "HA60-F400"
+Name "Huion 1060 Plus"
+ReportLength 16
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100 123
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T161_\d{6}$"
+Name "Huion G10T"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0061 0x0000 0x0000 12 201 "HUION_T209_\d{6}$"
+Name "Huion G930L"
+ReportLength 12
+MaxX 69088
+MaxY 43180
+MaxPressure 8191
+Width 345,44
+Height 215,9
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T166_\d{6}$"
+Name "Huion GC610"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T166_\d{6}$"
+Name "Huion GC610"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M174_\d{6}$"
+Name "Huion GT-156HD V2"
+ReportLength 12
+MaxX 68780
+MaxY 38710
+MaxPressure 8191
+Width 343,9
+Height 193,55
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M(168|18a)_\d{6}$"
+Name "Huion GT-191 V2"
+ReportLength 12
+MaxX 86976
+MaxY 47736
+MaxPressure 8191
+Width 434,88
+Height 238,68
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 8 201 "HUION_M165_\d{6}$"
+Name "Huion GT-220 V2 (2048)"
+ReportLength 8
+MaxX 37540
+MaxY 21120
+MaxPressure 2047
+Width 476,758
+Height 268,224
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M165_\d{6}$"
+Name "Huion GT-220 V2"
+ReportLength 12
+MaxX 95336
+MaxY 53629
+MaxPressure 8191
+Width 476,68
+Height 268,145
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M167_\d{6}$"
+Name "Huion GT-221 Pro"
+ReportLength 12
+MaxX 95346
+MaxY 53641
+MaxPressure 8191
+Width 476,73
+Height 268,205
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M175_\d{6}$"
+Name "Huion GT-221"
+ReportLength 12
+MaxX 95346
+MaxY 53641
+MaxPressure 8191
+Width 476,73
+Height 268,205
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T(167|205)_\d{6}$"
+Name "Huion H1060P"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T167_\d{6}$"
+Name "Huion H1060P"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T(205|219)_\d{6}$"
+Name "Huion H1060P"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0068 0x0000 0x0000 12 201 "HUION_T(21m|255)_\d{6}$"
+Name "Huion H1061P"
+ReportLength 12
+MaxX 53340
+MaxY 33340
+MaxPressure 8191
+Width 266,7
+Height 166,7
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T191_\d{6}$"
+Name "Huion H1161"
+ReportLength 12
+MaxX 55880
+MaxY 34925
+MaxPressure 8191
+Width 279,4
+Height 174,625
+InitString 200
+Type UCLogicV2
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T191_\d{6}$"
+Name "Huion H1161"
+ReportLength 12
+MaxX 55880
+MaxY 34925
+MaxPressure 8191
+Width 279,4
+Height 174,625
+InitString 200
+Type UCLogicV2
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T198_\d{6}$"
+Name "Huion H320M"
+ReportLength 12
+MaxX 45700
+MaxY 28580
+MaxPressure 8191
+Width 228,5
+Height 142,9
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006F 0x0000 0x0000 12 201 "HUION_T198_\d{6}$"
+Name "Huion H320M"
+ReportLength 12
+MaxX 45700
+MaxY 28580
+MaxPressure 8191
+Width 228,5
+Height 142,9
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T210_\d{6}$"
+Name "Huion H420X"
+ReportLength 12
+MaxX 21200
+MaxY 13200
+MaxPressure 8191
+Width 106
+Height 66
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_(T210|T223)_\d{6}$"
+Name "Huion H420X"
+ReportLength 12
+MaxX 21200
+MaxY 13200
+MaxPressure 8191
+Width 106
+Height 66
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T(211|224)_\d{6}$"
+Name "Huion H580X"
+ReportLength 12
+MaxX 40640
+MaxY 25400
+MaxPressure 8191
+Width 203,2
+Height 127
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T(211|224)_\d{6}$"
+Name "Huion H580X"
+ReportLength 12
+MaxX 40640
+MaxY 25400
+MaxPressure 8191
+Width 203,2
+Height 127
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T184_\d{6}$"
+Name "Huion H610 Pro V2"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T184_\d{6}$"
+Name "Huion H610 Pro V2"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T184_\d{6}$"
+Name "Huion H610 Pro V2"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 16 121 "^HA60\x00*$"
+Name "Huion H610 Pro V3"
+ReportLength 16
+MaxX 2048
+MaxY 2048
+MaxPressure 2047
+Width 254
+Height 158,75
+
+Tablet 0x256C 0x006E 0x0000 0x0000 8 121 "^HA60\x00*$"
+Name "Huion H610 Pro V3"
+ReportLength 8
+MaxX 2048
+MaxY 2048
+MaxPressure 2047
+Width 254
+Height 158,75
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T175_\d{6}$"
+Name "Huion H610 Pro"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T175_\d{6}$"
+Name "Huion H610 Pro"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_(T212|T229)_\d{6}$"
+Name "Huion H610X"
+ReportLength 12
+MaxX 50800
+MaxY 31760
+MaxPressure 8191
+Width 254
+Height 158,8
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T212_\d{6}$"
+Name "Huion H610X"
+ReportLength 12
+MaxX 50800
+MaxY 31760
+MaxPressure 8191
+Width 254
+Height 158,8
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0066 0x0000 0x0000 12 201 "HUION_T(21j|253)_\d{6}$"
+Name "Huion H641P"
+ReportLength 12
+MaxX 32000
+MaxY 20000
+MaxPressure 8191
+Width 160
+Height 100
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T19g_\d{6}$"
+Name "Huion H642"
+ReportLength 12
+MaxX 32004
+MaxY 19812
+MaxPressure 8191
+Width 160,02
+Height 99,06
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T19g_\d{6}$"
+Name "Huion H642"
+ReportLength 12
+MaxX 32004
+MaxY 19812
+MaxPressure 8191
+Width 160,02
+Height 99,06
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 8 6 "HuionH690"
+Name "Huion H690"
+ReportLength 8
+MaxX 36000
+MaxY 22500
+MaxPressure 2047
+Width 228,6
+Height 142,875
+InitString 100 123
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 16 6 "HuionH690"
+Name "Huion H690"
+ReportLength 16
+MaxX 36000
+MaxY 22500
+MaxPressure 2047
+Width 228,6
+Height 142,875
+InitString 100 123
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T22d_\d{6}$"
+Name "Huion H950P"
+ReportLength 12
+MaxX 44200
+MaxY 27600
+MaxPressure 8191
+Width 221
+Height 138
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T(172|204)_\d{6}$"
+Name "Huion H950P"
+ReportLength 12
+MaxX 44200
+MaxY 27600
+MaxPressure 8191
+Width 221
+Height 138
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T(172|204)_\d{6}$"
+Name "Huion H950P"
+ReportLength 12
+MaxX 44200
+MaxY 27600
+MaxPressure 8191
+Width 221
+Height 138
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006F 0x0000 0x0000 12 201 "HUION_T204_\d{6}$"
+Name "Huion H950P"
+ReportLength 12
+MaxX 44200
+MaxY 27600
+MaxPressure 8191
+Width 221
+Height 138
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0067 0x0000 0x0000 12 201 "HUION_(T21k|T254)_\d{6}$"
+Name "Huion H951P"
+ReportLength 12
+MaxX 44200
+MaxY 27600
+MaxPressure 8191
+Width 221
+Height 138
+InitString 200
+Type Inspiroy
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T226_\d{6}$"
+Name "Huion HC16 (Variant 2)"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 16383
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T18C_\d{6}$"
+Name "Huion HC16"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T18C_\d{6}$"
+Name "Huion HC16"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T194_\d{6}$"
+Name "Huion HS610"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogicV2
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T(194|227)_\d{6}$"
+Name "Huion HS610"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogicV2
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T19c_\d{6}$"
+Name "Huion HS611"
+ReportLength 12
+MaxX 51680
+MaxY 32300
+MaxPressure 8191
+Width 258,4
+Height 161,5
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006F 0x0000 0x0000 12 201 "HUION_T19c_\d{6}$"
+Name "Huion HS611"
+ReportLength 12
+MaxX 51680
+MaxY 32300
+MaxPressure 8191
+Width 258,4
+Height 161,5
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T(181|193)_\d{6}$"
+Name "Huion HS64"
+ReportLength 12
+MaxX 32000
+MaxY 20400
+MaxPressure 8191
+Width 160
+Height 102
+InitString 200
+Type UCLogic
+)CFG";
+
+	const char* configDataCompatibleExtended2 = R"CFG(
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T181_\d{6}$"
+Name "Huion HS64"
+ReportLength 12
+MaxX 32000
+MaxY 20400
+MaxPressure 8191
+Width 160
+Height 102
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006F 0x0000 0x0000 12 201 "HUION_T225_\d{6}$"
+Name "Huion HS64"
+ReportLength 12
+MaxX 32000
+MaxY 20400
+MaxPressure 8191
+Width 160
+Height 102
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T206_\d{6}$"
+Name "Huion HS95"
+ReportLength 12
+MaxX 40638
+MaxY 25398
+MaxPressure 8191
+Width 203,19
+Height 126,99
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M19p_\d{6}$"
+Name "Huion Kamvas 12"
+ReportLength 12
+MaxX 53580
+MaxY 33640
+MaxPressure 8191
+Width 267,9
+Height 168,2
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x2008 0x0000 0x0000 14 201 "HUION_M22c_\d{6}$"
+Name "Huion Kamvas 13 (Gen 3)"
+ReportLength 14
+MaxX 58760
+MaxY 33040
+MaxPressure 16383
+Width 293,8
+Height 165,2
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_(?:M20h|M19f|M215)_\d{6}$"
+Name "Huion Kamvas 13"
+ReportLength 12
+MaxX 58752
+MaxY 33048
+MaxPressure 8191
+Width 293,76
+Height 165,24
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M19s_\d{6}$"
+Name "Huion Kamvas 16 (2021)"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x2009 0x0000 0x0000 14 201 "HUION_M22d_\d{6}$"
+Name "Huion Kamvas 16 (Gen 3)"
+ReportLength 14
+MaxX 69920
+MaxY 39340
+MaxPressure 16383
+Width 349,6
+Height 196,7
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M18e_\d{6}$"
+Name "Huion Kamvas 16"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M192_\d{6}$"
+Name "Huion Kamvas 20"
+ReportLength 12
+MaxX 86950
+MaxY 47750
+MaxPressure 8191
+Width 434,75
+Height 238,75
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M19t_\d{6}$"
+Name "Huion Kamvas 22 Plus"
+ReportLength 12
+MaxX 95328
+MaxY 53622
+MaxPressure 8191
+Width 476,64
+Height 268,11
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M19g_\d{6}$"
+Name "Huion Kamvas 22"
+ReportLength 12
+MaxX 95352
+MaxY 53645
+MaxPressure 8191
+Width 476,76
+Height 268,225
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M205_\d{6}$"
+Name "Huion Kamvas 24 Plus"
+ReportLength 12
+MaxX 105370
+MaxY 59270
+MaxPressure 8191
+Width 526,85
+Height 296,35
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M206_\d{6}$"
+Name "Huion Kamvas 24"
+ReportLength 12
+MaxX 105370
+MaxY 59270
+MaxPressure 8191
+Width 526,85
+Height 296,35
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M171_\d{6}$"
+Name "Huion Kamvas Pro 12"
+ReportLength 12
+MaxX 53580
+MaxY 33640
+MaxPressure 8191
+Width 267,9
+Height 168,2
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M(20j|171)_\d{6}$"
+Name "Huion Kamvas Pro 12"
+ReportLength 12
+MaxX 53580
+MaxY 33640
+MaxPressure 8191
+Width 267,9
+Height 168,2
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M(210|213)_\d{6}$"
+Name "Huion Kamvas Pro 13 (2.5k)"
+ReportLength 12
+MaxX 57293
+MaxY 35808
+MaxPressure 8191
+Width 286,465
+Height 179,04
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M(182|20k)_\d{6}$"
+Name "Huion Kamvas Pro 13"
+ReportLength 12
+MaxX 58752
+MaxY 33048
+MaxPressure 8191
+Width 293,76
+Height 165,24
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M(182|20k)_\d{6}$"
+Name "Huion Kamvas Pro 13"
+ReportLength 12
+MaxX 58752
+MaxY 33048
+MaxPressure 8191
+Width 293,76
+Height 165,24
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M214_\d{6}$"
+Name "Huion Kamvas Pro 16 (2.5k)"
+ReportLength 12
+MaxX 69926
+MaxY 39333
+MaxPressure 8191
+Width 349,63
+Height 196,665
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M20q_\d{6}$"
+Name "Huion Kamvas Pro 16 (2.5k)"
+ReportLength 12
+MaxX 69926
+MaxY 39333
+MaxPressure 8191
+Width 349,63
+Height 196,665
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M202_\d{6}$"
+Name "Huion Kamvas Pro 16 (4k)"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M20a_\d{6}$"
+Name "Huion Kamvas Pro 16 Plus (4k)"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x2000 0x0000 0x0000 14 201 "HUION_M246_\d{6}$"
+Name "Huion Kamvas Pro 16 V2"
+ReportLength 14
+MaxX 68840
+MaxY 38720
+MaxPressure 16383
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M183_\d{6}$"
+Name "Huion Kamvas Pro 16"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M20m_\d{6}$"
+Name "Huion Kamvas Pro 16"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006B 0x0000 0x0000 14 201 "HUION_M220_\d{6}$"
+Name "Huion Kamvas Pro 19 (4K)"
+ReportLength 14
+MaxX 81792
+MaxY 46006
+MaxPressure 16383
+Width 408,96
+Height 230,03
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M(189|193)_\d{6}$"
+Name "Huion Kamvas Pro 20"
+ReportLength 12
+MaxX 87075
+MaxY 47750
+MaxPressure 8191
+Width 435,375
+Height 238,75
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M194_\d{6}$"
+Name "Huion Kamvas Pro 22 (2019)"
+ReportLength 12
+MaxX 95350
+MaxY 53644
+MaxPressure 8191
+Width 476,75
+Height 268,22
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M207_\d{6}$"
+Name "Huion Kamvas Pro 24 (4K)"
+ReportLength 12
+MaxX 105370
+MaxY 59270
+MaxPressure 8191
+Width 526,85
+Height 296,35
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006C 0x0000 0x0000 14 201 "HUION_M23b_\d{6}$"
+Name "Huion Kamvas Pro 24 (Gen 3)"
+ReportLength 14
+MaxX 105408
+MaxY 59290
+MaxPressure 16383
+Width 527,04
+Height 296,45
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_M184_\d{6}$"
+Name "Huion Kamvas Pro 24"
+ReportLength 12
+MaxX 105379
+MaxY 59236
+MaxPressure 8191
+Width 526,895
+Height 296,18
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006C 0x0000 0x0000 14 201 "HUION_M221_\d{6}$"
+Name "Huion Kamvas Pro 27"
+ReportLength 14
+MaxX 119347
+MaxY 67132
+MaxPressure 16383
+Width 596,735
+Height 335,66
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x2011 0x0000 0x0000 12 2 "Huion Tablet_L310"
+Name "Huion L310"
+ReportLength 12
+MaxX 32000
+MaxY 20000
+MaxPressure 16383
+Width 160
+Height 100
+InitString 200
+Type Inspiroy
+
+Tablet 0x256C 0x2012 0x0000 0x0000 12 201 "HUION_T23b_\d{6}$"
+Name "Huion L610"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 16383
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 16 201 "HUION_T151_\d{6}$"
+Name "Huion New 1060 Plus (2048)"
+ReportLength 16
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 8 201 "HUION_T151_\d{6}$"
+Name "Huion New 1060 Plus (2048)"
+ReportLength 8
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T174_\d{6}$"
+Name "Huion New 1060 Plus"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T174_\d{6}$"
+Name "Huion New 1060 Plus"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T218_\d{6}$"
+Name "Huion Note X10"
+ReportLength 12
+MaxX 37400
+MaxY 28200
+MaxPressure 8191
+Width 187
+Height 141
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T185_\d{6}$"
+Name "Huion Q11K V2"
+ReportLength 12
+MaxX 55880
+MaxY 34925
+MaxPressure 8191
+Width 279,4
+Height 174,625
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T164_\d{6}$"
+Name "Huion Q11K"
+ReportLength 12
+MaxX 55880
+MaxY 34925
+MaxPressure 8191
+Width 279,4
+Height 174,625
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T164_\d{6}$"
+Name "Huion Q11K"
+ReportLength 12
+MaxX 55880
+MaxY 34925
+MaxPressure 8191
+Width 279,4
+Height 174,625
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T18d_\d{6}$"
+Name "Huion Q620M"
+ReportLength 12
+MaxX 53340
+MaxY 33020
+MaxPressure 8191
+Width 266,7
+Height 165,1
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x0060 0x0000 0x0000 12 201 "HUION_T(216|22b)_\d{6}$"
+Name "Huion Q630M"
+ReportLength 12
+MaxX 53340
+MaxY 33340
+MaxPressure 8191
+Width 266,7
+Height 166,7
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_M211_\d{6}$"
+Name "Huion RDS-160"
+ReportLength 12
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344,2
+Height 193,6
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x2001 0x0000 0x0000 12 201 "HUION_M225_\d{6}$"
+Name "Huion RDS-220"
+ReportLength 12
+MaxX 95352
+MaxY 53645
+MaxPressure 8191
+Width 476,76
+Height 268,225
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T217_\d{6}$"
+Name "Huion RTE-100"
+ReportLength 12
+MaxX 24384
+MaxY 15238
+MaxPressure 8191
+Width 121,92
+Height 76,19
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T19h_\d{6}$"
+Name "Huion RTM-500"
+ReportLength 12
+MaxX 44199
+MaxY 27599
+MaxPressure 8191
+Width 220,995
+Height 137,995
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T19h_\d{6}$"
+Name "Huion RTM-500"
+ReportLength 12
+MaxX 44199
+MaxY 27599
+MaxPressure 8191
+Width 220,995
+Height 137,995
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006D 0x0000 0x0000 12 201 "HUION_T19k_\d{6}$"
+Name "Huion RTP-700"
+ReportLength 12
+MaxX 55880
+MaxY 34920
+MaxPressure 8191
+Width 279,4
+Height 174,6
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x0064 0x0000 0x0000 12 201 "HUION_T19k_\d{6}$"
+Name "Huion RTP-700"
+ReportLength 12
+MaxX 55880
+MaxY 34920
+MaxPressure 8191
+Width 279,4
+Height 174,6
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 64 201 "HUION_T153_\d{6}$"
+Name "Huion WH1409 V2 (Variant 2)"
+ReportLength 64
+MaxX 55200
+MaxY 34498
+MaxPressure 2047
+Width 350,52
+Height 219,062
+InitString 200
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T188_\d{6}$"
+Name "Huion WH1409 V2"
+ReportLength 12
+MaxX 70000
+MaxY 43600
+MaxPressure 8191
+Width 350
+Height 218
+InitString 200
+Type Giano
+
+Tablet 0x256C 0x006E 0x0000 0x0000 12 201 "HUION_T153_\d{6}$"
+Name "Huion WH1409"
+ReportLength 12
+MaxX 70000
+MaxY 43600
+MaxPressure 8191
+Width 350
+Height 218
+InitString 200
+Type Giano
+
+Tablet 0x5543 0x0004 0x0000 0x0000 8
+Name "KENTING K5540"
+ReportLength 8
+MaxX 10999
+MaxY 7999
+MaxPressure 1023
+Width 139,687
+Height 101,587
+InitString 100
+Type UCLogic
+
+Tablet 0x6161 0x4D15 0x0000 0x0000 12 201 "Vision_V201_\d{6}"
+Name "LetSketch WP9620C"
+ReportLength 12
+MaxX 53889
+MaxY 33591
+MaxPressure 8191
+Width 269,445
+Height 167,955
+InitString 200
+Type UCLogic
+)CFG";
+
+	const char* configDataCompatibleExtended3 = R"CFG(
+Tablet 0x256C 0x006E 0x0000 0x0000 16 6 "10594" 121 "HA60-F400"
+Name "Monoprice 10594"
+ReportLength 16
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100 123
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 16 6 "^10594\x00\x00et\x00$"
+Name "Monoprice 10594"
+ReportLength 16
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100 123
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 8 6 "10594" 121 "HA60-F400"
+Name "Monoprice 10594"
+ReportLength 8
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100 123
+Type UCLogic
+
+Tablet 0x5543 0x0781 0x0000 0x0000 8
+Name "Monoprice MP1060-HA60"
+ReportLength 8
+MaxX 39999
+MaxY 24999
+MaxPressure 1023
+Width 253,994
+Height 158,744
+InitString 100
+Type UCLogic
+
+Tablet 0x256C 0x006E 0x0000 0x0000 8 6 "Huion" 121 "M508"
+Name "Turcom TS-6580"
+ReportLength 8
+MaxX 32000
+MaxY 20000
+MaxPressure 2047
+Width 203,2
+Height 127
+InitString 100
+
+Tablet 0x256C 0x006E 0x0000 0x0000 16 6 "Huion" 121 "M508"
+Name "Turcom TS-6580"
+ReportLength 16
+MaxX 32000
+MaxY 20000
+MaxPressure 2047
+Width 203,2
+Height 127
+InitString 100
+
+Tablet 0x5543 0x0081 0x0000 0x0000 8 201 "F600_A60n_E\d{4}$"
+Name "UC-Logic 1060N"
+ReportLength 8
+MaxX 50800
+MaxY 30480
+MaxPressure 2047
+Width 254
+Height 152,4
+InitReport 0x02 0xB0 0x02
+InitString 100
+Type XPPen
+
+Tablet 0x5543 0x0081 0x0000 0x0000 8 201 "F600_A60n_E\d{4}$"
+Name "UC-Logic 1060N"
+ReportLength 8
+MaxX 50800
+MaxY 30480
+MaxPressure 2047
+Width 254
+Height 152,4
+InitReport 0x02 0xB0 0x02
+InitString 100
+Type XPPenOffsetAux
+
+Tablet 0x5543 0x0042 0x0000 0x0000 8 2 "TabletPF1209"
+Name "UC-Logic PF1209"
+ReportLength 8
+MaxX 47999
+MaxY 35999
+MaxPressure 1023
+Width 304,794
+Height 228,594
+InitString 109
+Type UCLogic
+
+Tablet 0x5543 0x0071 0x0000 0x0000 8 3 "F600_A62_140327"
+Name "UC-Logic TWMNA62"
+ReportLength 8
+MaxX 40000
+MaxY 25000
+MaxPressure 2047
+Width 254
+Height 158,75
+InitString 100
+Type XPPen
+
+Tablet 0x28BD 0x0924 0x0000 0x0000 10 4 "UG901_BPU1006"
+Name "UGEE M708 V2"
+ReportLength 10
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152,4
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x0924 0x0000 0x0000 12
+Name "UGEE M708 V2"
+ReportLength 12
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152,4
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x0924 0x0000 0x0000 12 4 "UG902_BPG1006"
+Name "UGEE M708 V3"
+ReportLength 12
+MaxX 50800
+MaxY 30480
+MaxPressure 16383
+Width 254
+Height 152,4
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x5543 0x0081 0x0000 0x0000 8 4 "F401-20111028" 5 "UC-LOIC"
+Name "UGEE M708"
+ReportLength 8
+MaxX 40000
+MaxY 24000
+MaxPressure 2047
+Width 200
+Height 120
+InitString 100 123
+Type XPPenOffsetAux
+
+Tablet 0x28BD 0x2903 0x0000 0x0000 12
+Name "UGEE M808"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158,75
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x2902 0x0000 0x0000 12
+Name "UGEE M908"
+ReportLength 12
+MaxX 50800
+MaxY 31750
+MaxPressure 16383
+Width 254
+Height 158,75
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x0938 0x0000 0x0000 12
+Name "UGEE S1060"
+ReportLength 12
+MaxX 50800
+MaxY 32000
+MaxPressure 8191
+Width 254
+Height 160
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x0937 0x0000 0x0000 12
+Name "UGEE S640"
+ReportLength 12
+MaxX 31998
+MaxY 19994
+MaxPressure 8191
+Width 159,99
+Height 99,97
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x093B 0x0000 0x0000 12
+Name "UGEE U1200"
+ReportLength 12
+MaxX 52644
+MaxY 29611
+MaxPressure 8191
+Width 263,22
+Height 148,055
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x093C 0x0000 0x0000 12
+Name "UGEE U1600"
+ReportLength 12
+MaxX 68828
+MaxY 38714
+MaxPressure 8191
+Width 344,14
+Height 193,57
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x28BD 0x290C 0x0000 0x0000 12
+Name "UGEE UE16"
+ReportLength 12
+MaxX 68199
+MaxY 38399
+MaxPressure 16383
+Width 340,995
+Height 191,995
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+Tablet 0x2FEB 0x0006 0x0000 0x0000 9
+Name "VEIKK A15 Pro"
+ReportOffset 1
+ReportLength 9
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152,4
+InitReport 0x09 0x01 0x04
+
+Tablet 0x2FEB 0x0002 0x0000 0x0000 9
+Name "VEIKK A30"
+ReportOffset 1
+ReportLength 9
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152,4
+InitReport 0x09 0x01 0x04
+
+Tablet 0x0531 0x0100 0x0000 0x0000 192
+Name "Wacom CTC-4110WL"
+ReportLength 192
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x0531 0x0102 0x0000 0x0000 192
+Name "Wacom CTC-6110WL"
+ReportLength 192
+MaxX 21600
+MaxY 13500
+MaxPressure 4095
+Width 216
+Height 135
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x0531 0x0103 0x0000 0x0000 19
+Name "Wacom CTC-6110WL"
+ReportLength 19
+MaxX 21600
+MaxY 13500
+MaxPressure 4095
+Width 216
+Height 135
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x056A 0x006A 0x0000 0x0000 8
+Name "Wacom CTE-460"
+ReportLength 8
+MaxX 15200
+MaxY 9500
+MaxPressure 511
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomBamboo
+
+Tablet 0x056A 0x0016 0x0000 0x0000 8
+Name "Wacom CTE-640"
+ReportLength 8
+MaxX 16704
+MaxY 12064
+MaxPressure 511
+Width 208,8
+Height 150,8
+InitFeature 0x02 0x02
+Type WacomBamboo
+
+Tablet 0x056A 0x006B 0x0000 0x0000 8
+Name "Wacom CTE-660"
+ReportLength 8
+MaxX 21648
+MaxY 13500
+MaxPressure 511
+Width 216,48
+Height 135
+InitFeature 0x02 0x02
+Type WacomBamboo
+
+Tablet 0x056A 0x0069 0x0000 0x0000 8
+Name "Wacom CTF-430"
+ReportLength 8
+MaxX 5104
+MaxY 3712
+MaxPressure 511
+Width 127,6
+Height 92,8
+InitFeature 0x02 0x02
+Type WacomBamboo
+
+Tablet 0x056A 0x0376 0x0000 0x0000 64
+Name "Wacom CTL-4100WL"
+ReportLength 64
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0376 0x0000 0x0000 192
+Name "Wacom CTL-4100WL"
+ReportLength 192
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0376 0x0000 0x0000 193
+Name "Wacom CTL-4100WL"
+ReportOffset 1
+ReportLength 193
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0377 0x0000 0x0000 361
+Name "Wacom CTL-4100WL"
+ReportLength 361
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0377 0x0000 0x0000 193
+Name "Wacom CTL-4100WL"
+ReportOffset 1
+ReportLength 193
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03C5 0x0000 0x0000 192
+Name "Wacom CTL-4100WL"
+ReportLength 192
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03C5 0x0000 0x0000 193
+Name "Wacom CTL-4100WL"
+ReportOffset 1
+ReportLength 193
+MaxX 15200
+MaxY 9500
+MaxPressure 4095
+Width 152
+Height 95
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0375 0x0000 0x0000 192
+Name "Wacom CTL-6100"
+ReportLength 192
+MaxX 21600
+MaxY 13500
+MaxPressure 4095
+Width 216
+Height 135
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0378 0x0000 0x0000 192
+Name "Wacom CTL-6100WL"
+ReportLength 192
+MaxX 21600
+MaxY 13500
+MaxPressure 4095
+Width 216
+Height 135
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03C7 0x0000 0x0000 192
+Name "Wacom CTL-6100WL"
+ReportLength 192
+MaxX 21600
+MaxY 13500
+MaxPressure 4095
+Width 216
+Height 135
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03CE 0x0000 0x0000 192
+Name "Wacom DTC-121"
+ReportLength 192
+MaxX 25632
+MaxY 14418
+MaxPressure 4095
+Width 256,32
+Height 144,18
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03A6 0x0000 0x0000 192
+Name "Wacom DTC-133"
+ReportLength 192
+MaxX 29434
+MaxY 16556
+MaxPressure 4095
+Width 294,34
+Height 165,56
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03A6 0x0000 0x0000 193
+Name "Wacom DTC-133"
+ReportOffset 1
+ReportLength 193
+MaxX 29434
+MaxY 16556
+MaxPressure 4095
+Width 294,34
+Height 165,56
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x034F 0x0000 0x0000 192
+Name "Wacom DTH-1320"
+ReportLength 192
+MaxX 59552
+MaxY 33848
+MaxPressure 8191
+Width 297,76
+Height 169,24
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03F0 0x0000 0x0000 192
+Name "Wacom Movink 13 (DTH-135)"
+ReportLength 192
+MaxX 59552
+MaxY 33848
+MaxPressure 8191
+Width 297,76
+Height 169,24
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x056A 0x03D0 0x0000 0x0000 192
+Name "Wacom Cintiq Pro 22 (DTH-227)"
+ReportLength 192
+MaxX 96012
+MaxY 54356
+MaxPressure 8191
+Width 480,06
+Height 271,78
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03C0 0x0000 0x0000 192
+Name "Wacom Cintiq Pro 27 (DTH-271)"
+ReportLength 192
+MaxX 120032
+MaxY 67868
+MaxPressure 8191
+Width 600,16
+Height 339,34
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0304 0x0000 0x0000 10
+Name "Wacom Cintiq 13HD (DTK-1300)"
+ReportLength 10
+MaxX 59800
+MaxY 34200
+MaxPressure 2047
+Width 299
+Height 171
+InitFeature 0x02 0x02
+Type WacomIntuos
+
+Tablet 0x056A 0x0390 0x0000 0x0000 192
+Name "Wacom Cintiq 16 (DTK-1660)"
+ReportLength 192
+MaxX 69632
+MaxY 39518
+MaxPressure 8191
+Width 348,16
+Height 197,59
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03AE 0x0000 0x0000 192
+Name "Wacom Cintiq 16 (DTK-1660)"
+ReportLength 192
+MaxX 69632
+MaxY 39518
+MaxPressure 8191
+Width 348,16
+Height 197,59
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0010 0x0000 0x0000 9
+Name "Wacom ET-0405-U"
+ReportOffset 1
+ReportLength 9
+MaxX 10208
+MaxY 7424
+MaxPressure 511
+Width 127,6
+Height 92,8
+InitFeature 0x02 0x02
+
+Tablet 0x056A 0x0060 0x0000 0x0000 8
+Name "Wacom FT-0405-U"
+ReportLength 8
+MaxX 5104
+MaxY 3712
+MaxPressure 511
+Width 127,6
+Height 92,8
+InitFeature 0x02 0x02
+Type WacomBamboo
+
+Tablet 0x056A 0x0020 0x0000 0x0000 10
+Name "Wacom GD-0405-U"
+ReportLength 10
+MaxX 25400
+MaxY 21200
+MaxPressure 2046
+Width 127
+Height 106
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0020 0x0000 0x0000 11
+Name "Wacom GD-0405-U"
+ReportOffset 1
+ReportLength 11
+MaxX 25400
+MaxY 21200
+MaxPressure 2046
+Width 127
+Height 106
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0021 0x0000 0x0000 10
+Name "Wacom GD-0608-U"
+ReportLength 10
+MaxX 40640
+MaxY 32480
+MaxPressure 2046
+Width 203,2
+Height 162,4
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0021 0x0000 0x0000 11
+Name "Wacom GD-0608-U"
+ReportOffset 1
+ReportLength 11
+MaxX 40640
+MaxY 32480
+MaxPressure 2046
+Width 203,2
+Height 162,4
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0022 0x0000 0x0000 10
+Name "Wacom GD-0912-U"
+ReportLength 10
+MaxX 60960
+MaxY 48120
+MaxPressure 2046
+Width 304,8
+Height 240,6
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0022 0x0000 0x0000 11
+Name "Wacom GD-0912-U"
+ReportOffset 1
+ReportLength 11
+MaxX 60960
+MaxY 48120
+MaxPressure 2046
+Width 304,8
+Height 240,6
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0023 0x0000 0x0000 10
+Name "Wacom GD-1212-U"
+ReportLength 10
+MaxX 60960
+MaxY 63360
+MaxPressure 2046
+Width 304,8
+Height 316,8
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0023 0x0000 0x0000 11
+Name "Wacom GD-1212-U"
+ReportOffset 1
+ReportLength 11
+MaxX 60960
+MaxY 63360
+MaxPressure 2046
+Width 304,8
+Height 316,8
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0024 0x0000 0x0000 10
+Name "Wacom GD-1218-U"
+ReportLength 10
+MaxX 91440
+MaxY 63360
+MaxPressure 2046
+Width 457,2
+Height 316,8
+InitFeature 0x04 0x00
+Type WacomIntuos
+)CFG";
+
+	const char* configDataCompatibleExtended4 = R"CFG(
+Tablet 0x056A 0x0024 0x0000 0x0000 11
+Name "Wacom GD-1218-U"
+ReportOffset 1
+ReportLength 11
+MaxX 91440
+MaxY 63360
+MaxPressure 2046
+Width 457,2
+Height 316,8
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0392 0x0000 0x0000 192
+Name "Wacom PTH-460"
+ReportLength 192
+MaxX 31920
+MaxY 19950
+MaxPressure 8191
+Width 159,6
+Height 99,75
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0392 0x0000 0x0000 193
+Name "Wacom PTH-460"
+ReportOffset 1
+ReportLength 193
+MaxX 31920
+MaxY 19950
+MaxPressure 8191
+Width 159,6
+Height 99,75
+Type WacomIntuosV2
+
+Tablet 0x056A 0x03DC 0x0000 0x0000 192
+Name "Wacom PTH-460"
+ReportLength 192
+MaxX 31920
+MaxY 19950
+MaxPressure 8191
+Width 159,6
+Height 99,75
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0357 0x0000 0x0000 192
+Name "Wacom PTH-660"
+ReportLength 192
+MaxX 44800
+MaxY 29600
+MaxPressure 8191
+Width 224
+Height 148
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0360 0x0000 0x0000 361
+Name "Wacom PTH-660"
+ReportLength 361
+MaxX 44800
+MaxY 29600
+MaxPressure 8191
+Width 224
+Height 148
+
+Tablet 0x056A 0x0358 0x0000 0x0000 192
+Name "Wacom PTH-860"
+ReportLength 192
+MaxX 62200
+MaxY 43200
+MaxPressure 8191
+Width 311
+Height 216
+Type WacomIntuosV2
+
+Tablet 0x056A 0x0358 0x0000 0x0000 193
+Name "Wacom PTH-860"
+ReportOffset 1
+ReportLength 193
+MaxX 62200
+MaxY 43200
+MaxPressure 8191
+Width 311
+Height 216
+Type WacomIntuosV2
+
+Tablet 0x056A 0x00BB 0x0000 0x0000 10
+Name "Wacom PTK-1240"
+ReportLength 10
+MaxX 97536
+MaxY 60960
+MaxPressure 2047
+Width 487,68
+Height 304,8
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x00BB 0x0000 0x0000 11
+Name "Wacom PTK-1240"
+ReportOffset 1
+ReportLength 11
+MaxX 97536
+MaxY 60960
+MaxPressure 2047
+Width 487,68
+Height 304,8
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x03F5 0x0000 0x0000 192
+Name "Wacom PTK-470"
+ReportLength 192
+MaxX 37400
+MaxY 21000
+MaxPressure 8191
+Width 187
+Height 105
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x056A 0x00BC 0x0000 0x0000 10
+Name "Wacom PTK-540WL"
+ReportLength 10
+MaxX 40640
+MaxY 25400
+MaxPressure 2047
+Width 203,2
+Height 127
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x00BC 0x0000 0x0000 11
+Name "Wacom PTK-540WL"
+ReportOffset 1
+ReportLength 11
+MaxX 40640
+MaxY 25400
+MaxPressure 2047
+Width 203,2
+Height 127
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x00B9 0x0000 0x0000 10
+Name "Wacom PTK-640"
+ReportLength 10
+MaxX 44704
+MaxY 27940
+MaxPressure 2047
+Width 223,52
+Height 139,7
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x00B9 0x0000 0x0000 11
+Name "Wacom PTK-640"
+ReportOffset 1
+ReportLength 11
+MaxX 44704
+MaxY 27940
+MaxPressure 2047
+Width 223,52
+Height 139,7
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x03F7 0x0000 0x0000 192
+Name "Wacom PTK-670"
+ReportLength 192
+MaxX 52600
+MaxY 29600
+MaxPressure 8191
+Width 263
+Height 148
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x056A 0x00BA 0x0000 0x0000 10
+Name "Wacom PTK-840"
+ReportLength 10
+MaxX 65024
+MaxY 40640
+MaxPressure 2047
+Width 325,12
+Height 203,2
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x00BA 0x0000 0x0000 11
+Name "Wacom PTK-840"
+ReportOffset 1
+ReportLength 11
+MaxX 65024
+MaxY 40640
+MaxPressure 2047
+Width 325,12
+Height 203,2
+InitFeature 0x02 0x02
+Type WacomIntuos4
+
+Tablet 0x056A 0x03F9 0x0000 0x0000 192
+Name "Wacom PTK-870"
+ReportLength 192
+MaxX 69800
+MaxY 39000
+MaxPressure 8191
+Width 349
+Height 195
+InitFeature 0x02 0x02
+Type WacomIntuosV3
+
+Tablet 0x056A 0x0041 0x0000 0x0000 10
+Name "Wacom XD-0405-U"
+ReportLength 10
+MaxX 25400
+MaxY 21200
+MaxPressure 2046
+Width 127
+Height 106
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0041 0x0000 0x0000 11
+Name "Wacom XD-0405-U"
+ReportOffset 1
+ReportLength 11
+MaxX 25400
+MaxY 21200
+MaxPressure 2046
+Width 127
+Height 106
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0042 0x0000 0x0000 10
+Name "Wacom XD-0608-U"
+ReportLength 10
+MaxX 40640
+MaxY 32480
+MaxPressure 2046
+Width 203,2
+Height 162,4
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0042 0x0000 0x0000 11
+Name "Wacom XD-0608-U"
+ReportOffset 1
+ReportLength 11
+MaxX 40640
+MaxY 32480
+MaxPressure 2046
+Width 203,2
+Height 162,4
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0043 0x0000 0x0000 10
+Name "Wacom XD-0912-U"
+ReportLength 10
+MaxX 60960
+MaxY 48120
+MaxPressure 2046
+Width 304,8
+Height 240,6
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0043 0x0000 0x0000 11
+Name "Wacom XD-0912-U"
+ReportOffset 1
+ReportLength 11
+MaxX 60960
+MaxY 48120
+MaxPressure 2046
+Width 304,8
+Height 240,6
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0044 0x0000 0x0000 10
+Name "Wacom XD-1212-U"
+ReportLength 10
+MaxX 60960
+MaxY 63360
+MaxPressure 2046
+Width 304,8
+Height 316,8
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0044 0x0000 0x0000 11
+Name "Wacom XD-1212-U"
+ReportOffset 1
+ReportLength 11
+MaxX 60960
+MaxY 63360
+MaxPressure 2046
+Width 304,8
+Height 316,8
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0045 0x0000 0x0000 10
+Name "Wacom XD-1218-U"
+ReportLength 10
+MaxX 91440
+MaxY 63360
+MaxPressure 2046
+Width 457,2
+Height 316,8
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+Tablet 0x056A 0x0045 0x0000 0x0000 11
+Name "Wacom XD-1218-U"
+ReportOffset 1
+ReportLength 11
+MaxX 91440
+MaxY 63360
+MaxPressure 2046
+Width 457,2
+Height 316,8
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+)CFG";
+const char* configDataGaomonExtended = R"CFG(
 # Gaomon extended configs
 # Device string matching keeps shared VID/PID tablets from using the wrong size.
 
@@ -2323,8 +4787,19 @@ Type UCLogic
 	appendCommands(configDataXpPenExtended1);
 	appendCommands(configDataXpPenExtended2);
 	appendCommands(configDataHuionLegacy);
-	appendCommands(configDataGaomonExtended);
+	appendCommands(configDataHuionHid);
+	appendCommands(configDataParblo);
+	appendCommands(configDataCompatibleExtended1);
+	appendCommands(configDataCompatibleExtended2);
+	appendCommands(configDataCompatibleExtended3);
+	appendCommands(configDataCompatibleExtended4);
+appendCommands(configDataGaomonExtended);
 	return commands;
 }
 
 } 
+
+
+
+
+

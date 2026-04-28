@@ -319,6 +319,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 
 		
+		else if (cmd->GetStringLower(0, "") == "inspiroy") {
+			tablet->settings.type = TabletSettings::TypeInspiroy;
+		}
+
+		
 		else if (cmd->GetStringLower(0, "") == "giano" || cmd->GetStringLower(0, "") == "huiongiano") {
 			tablet->settings.type = TabletSettings::TypeGiano;
 		}

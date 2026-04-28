@@ -55,7 +55,7 @@
 <h2>· Supported Tablets ·</h2>
 
 <p>
-  AetherGUI includes an embedded tablet database for common Wacom, XP-Pen, Huion, and Gaomon devices.
+  AetherGUI includes an embedded tablet database for common Wacom, XP-Pen, Huion, Gaomon, Parblo, UGEE, Artisul, UC-Logic, Monoprice, and related tablets.
   Some Wacom models include extra matching rules for official Wacom-driver HID interfaces.
   Newer Wacom IntuosV2 entries use expanded built-in matching data.
 </p>
@@ -98,13 +98,32 @@
   </tr>
   <tr>
     <td align="center"><strong>Huion</strong></td>
-    <td align="center">420 · H420 · H430P · H640P · osu!tablet</td>
+    <td align="center">
+      420 · 1060 Plus · G10T · G930L · GC610 · GT-156HD V2 · GT-191 V2 · GT-220 V2 · GT-221 / GT-221 Pro<br/>
+      H1060P · H1061P · H1161 · H320M · H420 / H420X · H430P · H580X · H610 Pro / V2 / V3 · H610X · H640P · H641P · H642 · H690 · H950P / H951P<br/>
+      HC16 · HS610 · HS611 · HS64 · HS95 · Kamvas 12 / 13 / 16 / 20 / 22 / 24 · Kamvas Pro 12 / 13 / 16 / 19 / 20 / 22 / 24 / 27 · Q11K / Q620M / Q630M · WH1409 · osu!tablet
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Parblo</strong></td>
+    <td align="center">
+      A609 · A610 · A610 Pro · A610 Pro Variant 2 · A640 · A640 V2<br/>
+      Intangbo M · Intangbo S · Intangbo SW · Ninos M · Ninos N4 · Ninos N7 · Ninos N7B · Ninos S
+    </td>
   </tr>
   <tr>
     <td align="center"><strong>Gaomon</strong></td>
     <td align="center">
       1060 Pro · GM116HD · GM156HD · M5 · M6 · M7 · M8 · M8 Variant 2 · M10K · M10K Pro<br/>
       M106K · M106K Pro · M1220 · M1230 · PD1161 · PD1320 · PD156 Pro · PD1560 · PD1561 · PD2200 · S56K · S620 · S630 · S830
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Other UC-Logic family</strong></td>
+    <td align="center">
+      Adesso Cybertablet K8 · Artisul A1201 / AP604 / D16 Pro / D22S / M0610 Pro · KENTING K5540 · LetSketch WP9620C<br/>
+      Monoprice 10594 / MP1060-HA60 · Turcom TS-6580 · UC-Logic 1060N / PF1209 / TWMNA62<br/>
+      UGEE M708 / M708 V2 / M708 V3 / M808 / M908 / S1060 / S640 / U1200 / U1600 / UE16 · VEIKK A30
     </td>
   </tr>
 </table>

@@ -13,6 +13,7 @@ public:
 		TypeUCLogic,
 		TypeUCLogicV1,
 		TypeUCLogicV2,
+		TypeInspiroy,
 		TypeGiano,
 		TypeXPPen,
 		TypeXPPenOffsetPressure,
