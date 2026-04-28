@@ -253,7 +253,7 @@
 <p>
   Inspired by Devocub Tablet Driver.
   <br/>
-  Community tablet metadata and testing reports helped improve device coverage.
+  Community tablet metadata and testing reports helped improve device coverage (OpenTabletDriver base of supported tablets was used too).
 </p>
 
 </div>
