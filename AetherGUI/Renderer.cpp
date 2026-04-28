@@ -48,7 +48,7 @@ bool Renderer::LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap
 	if (SUCCEEDED(hr))
 		hr = decoder->GetFrame(0, &frame);
 
-	// If maxSize > 0 and image is larger, pre-scale via WIC for high-quality downscale
+	
 	IWICBitmapSource* scaledSource = nullptr;
 	if (SUCCEEDED(hr) && maxSize > 0) {
 		UINT srcW = 0, srcH = 0;
@@ -94,7 +94,7 @@ void Renderer::TryLoadLogoBitmap() {
 	};
 
 	for (const auto& candidate : candidates) {
-		// Pre-scale to 128px via WIC HighQualityCubic to avoid pixelated downscale in D2D
+		
 		if (FileExistsW(candidate) && LoadBitmapFromFile(candidate, &pLogoBitmap, 128))
 			break;
 	}
@@ -285,16 +285,16 @@ void Renderer::DrawBitmap(ID2D1Bitmap* bitmap, float x, float y, float w, float 
 void Renderer::DrawBitmapTinted(ID2D1Bitmap* bitmap, float x, float y, float w, float h, D2D1_COLOR_F tint, float opacity) {
 	if (!bitmap || !pRT) return;
 
-	// Draw the original bitmap
+	
 	D2D1_RECT_F destRect = D2D1::RectF(x, y, x + w, y + h);
 	pRT->DrawBitmap(bitmap, destRect, opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 
-	// Overlay tint color using source-atop compositing via layer + bitmap brush
-	// Use the bitmap as a mask: create a layer clipped to the bitmap alpha
+	
+	
 	ID2D1BitmapBrush* pBmpBrush = nullptr;
 	HRESULT hr = pRT->CreateBitmapBrush(bitmap, &pBmpBrush);
 	if (SUCCEEDED(hr)) {
-		// Scale the brush to match destination size
+		
 		D2D1_SIZE_F bmpSize = bitmap->GetSize();
 		float sx = w / bmpSize.width;
 		float sy = h / bmpSize.height;
@@ -304,13 +304,13 @@ void Renderer::DrawBitmapTinted(ID2D1Bitmap* bitmap, float x, float y, float w, 
 		ID2D1Layer* pLayer = nullptr;
 		hr = pRT->CreateLayer(nullptr, &pLayer);
 		if (SUCCEEDED(hr)) {
-			// Push layer using bitmap brush as opacity mask
+			
 			pRT->PushLayer(
 				D2D1::LayerParameters(destRect, nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
 					D2D1::Matrix3x2F::Identity(), 1.0f, pBmpBrush),
 				pLayer);
 
-			// Fill with tint color — only visible where bitmap has alpha
+			
 			pBrush->SetColor(tint);
 			pRT->FillRectangle(destRect, pBrush);
 

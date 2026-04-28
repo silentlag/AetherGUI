@@ -15,7 +15,7 @@ public:
 	bool mouseClicked = false;
 	float scrollDelta = 0;
 
-	// Drag-scroll with middle/right mouse button
+	
 	bool middleMouseDown = false;
 	bool rightMouseDown = false;
 	bool isDragScrolling = false;
@@ -80,7 +80,7 @@ public:
 	ShootingStar stars[MAX_STARS];
 	float starSpawnTimer = 0.0f;
 
-	// Particle style: 0=Shooting Stars, 1=Fireflies, 2=Aurora, 3=Snow, 4=None
+	
 	int particleStyle = 0;
 	struct Firefly {
 		float x, y;
@@ -193,7 +193,7 @@ public:
 
 	ColorPicker accentPicker;
 
-	// === Aether Smooth filter controls ===
+	
 	struct {
 		Toggle enabled;
 		Toggle lagRemovalEnabled;
@@ -208,34 +208,34 @@ public:
 		Slider suppressionTime;
 	} aether;
 
-	// === Full UI Themes ===
+	
 	static const int MAX_THEMES = 14;
-	const Theme::ThemeData* uiThemeDefaults[MAX_THEMES]; // originals for reset
-	Theme::ThemeData uiThemes[MAX_THEMES];               // editable runtime copies
+	const Theme::ThemeData* uiThemeDefaults[MAX_THEMES]; 
+	Theme::ThemeData uiThemes[MAX_THEMES];               
 	int uiThemeCount = 0;
 	int currentTheme = 0;
 	float themeHoverT[MAX_THEMES] = {};
 
-	// === Hex color input ===
+	
 	TextInput hexColorInput;
 
-	// === Theme inline color editor ===
-	int editingTheme = -1;    // which theme card has picker open (-1 = none)
-	int editingSlot = -1;     // which color slot (0-5)
+	
+	int editingTheme = -1;    
+	int editingSlot = -1;     
 	ColorPicker slotPicker;
-	TextInput slotHexInput;   // hex input for editing slot color
+	TextInput slotHexInput;   
 
 	static const int THEME_SLOT_COUNT = 6;
 	const wchar_t* themeSlotNames[THEME_SLOT_COUNT] = {
 		L"Deep BG", L"Base BG", L"Surface", L"Elevated", L"Text", L"Accent"
 	};
 
-	// Get/Set color slot from ThemeData
+	
 	void GetThemeSlotColor(Theme::ThemeData& t, int slot, float& r, float& g, float& b);
 	void SetThemeSlotColor(Theme::ThemeData& t, int slot, float r, float g, float b);
 	void ResetThemeToDefault(int themeIndex);
 
-	// === Profile system ===
+	
 	int currentProfile = 0;
 	static const int MAX_PROFILES = 4;
 	struct ProfileSlot {
@@ -246,123 +246,123 @@ public:
 	ProfileSlot profiles[MAX_PROFILES];
 	Button profileBtns[MAX_PROFILES];
 
-	// === Live cursor dot ===
+	
 	float liveCursorAnimT = 0;
 	float liveCursorPulseT = 0;
 
-	// === Input Visualizer ===
+	
 	bool showVisualizer = false;
 	Toggle visualizerToggle;
 	float vizAnimT = 0;
 
-	// === Hz meter (reads from service) ===
+	
 	float measuredHz = 0;
 
-	/// Initialize renderer, controls and auto-start the driver service
+	
 	bool Initialize(HWND hwnd);
-	/// Release all resources and stop the driver
+	
 	void Shutdown();
-	/// Main loop frame: update input, draw UI, present
+	
 	void Tick();
 
-	/// Track cursor position for hover/drag interactions
+	
 	void OnMouseMove(float x, float y);
-	/// Begin mouse press — starts drag or click
+	
 	void OnMouseDown();
-	/// End mouse press — finalize drag and apply settings
+	
 	void OnMouseUp();
-	/// Scroll content panels or sliders
+	
 	void OnMouseWheel(float delta);
-	/// Begin drag-scroll with middle mouse button
+	
 	void OnMiddleMouseDown();
-	/// End drag-scroll with middle mouse button
+	
 	void OnMiddleMouseUp();
-	/// Begin drag-scroll with right mouse button
+	
 	void OnRightMouseDown();
-	/// End drag-scroll with right mouse button
+	
 	void OnRightMouseUp();
-	/// Route keyboard input to active text fields and sliders
+	
 	void OnChar(wchar_t ch);
-	/// Handle special keys (arrows, clipboard, command history)
+	
 	void OnKeyDown(int vk);
-	/// Resize render target and recalculate layout
+	
 	void OnResize(UINT width, UINT height);
-	/// React to monitor configuration changes
+	
 	void OnDisplayChange();
 
 private:
-	/// Create all UI controls with default values and layout
+	
 	void InitControls();
-	/// Reserved for future per-frame control updates
+	
 	void UpdateControls();
-	/// Push current filter configuration to the driver service
+	
 	void SendFilterSettings();
-	/// Push all settings (area, filters, buttons, overclock) to the driver
+	
 	void ApplyAllSettings();
-	/// Save current config to the default path next to the executable
+	
 	void AutoSaveConfig();
-	/// Load config from the default path if it exists
+	
 	void AutoLoadConfig();
-	/// Return the full path to aether_config.cfg next to the executable
+	
 	std::wstring GetConfigPath();
 
-	/// Draw the top header bar with logo, status pill and start/stop button
+	
 	void DrawHeader();
-	/// Draw the animated background (stars, dot grid)
+	
 	void DrawBackground();
-	/// Draw the Aether logo image or fallback glyph
+	
 	void DrawLogoBadge(float x, float y);
-	/// Draw the Area tab: screen map, tablet area, options, output mode
+	
 	void DrawAreaPanel();
-	/// Draw the Filters tab: smoothing, antichatter, noise, snap, etc.
+	
 	void DrawFilterPanel();
-	/// Draw the Console tab: driver log output and command input
+	
 	void DrawConsolePanel();
-	/// Draw the Settings tab: button mapping, pen settings, overclock
+	
 	void DrawSettingsPanel();
-	/// Draw the About tab: logo animation, credits, feature list
+	
 	void DrawAboutPanel();
-	/// Draw the bottom status bar with connection info, mode, and Hz meter
+	
 	void DrawStatusBar();
-	/// Draw live cursor dot on tablet area preview
+	
 	void DrawLiveCursor(float previewX, float previewY, float previewW, float previewH, float fullW, float fullH);
-	/// Draw the input trail visualizer overlay
+	
 	void DrawInputVisualizer(float x, float y, float w, float h);
-	/// Draw full UI theme selector cards
+	
 	void DrawThemeSelector(float x, float& y, float w);
-	/// Draw profile selector buttons
+	
 	void DrawProfileSelector(float x, float y, float w);
-	/// Update Hz meter from pen position timestamps
+	
 	void UpdateHzMeter();
-	/// Draw the overclock info card with Hz meter
+	
 	void DrawOverclockInfo(float x, float y, float w);
-	/// Re-enumerate monitors and update display target list
+	
 	void RefreshDetectedScreen();
-	/// Ensure scroll offsets stay within content bounds
+	
 	void ClampScrollOffsets();
-	/// Send desktop size and screen area to the driver
+	
 	void SendDisplaySettingsToDriver();
-	/// Launch AetherService.exe and send initial settings
+	
 	bool StartDriverService();
-	/// Send all startup settings (area, mode, buttons, filters) then start
+	
 	void SendStartupSettingsToDriver();
-	/// Switch to a different display target and apply its resolution
+	
 	void ApplyDisplayTarget(int index);
-	/// Calculate screen width/height ratio for aspect lock
+	
 	float GetScreenAspectRatio() const;
-	/// Clamp screen area values to detected desktop bounds
+	
 	void ClampScreenArea();
-	/// Clamp tablet area within full tablet dimensions
+	
 	void ClampTabletAreaToFull(float fullTabletW, float fullTabletH);
-	/// Enforce aspect ratio lock on tablet area dimensions
+	
 	void ApplyAspectLock(bool preserveHeight);
 
-	/// Get Y coordinate where scrollable content begins
+	
 	float GetContentAreaTop();
-	/// Get Y coordinate where scrollable content ends (above status bar)
+	
 	float GetContentAreaBottom();
-	/// Push a clip rectangle covering the content area
+	
 	void BeginClipContent();
-	/// Pop the content area clip rectangle
+	
 	void EndClipContent();
 };

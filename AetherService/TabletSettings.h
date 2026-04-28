@@ -8,6 +8,16 @@ public:
 		TypeWacom4100,
 		TypeWacomBamboo,
 		TypeWacomIntuos4,
+		TypeWacomIntuosV2,
+		TypeWacomIntuosV3,
+		TypeUCLogic,
+		TypeUCLogicV1,
+		TypeUCLogicV2,
+		TypeGiano,
+		TypeXPPen,
+		TypeXPPenOffsetPressure,
+		TypeXPPenGen2,
+		TypeXPPenOffsetAux,
 		TypeWacomDrivers
 	};
 
@@ -22,11 +32,12 @@ public:
 	double height;
 	BYTE reportId;
 	int reportLength;
+	int reportOffset;
 	double skew;
 	TabletType type;
 	int mouseWheelSpeed;
 
-	// Pre-computed reciprocals for fast coordinate conversion
+	
 	double invMaxX;
 	double invMaxY;
 

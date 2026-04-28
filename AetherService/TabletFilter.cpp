@@ -10,23 +10,23 @@ TabletFilter::TabletFilter() {
 	isEnabled = false;
 }
 
-//
-// Start Timer
-//
+
+
+
 bool TabletFilter::StartTimer() {
 	if (timer == NULL) {
 		MMRESULT result = timeSetEvent(
-			(UINT)timerInterval,//UINT           uDelay,
-			1,//UINT           uResolution,
-			callback, //LPTIMECALLBACK lpTimeProc,
-			NULL, //DWORD_PTR      dwUser,
-			TIME_PERIODIC | TIME_KILL_SYNCHRONOUS //UINT           fuEvent
+			(UINT)timerInterval,
+			1,
+			callback, 
+			NULL, 
+			TIME_PERIODIC | TIME_KILL_SYNCHRONOUS 
 		);
 		if (result == NULL) {
 			return false;
 		}
 		else {
-			timer = (HANDLE)1; // for code compatibility purposes
+			timer = (HANDLE)1; 
 			uTimerID = result;
 		}
 	}
@@ -34,14 +34,14 @@ bool TabletFilter::StartTimer() {
 }
 
 
-//
-// Stop Timer
-//
+
+
+
 bool TabletFilter::StopTimer() {
 	if (timer == NULL) return false;
 
 	MMRESULT result = timeKillEvent(uTimerID);
-	// Always reset timer handle so StartTimer() can create a new one
+	
 	timer = NULL;
 	return (result == TIMERR_NOERROR);
 }

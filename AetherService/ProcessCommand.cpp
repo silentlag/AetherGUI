@@ -5,19 +5,19 @@
 #include "Logger.h"
 
 
-//
-// Process Command
-//
+
+
+
 bool ProcessCommand(CommandLine *cmd) {
 
 	LOG_INFO(">> %s\n", cmd->line.c_str());
 
-	//
-	// Tablet
-	//
+	
+	
+	
 	if (cmd->is("Tablet")) {
 
-		// USB Tablet
+		
 		if (cmd->valueCount == 3) {
 			string guid = cmd->GetString(0, "");
 			int stringId = cmd->GetInt(1, 0);
@@ -35,15 +35,19 @@ bool ProcessCommand(CommandLine *cmd) {
 			}
 		}
 
-		// HID Tablet
-		else if (cmd->valueCount == 4 || cmd->valueCount == 5) {
+		
+		else if (cmd->valueCount >= 4 && cmd->valueCount <= 9) {
 			USHORT vendorID = cmd->GetInt(0, 0);
 			USHORT productID = cmd->GetInt(1, 0);
 			USHORT usagePage = cmd->GetInt(2, 0);
 			USHORT usage = cmd->GetInt(3, 0);
 			int inputReportLength = cmd->GetInt(4, 0);
+			int stringId = cmd->GetInt(5, 0);
+			string stringMatch = cmd->GetString(6, "");
+			int stringId2 = cmd->GetInt(7, 0);
+			string stringMatch2 = cmd->GetString(8, "");
 			if (tablet == NULL) {
-				tablet = new Tablet(vendorID, productID, usagePage, usage, inputReportLength);
+				tablet = new Tablet(vendorID, productID, usagePage, usage, inputReportLength, stringId, stringMatch, stringId2, stringMatch2);
 				if (tablet->isOpen) {
 					LOG_INFO("Tablet found! HID usage 0x%04X 0x%04X inputLen %d\n",
 						tablet->hidDevice->usagePage,
@@ -52,8 +56,14 @@ bool ProcessCommand(CommandLine *cmd) {
 				}
 				else {
 					if (inputReportLength > 0) {
-						LOG_WARNING("Can't open HID tablet 0x%04X 0x%04X 0x%04X 0x%04X inputLen %d\n",
-							vendorID, productID, usagePage, usage, inputReportLength);
+						if (stringId > 0 && !stringMatch.empty()) {
+							LOG_WARNING("Can't open HID tablet 0x%04X 0x%04X 0x%04X 0x%04X inputLen %d string %d '%s' string2 %d '%s'\n",
+								vendorID, productID, usagePage, usage, inputReportLength, stringId, stringMatch.c_str(), stringId2, stringMatch2.c_str());
+						}
+						else {
+							LOG_WARNING("Can't open HID tablet 0x%04X 0x%04X 0x%04X 0x%04X inputLen %d\n",
+								vendorID, productID, usagePage, usage, inputReportLength);
+						}
 					}
 					else {
 						LOG_WARNING("Can't open HID tablet 0x%04X 0x%04X 0x%04X 0x%04X\n", vendorID, productID, usagePage, usage);
@@ -89,7 +99,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	// Check tablet
+	
 	else if (cmd->is("CheckTablet")) {
 		if (!CheckTablet()) {
 			LOG_ERROR("Tablet not found!\n");
@@ -99,7 +109,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	// HID List
+	
 	else if (cmd->is("HIDList")) {
 		HANDLE hidHandle = 0;
 		HIDDevice *hid = new HIDDevice();
@@ -112,7 +122,7 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// HID Device 2
+	
 	else if (cmd->is("HID2")) {
 
 		if (cmd->valueCount == 4) {
@@ -134,42 +144,50 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	// Tablet Name
+	
 	else if (cmd->is("Name")) {
 		if (tablet == NULL) return false;
 		tablet->name = cmd->GetString(0, tablet->name);
 		LOG_INFO("Tablet name = '%s'\n", tablet->name.c_str());
 	}
 
-	// Report Id
+	
 	else if (cmd->is("ReportId")) {
 		if (tablet == NULL) return false;
 		tablet->settings.reportId = cmd->GetInt(0, tablet->settings.reportId);
 		LOG_INFO("Tablet report id = %d\n", tablet->settings.reportId);
 	}
 
-	// Report Length
+	
 	else if (cmd->is("ReportLength")) {
 		if (tablet == NULL) return false;
 		tablet->settings.reportLength = cmd->GetInt(0, tablet->settings.reportLength);
 		LOG_INFO("Tablet report length = %d\n", tablet->settings.reportLength);
 	}
 
-	// Detect Mask
+	
+	else if (cmd->is("ReportOffset")) {
+		if (tablet == NULL) return false;
+		tablet->settings.reportOffset = cmd->GetInt(0, tablet->settings.reportOffset);
+		if (tablet->settings.reportOffset < 0) tablet->settings.reportOffset = 0;
+		LOG_INFO("Tablet report offset = %d\n", tablet->settings.reportOffset);
+	}
+
+	
 	else if (cmd->is("DetectMask")) {
 		if (tablet == NULL) return false;
 		tablet->settings.detectMask = cmd->GetInt(0, tablet->settings.detectMask);
 		LOG_INFO("Tablet detect mask = %02X\n", tablet->settings.detectMask);
 	}
 
-	// Ignore Mask
+	
 	else if (cmd->is("IgnoreMask")) {
 		if (tablet == NULL) return false;
 		tablet->settings.ignoreMask = cmd->GetInt(0, tablet->settings.ignoreMask);
 		LOG_INFO("Tablet ignore mask = %02X\n", tablet->settings.ignoreMask);
 	}
 
-	// Max X
+	
 	else if (cmd->is("MaxX")) {
 		if (tablet == NULL) return false;
 		tablet->settings.maxX = cmd->GetInt(0, tablet->settings.maxX);
@@ -177,7 +195,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet max X = %d\n", tablet->settings.maxX);
 	}
 
-	// Max Y
+	
 	else if (cmd->is("MaxY")) {
 		if (tablet == NULL) return false;
 		tablet->settings.maxY = cmd->GetInt(0, tablet->settings.maxY);
@@ -185,21 +203,21 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet max Y = %d\n", tablet->settings.maxY);
 	}
 
-	// Max Pressure
+	
 	else if (cmd->is("MaxPressure")) {
 		if (tablet == NULL) return false;
 		tablet->settings.maxPressure = cmd->GetInt(0, tablet->settings.maxPressure);
 		LOG_INFO("Tablet max pressure = %d\n", tablet->settings.maxPressure);
 	}
 
-	// Click Pressure
+	
 	else if (cmd->is("ClickPressure")) {
 		if (tablet == NULL) return false;
 		tablet->settings.clickPressure = cmd->GetInt(0, tablet->settings.clickPressure);
 		LOG_INFO("Tablet click pressure = %d\n", tablet->settings.clickPressure);
 	}
 
-	// Tip Threshold, OpenTabletDriver-style percentage
+	
 	else if (cmd->is("TipThreshold") || cmd->is("TipActivationThreshold")) {
 		if (tablet == NULL) return false;
 		double percent = cmd->GetDouble(0, 0.0);
@@ -222,7 +240,7 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Keep pen tip down
+	
 	else if (cmd->is("KeepTipDown")) {
 		if (tablet == NULL) return false;
 		tablet->settings.keepTipDown = cmd->GetInt(0, tablet->settings.keepTipDown);
@@ -230,52 +248,102 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Width
+	
 	else if (cmd->is("Width")) {
 		if (tablet == NULL) return false;
 		tablet->settings.width = cmd->GetDouble(0, tablet->settings.width);
 		LOG_INFO("Tablet width = %0.2f mm\n", tablet->settings.width);
 	}
 
-	// Height
+	
 	else if (cmd->is("Height")) {
 		if (tablet == NULL) return false;
 		tablet->settings.height = cmd->GetDouble(0, tablet->settings.height);
 		LOG_INFO("Tablet height = %0.2f mm\n", tablet->settings.height);
 	}
 
-	// Skew
+	
 	else if (cmd->is("Skew")) {
 		if (tablet == NULL) return false;
 		tablet->settings.skew = cmd->GetDouble(0, tablet->settings.skew);
 		LOG_INFO("Tablet skew = Shift X-axis %0.2f mm per Y-axis mm\n", tablet->settings.skew);
 	}
 
-	// Type
+	
 	else if (cmd->is("Type")) {
 		if (tablet == NULL) return false;
 
-		// Wacom Intuos (490)
+		
 		if (cmd->GetStringLower(0, "") == "wacomintuos") {
 			tablet->settings.type = TabletSettings::TypeWacomIntuos;
 		}
 
-		// Wacom CTL-4100
+		
 		else if (cmd->GetStringLower(0, "") == "wacom4100") {
 			tablet->settings.type = TabletSettings::TypeWacom4100;
 		}
 
-		// Wacom Bamboo / Graphire-style reports
+		
 		else if (cmd->GetStringLower(0, "") == "wacombamboo") {
 			tablet->settings.type = TabletSettings::TypeWacomBamboo;
 		}
 
-		// Wacom Intuos4 / PTK series
+		
 		else if (cmd->GetStringLower(0, "") == "wacomintuos4") {
 			tablet->settings.type = TabletSettings::TypeWacomIntuos4;
 		}
 
-		// Wacom Drivers
+		
+		else if (cmd->GetStringLower(0, "") == "wacomintuosv2") {
+			tablet->settings.type = TabletSettings::TypeWacomIntuosV2;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "wacomintuosv3") {
+			tablet->settings.type = TabletSettings::TypeWacomIntuosV3;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "uclogic") {
+			tablet->settings.type = TabletSettings::TypeUCLogic;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "uclogicv1") {
+			tablet->settings.type = TabletSettings::TypeUCLogicV1;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "uclogicv2") {
+			tablet->settings.type = TabletSettings::TypeUCLogicV2;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "giano" || cmd->GetStringLower(0, "") == "huiongiano") {
+			tablet->settings.type = TabletSettings::TypeGiano;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "xppen") {
+			tablet->settings.type = TabletSettings::TypeXPPen;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "xppenoffsetpressure") {
+			tablet->settings.type = TabletSettings::TypeXPPenOffsetPressure;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "xppengen2") {
+			tablet->settings.type = TabletSettings::TypeXPPenGen2;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "xppenoffsetaux") {
+			tablet->settings.type = TabletSettings::TypeXPPenOffsetAux;
+		}
+
+		
 		else if (cmd->GetStringLower(0, "") == "wacomdrivers") {
 			tablet->settings.type = TabletSettings::TypeWacomDrivers;
 		}
@@ -284,33 +352,44 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Init Feature Report
+	
 	else if (cmd->is("InitFeature") && cmd->valueCount > 0) {
 		if (tablet == NULL) return false;
-		tablet->initFeature = new BYTE[cmd->valueCount];
+		vector<BYTE> report;
+		report.resize(cmd->valueCount);
 		for (int i = 0; i < (int)cmd->valueCount; i++) {
-			tablet->initFeature[i] = cmd->GetInt(i, 0);
+			report[i] = cmd->GetInt(i, 0);
 		}
-		tablet->initFeatureLength = cmd->valueCount;
-		LOG_INFOBUFFER(tablet->initFeature, tablet->initFeatureLength, "Tablet init feature report: ");
+		tablet->initFeatureReports.push_back(report);
+		LOG_INFOBUFFER(report.data(), (int)report.size(), "Tablet init feature report: ");
 	}
 
-	// Init Output Report
+	
+	else if ((cmd->is("InitString") || cmd->is("InitializationString")) && cmd->valueCount > 0) {
+		if (tablet == NULL) return false;
+		for (int i = 0; i < (int)cmd->valueCount && tablet->initStringCount < 8; i++) {
+			tablet->initStringIds[tablet->initStringCount++] = cmd->GetInt(i, 0);
+		}
+		LOG_INFO("Tablet init string count = %d\n", tablet->initStringCount);
+	}
+
+	
 	else if (cmd->is("InitReport") && cmd->valueCount > 0) {
 		if (tablet == NULL) return false;
-		tablet->initReport = new BYTE[cmd->valueCount];
+		vector<BYTE> report;
+		report.resize(cmd->valueCount);
 		for (int i = 0; i < (int)cmd->valueCount; i++) {
-			tablet->initReport[i] = cmd->GetInt(i, 0);
+			report[i] = cmd->GetInt(i, 0);
 		}
-		tablet->initReportLength = cmd->valueCount;
-		LOG_INFOBUFFER(tablet->initReport, tablet->initReportLength, "Tablet init report: ");
+		tablet->initOutputReports.push_back(report);
+		LOG_INFOBUFFER(report.data(), (int)report.size(), "Tablet init report: ");
 
 	}
 
 
-	//
-	// Set Feature Report
-	//
+	
+	
+	
 	else if ((cmd->is("SetFeature") || cmd->is("Feature")) && cmd->valueCount > 1) {
 		if (tablet == NULL) return false;
 		if (tablet->hidDevice == NULL) return false;
@@ -325,9 +404,9 @@ bool ProcessCommand(CommandLine *cmd) {
 		delete[] buffer;
 	}
 
-	//
-	// Get Feature Report
-	//
+	
+	
+	
 	else if (cmd->is("GetFeature") && cmd->valueCount > 1) {
 		if (tablet == NULL) return false;
 		if (tablet->hidDevice == NULL) return false;
@@ -343,9 +422,9 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// Send Output Report
-	//
+	
+	
+	
 	else if ((cmd->is("OutputReport") || cmd->is("Report")) && cmd->valueCount > 1) {
 		if (tablet == NULL) return false;
 		if (tablet->hidDevice == NULL) return false;
@@ -360,9 +439,9 @@ bool ProcessCommand(CommandLine *cmd) {
 		delete[] buffer;
 	}
 
-	//
-	// Tablet Area
-	//
+	
+	
+	
 	else if (cmd->is("TabletArea") || cmd->is("Area")) {
 		if (!CheckTablet()) return true;
 		mapper->areaTablet.width = cmd->GetDouble(0, mapper->areaTablet.width);
@@ -373,7 +452,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		LogTabletArea("Tablet area");
 	}
 
-	// Button Map
+	
 	else if (cmd->is("ButtonMap") || cmd->is("Buttons")) {
 		if (!CheckTablet()) return true;
 		char buttonMapBuffer[32];
@@ -385,7 +464,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Button Map = %s\n", buttonMapBuffer);
 	}
 
-	// Mouse Wheel Speed
+	
 	else if (cmd->is("MouseWheelSpeed")) {
 		if (!CheckTablet()) return true;
 		int MouseWheelSpeed = (int)cmd->GetInt(0, tablet->settings.mouseWheelSpeed);
@@ -393,7 +472,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Mouse Wheel Speed = %d\n", MouseWheelSpeed);
 	}
 
-	// Overclock / high polling mode
+	
 	else if (cmd->is("Overclock") || cmd->is("TabletOverclock")) {
 		if (!CheckTablet()) return true;
 
@@ -413,12 +492,12 @@ bool ProcessCommand(CommandLine *cmd) {
 			double interval = 1000.0 / (double)targetHz;
 			if (interval < 0.5) interval = 0.5;
 
-			// Update interval on the actual timed filter (filterTimed[0] == &smoothing)
-			// and restart the timer unconditionally
+			
+			
 			tablet->smoothing.timerInterval = interval;
 			tablet->smoothing.SetLatency(tablet->smoothing.latency);
 
-			// Also update all timed filters in case they differ
+			
 			for (int fi = 0; fi < tablet->filterTimedCount; fi++) {
 				tablet->filterTimed[fi]->timerInterval = interval;
 			}
@@ -426,8 +505,8 @@ bool ProcessCommand(CommandLine *cmd) {
 			overclockActive = true;
 			overclockTargetHz = (double)targetHz;
 
-			// Stop the multimedia timer; overclock uses a high-resolution loop
-			// so target rates above 1000 Hz can use sub-millisecond intervals.
+			
+			
 			tablet->smoothing.StopTimer();
 			if (tablet->filterTimedCount > 0 && tablet->filterTimed[0]->callback != NULL) {
 				StartOverclockTimer((double)targetHz);
@@ -457,7 +536,7 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Screen Map Area
+	
 	else if (cmd->is("ScreenArea") || cmd->is("Screen")) {
 		if (!CheckTablet()) return true;
 		mapper->areaScreen.width = cmd->GetDouble(0, mapper->areaScreen.width);
@@ -472,22 +551,22 @@ bool ProcessCommand(CommandLine *cmd) {
 		);
 	}
 
-	// Area clipping
+	
 	else if (cmd->is("AreaClipping") || cmd->is("Clipping")) {
 		if (!CheckTablet()) return true;
 		mapper->areaClipping = cmd->GetBoolean(0, mapper->areaClipping);
 		LOG_INFO("Area clipping = %s\n", mapper->areaClipping ? "on" : "off");
 	}
 
-	// Area limiting (block input outside area entirely, OTD-style)
+	
 	else if (cmd->is("AreaLimiting") || cmd->is("Limiting")) {
 		if (!CheckTablet()) return true;
 		mapper->areaLimiting = cmd->GetBoolean(0, mapper->areaLimiting);
-		if (mapper->areaLimiting) mapper->areaClipping = true; // Limiting implies clipping
+		if (mapper->areaLimiting) mapper->areaClipping = true; 
 		LOG_INFO("Area limiting = %s\n", mapper->areaLimiting ? "on" : "off");
 	}
 
-	// Screen Map Area
+	
 	else if (cmd->is("DesktopSize") || cmd->is("Desktop")) {
 		if (!CheckTablet()) return true;
 		mapper->areaVirtualScreen.width = cmd->GetDouble(0, mapper->areaVirtualScreen.width);
@@ -498,7 +577,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		);
 	}
 
-	// Move tablet area to border
+	
 	else if (cmd->is("TabletMove") || cmd->is("Move") && cmd->valueCount > 0) {
 		if (!CheckTablet()) return true;
 		string border;
@@ -533,9 +612,9 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	//
-	// Rotate tablet area
-	//
+	
+	
+	
 	else if (cmd->is("Rotate")) {
 		if (!CheckTablet()) return true;
 		double value = cmd->GetDouble(0, 0);
@@ -549,18 +628,18 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// Relative mode sensitivity
-	//
+	
+	
+	
 	else if (cmd->is("Sensitivity")) {
 		if (!CheckTablet()) return true;
 		vmulti->relativeData.sensitivity = cmd->GetDouble(0, vmulti->relativeData.sensitivity);
 		LOG_INFO("Relative mode sensitivity = %0.2f px/mm\n", vmulti->relativeData.sensitivity);
 	}
 
-	//
-	// Relative mode reset distance
-	//
+	
+	
+	
 	else if (cmd->is("ResetDistance")) {
 		if (!CheckTablet()) return true;
 		vmulti->relativeData.resetDistance = cmd->GetDouble(0, vmulti->relativeData.resetDistance);
@@ -568,13 +647,13 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// VMulti output mode
-	//
+	
+	
+	
 	else if (cmd->is("Mode")) {
 		string mode = cmd->GetStringLower(0, "");
 
-		// Absolute mouse
+		
 		if (mode.compare(0, 3, "abs") == 0) {
 			if (vmulti->mode != VMulti::ModeAbsoluteMouse)
 				vmulti->ResetReport();
@@ -582,7 +661,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Absolute\n");
 		}
 
-		// Relative mouse
+		
 		else if (mode.compare(0, 3, "rel") == 0) {
 			if (vmulti->mode != VMulti::ModeRelativeMouse)
 				vmulti->ResetReport();
@@ -590,7 +669,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Relative\n");
 		}
 
-		// Digitizer
+		
 		else if (mode.compare(0, 3, "dig") == 0 || mode.compare(0, 3, "pen") == 0) {
 			if (vmulti->mode != VMulti::ModeDigitizer)
 				vmulti->ResetReport();
@@ -598,7 +677,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Digitizer\n");
 		}
 
-		// SendInput
+		
 		else if (mode.compare(0, 4, "send") == 0) {
 			if (vmulti->mode != VMulti::ModeSendInput)
 				vmulti->ResetReport();
@@ -614,9 +693,9 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// Smoothing filter
-	//
+	
+	
+	
 	else if (cmd->is("Smoothing")) {
 		if (!CheckTablet()) return true;
 		double latency = cmd->GetDouble(0, tablet->smoothing.GetLatency());
@@ -624,24 +703,24 @@ bool ProcessCommand(CommandLine *cmd) {
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		// Off / False
+		
 		if (stringValue == "off" || stringValue == "false") {
 			latency = 0;
 		}
 
-		// Limits
+		
 		if (latency < 0) latency = 1;
 		if (latency > 1000) latency = 1000;
 		if (threshold < 0.001) threshold = 0.001;
 		if (threshold > 0.999) threshold = 0.999;
 
-		// Set threshold
+		
 		tablet->smoothing.threshold = threshold;
 
-		// Set smoothing filter latency
+		
 		tablet->smoothing.SetLatency(latency);
 
-		// Print output
+		
 		if (tablet->smoothing.weight < 1.0) {
 			tablet->smoothing.isEnabled = true;
 			LOG_INFO("Smoothing = %0.2f ms to reach %0.0f%% (weight = %f)\n", latency, tablet->smoothing.threshold * 100, tablet->smoothing.weight);
@@ -653,9 +732,9 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// Antichatter filter
-	//
+	
+	
+	
 	else if (cmd->is("AntichatterEnabled")) {
 		bool AntichatterEnabled = (bool)cmd->GetInt(0, tablet->smoothing.AntichatterEnabled);
 		tablet->smoothing.AntichatterEnabled = AntichatterEnabled;
@@ -682,9 +761,9 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Filter Antichatter Offset Y = %0.2f cm\n", tablet->smoothing.antichatterOffsetY);
 	}
 
-	//
-	// Prediction
-	//
+	
+	
+	
 	else if (cmd->is("PredictionEnabled")) {
 		bool PredictionEnabled = (bool)cmd->GetInt(0, tablet->smoothing.PredictionEnabled);
 		tablet->smoothing.PredictionEnabled = PredictionEnabled;
@@ -713,16 +792,16 @@ bool ProcessCommand(CommandLine *cmd) {
 
 
 
-	//
-	// Smoothing filter interval
-	//
+	
+	
+	
 	else if (cmd->is("SmoothingInterval")) {
 		int interval = cmd->GetInt(0, (int)round(tablet->smoothing.timerInterval));
 
-		// 10 Hz
+		
 		if (interval > 100) interval = 100;
 
-		// 1000 Hz
+		
 		if (interval < 1) interval = 1;
 
 		if (overclockActive) {
@@ -731,7 +810,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			return true;
 		}
 
-		// Interval changed?
+		
 		if (interval != (int)round(tablet->smoothing.timerInterval)) {
 			tablet->smoothing.timerInterval = interval;
 			tablet->smoothing.SetLatency(tablet->smoothing.latency);
@@ -745,19 +824,19 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// Noise reduction filter
-	//
+	
+	
+	
 	else if (cmd->is("Noise")) {
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		// Off / False
+		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->noise.isEnabled = false;
 			LOG_INFO("Noise Reduction = off\n");
 
-			// Set parameters
+			
 		}
 		else {
 
@@ -765,7 +844,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			double distanceThreshold = cmd->GetDouble(1, tablet->noise.distanceThreshold);
 			int iterations = cmd->GetInt(2, tablet->noise.iterations);
 
-			// Limits
+			
 			if (length < 0) length = 0;
 			else if (length > 50) length = 50;
 
@@ -775,12 +854,12 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (iterations < 1) iterations = 1;
 			else if (iterations > 100) iterations = 100;
 
-			// Set
+			
 			tablet->noise.buffer.SetLength(length);
 			tablet->noise.distanceThreshold = distanceThreshold;
 			tablet->noise.iterations = iterations;
 
-			// Enable filter
+			
 			if (tablet->noise.buffer.length > 0) {
 				tablet->noise.isEnabled = true;
 				LOG_INFO("Noise Reduction = %d packets, %0.3f mm threshold, %d iterations\n", length, distanceThreshold, iterations);
@@ -797,15 +876,15 @@ bool ProcessCommand(CommandLine *cmd) {
 
 	}
 
-	//
-	// Position Reconstructor filter
-	//
+	
+	
+	
 	else if (cmd->is("Reconstructor") || cmd->is("Recon")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		// Off / False
+		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->reconstructor.isEnabled = false;
 			LOG_INFO("Reconstructor = off\n");
@@ -816,7 +895,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			double accelCap = cmd->GetDouble(2, tablet->reconstructor.accelerationCap);
 			double predTime = cmd->GetDouble(3, tablet->reconstructor.predictionTimeMs);
 
-			// Limits
+			
 			if (strength < 0) strength = 0;
 			else if (strength > 2.0) strength = 2.0;
 
@@ -829,7 +908,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (predTime < 0.1) predTime = 0.1;
 			else if (predTime > 50) predTime = 50;
 
-			// Set
+			
 			tablet->reconstructor.reconstructionStrength = strength;
 			tablet->reconstructor.velocitySmoothing = velSmooth;
 			tablet->reconstructor.accelerationCap = accelCap;
@@ -847,15 +926,15 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	//
-	// Adaptive state filter
-	//
+	
+	
+	
 	else if (cmd->is("Adaptive")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		// Off / False
+		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->adaptive.isEnabled = false;
 			LOG_INFO("Adaptive = off\n");
@@ -865,7 +944,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			double measNoise = cmd->GetDouble(1, tablet->adaptive.measurementNoise);
 			double velWeight = cmd->GetDouble(2, tablet->adaptive.velocityWeight);
 
-			// Limits
+			
 			if (procNoise < 0.001) procNoise = 0.001;
 			else if (procNoise > 10.0) procNoise = 10.0;
 
@@ -875,7 +954,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (velWeight < 0) velWeight = 0;
 			else if (velWeight > 5.0) velWeight = 5.0;
 
-			// Set
+			
 			tablet->adaptive.processNoise = procNoise;
 			tablet->adaptive.measurementNoise = measNoise;
 			tablet->adaptive.velocityWeight = velWeight;
@@ -887,15 +966,15 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	//
-	// Aether Smooth filter
-	//
+	
+	
+	
 	else if (cmd->is("AetherSmooth") || cmd->is("Aether")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		// Off / False
+		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->aetherSmooth.isEnabled = false;
 			LOG_INFO("Aether Smooth = off\n");
@@ -906,7 +985,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	// Aether Smooth: Lag Removal
+	
 	else if (cmd->is("AetherLagRemoval") || cmd->is("AS_LagRemoval")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableAntismoothing = cmd->GetBoolean(0, tablet->aetherSmooth.enableAntismoothing);
@@ -916,7 +995,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.antismoothing);
 	}
 
-	// Aether Smooth: Stabilizer (Adaptive Flow)
+	
 	else if (cmd->is("AetherStabilizer") || cmd->is("AS_Stabilizer")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableSmoothing = cmd->GetBoolean(0, tablet->aetherSmooth.enableSmoothing);
@@ -928,7 +1007,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.speedSensitivity);
 	}
 
-	// Aether Smooth: Dynamic Snapping
+	
 	else if (cmd->is("AetherSnapping") || cmd->is("AS_Snapping")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableRadialFollow = cmd->GetBoolean(0, tablet->aetherSmooth.enableRadialFollow);
@@ -940,7 +1019,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.radialOuter);
 	}
 
-	// Aether Smooth: Suppression
+	
 	else if (cmd->is("AetherSuppression") || cmd->is("AS_Suppress")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableDebounce = cmd->GetBoolean(0, tablet->aetherSmooth.enableDebounce);
@@ -964,12 +1043,12 @@ bool ProcessCommand(CommandLine *cmd) {
 	else if (cmd->is("Debug")) {
 		if (!CheckTablet()) return true;
 		tablet->debugEnabled = cmd->GetBoolean(0, tablet->debugEnabled);
-		//vmulti->debugEnabled = tablet->debugEnabled;
+		
 		LOG_INFO("Tablet debug = %s\n", tablet->debugEnabled ? "True" : "False");
 	}
 
 
-	// Log
+	
 	else if (cmd->is("Log") && cmd->valueCount > 0) {
 		string logPath = cmd->GetString(0, "log.txt");
 		if (!cmd->GetBoolean(0, true)) {
@@ -985,13 +1064,13 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Wait
+	
 	else if (cmd->is("Wait")) {
 		int waitTime = cmd->GetInt(0, 0);
 		Sleep(waitTime);
 	}
 
-	// Direct logging
+	
 	else if (cmd->is("LogDirect")) {
 		logger.ProcessMessages();
 		logger.directPrint = cmd->GetBoolean(0, logger.directPrint);
@@ -1001,53 +1080,53 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Output
+	
 	else if (cmd->is("Output")) {
 		vmulti->outputEnabled = cmd->GetBoolean(0, vmulti->outputEnabled);
 		LOG_INFO("Output enabled = %s\n", vmulti->outputEnabled ? "True" : "False");
 	}
 
-	// Info
+	
 	else if (cmd->is("Info")) {
 		if (!CheckTablet()) return true;
 		LogInformation();
 	}
 
-	// Status
+	
 	else if (cmd->is("Status")) {
 		if (!CheckTablet()) return true;
 		LogStatus();
 	}
 
-	// Benchmark
+	
 	else if (cmd->is("Benchmark") || cmd->is("Bench")) {
 		if (!CheckTablet()) return true;
 
 		int timeLimit;
 		int packetCount = cmd->GetInt(0, 200);
 
-		// Limit packet count
+		
 		if (packetCount < 10) packetCount = 10;
 		if (packetCount > 1000) packetCount = 1000;
 
-		// Time limit
+		
 		timeLimit = packetCount * 10;
 		if (timeLimit < 1000) timeLimit = 1000;
 
-		// Log
+		
 		LOG_DEBUG("Tablet benchmark starting in 3 seconds!\n");
 		LOG_DEBUG("Keep the pen stationary on top of the tablet!\n");
 		Sleep(3000);
 		LOG_DEBUG("Benchmark started!\n");
 
-		// Benchmark
+		
 		tablet->benchmark.Start(packetCount);
 
-		// Wait for the benchmark to finish
+		
 		for (int i = 0; i < timeLimit / 100; i++) {
 			Sleep(100);
 
-			// Benchmark result
+			
 			if (tablet->benchmark.packetCounter <= 0) {
 
 				double width = tablet->benchmark.maxX - tablet->benchmark.minX;
@@ -1077,7 +1156,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			}
 		}
 
-		// Benchmark failed
+		
 		if (tablet->benchmark.packetCounter > 0) {
 			LOG_ERROR("Benchmark failed!\n");
 			LOG_ERROR("Not enough packets captured in %0.2f seconds!\n",
@@ -1089,7 +1168,7 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Include
+	
 	else if (cmd->is("Include")) {
 		string filename = cmd->GetString(0, "");
 		if (filename == "") {
@@ -1105,14 +1184,14 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 
-	// Exit
+	
 	else if (cmd->is("Exit") || cmd->is("Quit")) {
 		LOG_INFO("Bye!\n");
 		CleanupAndExit(0);
 	}
 
 
-	// Unknown
+	
 	else if (cmd->isValid) {
 		LOG_WARNING("Unknown command: %s\n", cmd->line.c_str());
 	}
@@ -1122,15 +1201,15 @@ bool ProcessCommand(CommandLine *cmd) {
 
 
 
-//
-// Read command file
-//
+
+
+
 bool ReadCommandFile(string filename) {
 	CommandLine *cmd;
 	ifstream file;
 	string line = "";
 
-	// Open config file
+	
 	file.open(filename);
 	if (!file.is_open()) {
 		return false;
@@ -1139,15 +1218,15 @@ bool ReadCommandFile(string filename) {
 
 	LOG_INFO("\\ Reading '%s'\n", filename.c_str());
 
-	// Loop through lines
+	
 	while (!file.eof()) {
 		getline(file, line);
 		if (line.length() == 0) continue;
 		cmd = new CommandLine(line);
 
-		//
-		// Do not redefine tablet if one is already open
-		//
+		
+		
+		
 		if (cmd->is("Tablet") && tablet != NULL && tablet->IsConfigured()) {
 			LOG_INFO(">> %s\n", cmd->line.c_str());
 			LOG_INFO("Tablet is already defined!\n");
@@ -1166,9 +1245,9 @@ bool ReadCommandFile(string filename) {
 
 
 
-//
-// Log general information
-//
+
+
+
 void LogInformation() {
 	char stringBuffer[64];
 	int maxLength = sizeof(stringBuffer) - 1;
@@ -1224,9 +1303,9 @@ void LogInformation() {
 	LOG_INFO("\n");
 }
 
-//
-// Log Status
-//
+
+
+
 void LogStatus() {
 	LOG_STATUS("TABLET %s\n", tablet->name.c_str());
 
@@ -1251,9 +1330,9 @@ void LogStatus() {
 	LOG_STATUS("MAX_PRESSURE %d\n", tablet->settings.maxPressure);
 }
 
-//
-// Log tablet area
-//
+
+
+
 void LogTabletArea(string text) {
 	LOG_INFO("%s: (%0.2f mm x %0.2f mm X+%0.2f mm Y+%0.2f mm)\n",
 		text.c_str(),

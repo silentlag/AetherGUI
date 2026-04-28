@@ -2,7 +2,7 @@
 #include "Framework.h"
 #include "Theme.h"
 
-/// Direct2D/DirectWrite renderer for all UI drawing operations
+
 class Renderer {
 public:
 	ID2D1Factory* pFactory = nullptr;
@@ -28,16 +28,16 @@ public:
 	float dpiScale = 1.0f;
 	float deltaTime = 0.016f;
 
-	/// Create D2D factory, render target, brushes, fonts, and load logo bitmap
+	
 	bool Initialize(HWND hwnd);
-	/// Release all D2D/DWrite resources and unload private font
+	
 	void Shutdown();
-	/// Resize the render target to match the new window size
+	
 	void Resize(UINT width, UINT height);
 
-	/// Begin a new frame: call BeginDraw and clear to background color
+	
 	void BeginFrame();
-	/// End the frame: call EndDraw and handle device loss
+	
 	void EndFrame();
 
 	void FillRect(float x, float y, float w, float h, D2D1_COLOR_F color);
@@ -63,11 +63,11 @@ public:
 		D2D1_COLOR_F leftColor, D2D1_COLOR_F rightColor);
 
 private:
-	/// Search for font.ttf near the executable and register it as a private font
+	
 	void TryLoadPrivateFont();
-	/// Search for aether_logo.png near the executable and load as D2D bitmap
+	
 	void TryLoadLogoBitmap();
 	bool LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize = 0);
-	/// Create all IDWriteTextFormat objects for title, body, small, mono, icon fonts
+	
 	bool CreateTextFormats();
 };

@@ -1,7 +1,7 @@
-// stdafx.h : include file for standard system include files,
-// or project specific include files that are used frequently, but
-// are changed infrequently
-//
+
+
+
+
 #pragma once
 #include "targetver.h"
 
@@ -19,7 +19,7 @@
 #include "Tablet.h"
 #include "ScreenMapper.h"
 
-// Global variables...
+
 extern VMulti *vmulti;
 extern Tablet *tablet;
 extern ScreenMapper *mapper;
@@ -32,4 +32,4 @@ extern void StartOverclockTimer(double targetHz);
 extern void StopOverclockTimer();
 
 
-// TODO: reference additional headers your program requires here
+

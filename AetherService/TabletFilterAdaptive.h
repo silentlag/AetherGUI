@@ -6,27 +6,27 @@
 class TabletFilterAdaptive : public TabletFilter {
 public:
 
-	// State vector: [x, y, vx, vy]
+	
 	double state[4];
 
-	// Error covariance matrix P (4x4)
+	
 	double P[4][4];
 
-	// Process noise covariance Q (4x4 diagonal)
-	double processNoise;        // Q scalar for position
-	double processNoiseVelocity; // Q scalar for velocity
+	
+	double processNoise;        
+	double processNoiseVelocity; 
 
-	// Measurement noise covariance R (2x2 diagonal)
-	double measurementNoise;    // R scalar
+	
+	double measurementNoise;    
 
-	// Velocity model weight (how much the velocity model is trusted)
+	
 	double velocityWeight;
 
-	// Last update timestamp
+	
 	double lastTimestamp;
 	bool hasInitialized;
 
-	// Output
+	
 	Vector2D position;
 	Vector2D target;
 

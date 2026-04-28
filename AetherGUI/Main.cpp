@@ -6,7 +6,7 @@
 #include "AetherApp.h"
 #include "resource.h"
 
-// Create a high-quality HICON from a PNG file at any requested size using WIC
+
 static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 	IWICImagingFactory* wicFactory = nullptr;
 	IWICBitmapDecoder* decoder = nullptr;
@@ -24,14 +24,14 @@ static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 	hr = decoder->GetFrame(0, &frame);
 	if (FAILED(hr)) goto cleanup;
 
-	// Scale to requested size
+	
 	hr = wicFactory->CreateBitmapScaler(&scaler);
 	if (FAILED(hr)) goto cleanup;
 
 	hr = scaler->Initialize(frame, size, size, WICBitmapInterpolationModeHighQualityCubic);
 	if (FAILED(hr)) goto cleanup;
 
-	// Convert to 32bpp BGRA
+	
 	hr = wicFactory->CreateFormatConverter(&converter);
 	if (FAILED(hr)) goto cleanup;
 
@@ -43,16 +43,16 @@ static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 		UINT stride = size * 4;
 		UINT bufSize = stride * size;
 		std::vector<BYTE> colorBits(bufSize, 0);
-		std::vector<BYTE> maskBits((size * size + 7) / 8, 0); // 1bpp AND mask, all 0 = opaque
+		std::vector<BYTE> maskBits((size * size + 7) / 8, 0); 
 
 		hr = converter->CopyPixels(nullptr, stride, bufSize, colorBits.data());
 		if (FAILED(hr)) goto cleanup;
 
-		// Create a DDB color bitmap and mask bitmap for CreateIconIndirect
+		
 		BITMAPINFO bmi = {};
 		bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 		bmi.bmiHeader.biWidth = size;
-		bmi.bmiHeader.biHeight = -(LONG)size; // top-down
+		bmi.bmiHeader.biHeight = -(LONG)size; 
 		bmi.bmiHeader.biPlanes = 1;
 		bmi.bmiHeader.biBitCount = 32;
 		bmi.bmiHeader.biCompression = BI_RGB;
@@ -63,7 +63,7 @@ static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 		if (hbmColor && dibBits) {
 			memcpy(dibBits, colorBits.data(), bufSize);
 
-			// Pre-multiply alpha for correct icon rendering
+			
 			BYTE* px = (BYTE*)dibBits;
 			for (UINT i = 0; i < (UINT)(size * size); i++) {
 				BYTE a = px[3];
@@ -98,7 +98,7 @@ cleanup:
 	return hIcon;
 }
 
-// Search for aether_logo.png near the executable
+
 static std::wstring FindLogoPNG() {
 	wchar_t exePath[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, exePath, MAX_PATH);
@@ -127,7 +127,7 @@ static std::wstring FindLogoPNG() {
 AetherApp app;
 bool isRunning = true;
 
-// === System Tray ===
+
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAY_SHOW  4001
 #define ID_TRAY_EXIT  4002
@@ -141,7 +141,7 @@ void CreateTrayIcon(HWND hWnd, HINSTANCE hInstance) {
 	nid.uID = 1;
 	nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 	nid.uCallbackMessage = WM_TRAYICON;
-	// Generate tray icon from PNG at the exact tray size for crisp rendering
+	
 	int traySize = GetSystemMetrics(SM_CXSMICON);
 	{
 		std::wstring png = FindLogoPNG();
@@ -183,7 +183,7 @@ void ShowTrayMenu(HWND hWnd) {
 	AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, L"Show Aether");
 	AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
-	// Required for the menu to disappear when clicking elsewhere
+	
 	SetForegroundWindow(hWnd);
 	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, nullptr);
 	DestroyMenu(hMenu);
@@ -222,7 +222,7 @@ void EnablePerMonitorDpiAwareness() {
 }
 
 void ApplyAetherWindowTheme(HWND hWnd) {
-	// Read colors from the current theme instead of hardcoding
+	
 	BOOL darkMode = Theme::IsLightTheme() ? FALSE : TRUE;
 	DwmSetWindowAttribute(hWnd, 19, &darkMode, sizeof(darkMode));
 	DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
@@ -246,7 +246,7 @@ void ApplyAetherWindowTheme(HWND hWnd) {
 	DWM_WINDOW_CORNER_PREFERENCE corner = static_cast<DWM_WINDOW_CORNER_PREFERENCE>(DWMWCP_ROUND);
 	DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
 
-	// Force Windows to redraw the non-client area (titlebar/border)
+	
 	SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
 		SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
@@ -387,8 +387,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 	case WM_ACTIVATE:
 	case WM_SETTINGCHANGE:
-		// Don't call heavy ApplyAetherWindowTheme on every focus change
-		// It causes SetWindowPos+RedrawWindow which can disrupt timing
+		
+		
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 
 	case WM_DESTROY:
@@ -420,10 +420,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
-	// === Single instance check ===
+	
 	HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"AetherGUI_SingleInstance");
 	if (GetLastError() == ERROR_ALREADY_EXISTS) {
-		// Another instance is running — find its window and bring to front
+		
 		HWND existing = FindWindowW(L"AetherDriverClass", nullptr);
 		if (existing) {
 			if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
@@ -436,7 +436,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 	EnablePerMonitorDpiAwareness();
 
-	// Prevent Windows 11 from throttling our process when not in foreground
+	
 	{
 		struct { ULONG Version; ULONG ControlMask; ULONG StateMask; } throttling = {};
 		throttling.Version = 1;
@@ -446,7 +446,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	}
 	timeBeginPeriod(1);
 
-	// Initialize COM early so we can use WIC to create icons from PNG
+	
 	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
 	WNDCLASSEXW wc = {};
@@ -459,8 +459,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	wc.hbrBackground = hDarkBrush;
 	wc.lpszClassName = L"AetherDriverClass";
 
-	// Generate high-quality icons from the PNG logo at runtime via WIC
-	// This avoids ICO quality limitations — always pixel-perfect at any DPI
+	
+	
 	std::wstring logoPng = FindLogoPNG();
 	HICON hIconClassBig = nullptr;
 	HICON hIconClassSmall = nullptr;
@@ -510,11 +510,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 	if (!hWnd) return 1;
 
-	// Set window icons from PNG — crisp at any size
+	
 	HICON hIconBig = nullptr;
 	HICON hIconSmall = nullptr;
 	if (!logoPng.empty()) {
-		// 48x48 for taskbar on 100% DPI, larger for high-DPI
+		
 		int bigSize = std::max(48, GetSystemMetrics(SM_CXICON));
 		hIconBig = CreateIconFromPNG(logoPng, bigSize);
 		hIconSmall = CreateIconFromPNG(logoPng, GetSystemMetrics(SM_CXSMICON));

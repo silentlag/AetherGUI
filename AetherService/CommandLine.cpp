@@ -4,23 +4,23 @@
 #define LOG_MODULE "CommandLine"
 #include "Logger.h"
 
-//
-// Constructor
-//
+
+
+
 CommandLine::CommandLine(string text) {
 	this->line = text;
 	this->Parse(text);
 }
 
-//
-// Destructor
-//
+
+
+
 CommandLine::~CommandLine() {
 }
 
-//
-// Command matcher
-//
+
+
+
 bool CommandLine::is(string command) {
 
 	string match = this->command;
@@ -34,9 +34,9 @@ bool CommandLine::is(string command) {
 }
 
 
-//
-// Parse
-//
+
+
+
 int CommandLine::Parse(string line) {
 
 	string item = "";
@@ -64,7 +64,7 @@ int CommandLine::Parse(string line) {
 	for (std::string::iterator it = line.begin(); it != line.end(); ++it) {
 		currentChar = *it;
 
-		// Comment char
+		
 		if (!isEnclosed && currentChar == commentChar) {
 			if (itemLength > 0) {
 				items.push_back(item);
@@ -72,7 +72,7 @@ int CommandLine::Parse(string line) {
 			break;
 		}
 
-		// Is split char?
+		
 		isSplitChar = false;
 		for (int i = 0; i < (int)sizeof(splitChars); i++) {
 			if (splitChars[i] && currentChar == splitChars[i]) {
@@ -81,7 +81,7 @@ int CommandLine::Parse(string line) {
 			}
 		}
 
-		// Is end char?
+		
 		isEndChar = false;
 		for (int i = 0; i < (int)sizeof(endChars); i++) {
 			if (currentChar == endChars[i]) {
@@ -90,21 +90,21 @@ int CommandLine::Parse(string line) {
 			}
 		}
 
-		// Is last char?
+		
 		isLastChar = false;
 		if (index == lineLength - 1) {
 			isLastChar = true;
 		}
 
 
-		// Toggle enclosing
+		
 		isEnclosingChar = false;
 		if (currentChar == enclosingChar && previousChar != escapeChar) {
 			isEnclosed = !isEnclosed;
 			isEnclosingChar = true;
 		}
 
-		// New item
+		
 		if (
 			!isEnclosed &&
 			(
@@ -117,11 +117,11 @@ int CommandLine::Parse(string line) {
 				)
 			) {
 
-			//INFO("char: %c\n", currentChar);
-			//INFO("itemCount = %d\n", itemCount);
-			//INFO("itemLength = %d\n", itemLength);
+			
+			
+			
 
-			// Last char
+			
 			if (isLastChar && !isEndChar && !isSplitChar) {
 				if (!isEnclosingChar) {
 					item.push_back(currentChar);
@@ -129,7 +129,7 @@ int CommandLine::Parse(string line) {
 				}
 			}
 
-			// Create new item
+			
 			if (itemLength > 0) {
 				items.push_back(item);
 				item = "";
@@ -141,12 +141,12 @@ int CommandLine::Parse(string line) {
 				itemLength = 0;
 			}
 
-			// Stop parsing at end of the line
+			
 			if (isEndChar) {
 				break;
 			}
 
-			// Add text to item
+			
 		}
 		else if (currentChar >= 32) {
 			if (itemCount == 0 && currentChar == '=') {
@@ -164,7 +164,7 @@ int CommandLine::Parse(string line) {
 		previousChar = currentChar;
 	}
 
-	// Set command
+	
 	if (itemCount > 0) {
 		command = items[0];
 		isValid = true;
@@ -173,7 +173,7 @@ int CommandLine::Parse(string line) {
 		isValid = false;
 	}
 
-	// Set values
+	
 	values.clear();
 	for (int i = 1; i < (int)items.size(); i++) {
 		values.push_back(items[i]);
@@ -184,9 +184,9 @@ int CommandLine::Parse(string line) {
 }
 
 
-//
-// Parse hex string
-//
+
+
+
 string CommandLine::ParseHex(string str) {
 	if (str.size() >= 3 && str[0] == '0' && str[1] == 'x') {
 		try {
@@ -200,9 +200,9 @@ string CommandLine::ParseHex(string str) {
 }
 
 
-//
-// Get string value
-//
+
+
+
 string CommandLine::GetString(int index, string defaultValue) {
 	if (index < valueCount) {
 		return values[index];
@@ -211,9 +211,9 @@ string CommandLine::GetString(int index, string defaultValue) {
 }
 
 
-//
-// Get lowercase string value
-//
+
+
+
 string CommandLine::GetStringLower(int index, string defaultValue) {
 	string str = GetString(index, defaultValue);
 	transform(str.begin(), str.end(), str.begin(), ::tolower);
@@ -221,9 +221,9 @@ string CommandLine::GetStringLower(int index, string defaultValue) {
 }
 
 
-//
-// Get integer
-//
+
+
+
 int CommandLine::GetInt(int index, int defaultValue) {
 	if (index < valueCount) {
 		try {
@@ -236,9 +236,9 @@ int CommandLine::GetInt(int index, int defaultValue) {
 }
 
 
-//
-// Get long integer
-//
+
+
+
 long CommandLine::GetLong(int index, long defaultValue) {
 	if (index < valueCount) {
 		try {
@@ -251,9 +251,9 @@ long CommandLine::GetLong(int index, long defaultValue) {
 }
 
 
-//
-// Get double precision floating point number
-//
+
+
+
 double CommandLine::GetDouble(int index, double defaultValue) {
 	if (index < valueCount) {
 		try {
@@ -266,9 +266,9 @@ double CommandLine::GetDouble(int index, double defaultValue) {
 }
 
 
-//
-// Get floating point number
-//
+
+
+
 float CommandLine::GetFloat(int index, float defaultValue) {
 	if (index < valueCount) {
 		try {
@@ -281,9 +281,9 @@ float CommandLine::GetFloat(int index, float defaultValue) {
 }
 
 
-//
-// Get boolean
-//
+
+
+
 bool CommandLine::GetBoolean(int index, bool defaultValue) {
 	if (GetInt(index, 0) > 0) return true;
 	string str = GetStringLower(index, "");

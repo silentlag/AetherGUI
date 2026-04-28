@@ -33,7 +33,7 @@
 
 <br/>
 
-<h2>· Feautures ·</h2>
+<h2>· Features ·</h2>
 
 <table align="center">
   <tr>
@@ -57,6 +57,7 @@
 <p>
   AetherGUI includes an embedded tablet database for common Wacom, XP-Pen, Huion, and Gaomon devices.
   Some Wacom models include extra matching rules for official Wacom-driver HID interfaces.
+  Newer Wacom IntuosV2 entries use expanded built-in matching data.
 </p>
 
 <table align="center">
@@ -75,12 +76,25 @@
   <tr>
     <td align="center"><strong>Wacom Intuos / Intuos Pro</strong></td>
     <td align="center">
-      CTL-4100 · PTK-440 · PTK-450 · PTK-650 · PTH-450 · PTH-451 · PTH-650 · PTH-651 · PTH-850 · PTH-851
+      CTL-4100 · CTL-4100WL · CTL-6100 · CTL-6100WL · PTK-440 · PTK-450 · PTK-650<br/>
+      PTH-450 · PTH-451 · PTH-460 · PTH-650 · PTH-651 · PTH-660 · PTH-850 · PTH-851 · PTH-860
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Wacom Cintiq / Pen Display</strong></td>
+    <td align="center">
+      DTC-121 · DTC-133 · DTH-1320 · DTK-1660 · Cintiq Pro 22 DTH-227 · Cintiq Pro 27 DTH-271
     </td>
   </tr>
   <tr>
     <td align="center"><strong>XP-Pen</strong></td>
-    <td align="center">Deco 01 · G430 · G540 Pro · G640</td>
+    <td align="center">
+      Artist 10 / 10S · Artist 12 / 12 Pro / 12 2nd Gen · Artist 13 / 13.3 / 13.3 Pro / 13.3 Pro V2 · Artist 15.6 / 15.6 Pro / 15.6 Pro V2<br/>
+      Artist 16 / 16 Pro / 16 2nd Gen · Artist 22 / 22HD / 22R Pro · Artist 24 / 24 Pro · Artist Pro 14 / 16 / 16TP / 19 / 22 / 24<br/>
+      Deco 01 / 01 V2 / 01 V3 · Deco 02 · Deco 03 · Deco 640 · Deco Fun CT430 / CT640 / CT1060 · Deco L / LW / M / MW<br/>
+      Deco mini4 / mini7 / mini7W V2 · Deco Pro Small / Medium / SW / MW / LW Gen2 / MW Gen2 / XLW Gen2 · Innovator 16<br/>
+      Star 02 / 03 / 03 Pro / 03 V2 · Star 05 V3 · Star 06 / 06C · Star G430 / G430S / G430S V2 · G540 / G540 Pro · G640 / G640S · G960 / G960S / G960S Plus
+    </td>
   </tr>
   <tr>
     <td align="center"><strong>Huion</strong></td>
@@ -88,7 +102,10 @@
   </tr>
   <tr>
     <td align="center"><strong>Gaomon</strong></td>
-    <td align="center">S56K</td>
+    <td align="center">
+      1060 Pro · GM116HD · GM156HD · M5 · M6 · M7 · M8 · M8 Variant 2 · M10K · M10K Pro<br/>
+      M106K · M106K Pro · M1220 · M1230 · PD1161 · PD1320 · PD156 Pro · PD1560 · PD1561 · PD2200 · S56K · S620 · S630 · S830
+    </td>
   </tr>
 </table>
 
@@ -217,7 +234,7 @@
 <p>
   Inspired by Devocub Tablet Driver.
   <br/>
-  Device configuration ideas and tablet metadata were cross-checked against OpenTabletDriver.
+  Community tablet metadata and testing reports helped improve device coverage.
 </p>
 
 </div>

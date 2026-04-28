@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "USBDevice.h"
 #include "HIDDevice.h"
@@ -24,37 +25,37 @@ public:
 	HIDDevice * hidDevice2;
 	int usbPipeId;
 
-	//
-	// Enums
-	//
+	
+	
+	
 	enum TabletButtons {
 		Button1, Button2, Button3, Button4,
 		Button5, Button6, Button7, Button8
 	};
 
-	// Tablet packet state
+	
 	enum TabletPacketState {
 		PacketPositionInvalid = 0,
 		PacketValid = 1,
 		PacketInvalid = 2
 	};
 
-	//
-	// Position report data
-	//
+	
+	
+	
 #pragma pack(1)
 	struct {
 		BYTE reportId;
 		BYTE buttons;
-		USHORT x;
-		USHORT y;
-		USHORT pressure;
-		USHORT z;
+		UINT x;
+		UINT y;
+		UINT pressure;
+		UINT z;
 	} reportData;
 
-	//
-	// Tablet state
-	//
+	
+	
+	
 	struct {
 		bool isValid;
 		BYTE buttons;
@@ -63,58 +64,62 @@ public:
 		double z;
 	} state;
 
-	// Settings
+	
 	TabletSettings settings;
 
-	// Smoothing filter
+	
 	TabletFilterSmoothing smoothing;
 
-	// Noise reduction filter
+	
 	TabletFilterNoiseReduction noise;
 
-	// Peak filter
+	
 	TabletFilterPeak peak;
 
-	// Position Reconstructor filter
+	
 	TabletFilterReconstructor reconstructor;
 
-	// Adaptive state filter
+	
 	TabletFilterAdaptive adaptive;
 
-	// Aether Smooth filter
+	
 	TabletFilterAetherSmooth aetherSmooth;
 
-	// Timed filter
+	
 	TabletFilter *filterTimed[10];
 	int filterTimedCount;
 
-	// Packet filter
+	
 	TabletFilter *filterPacket[10];
 	int filterPacketCount;
 
-	// Benchmark
+	
 	TabletBenchmark benchmark;
 
-	// Button map
+	
 	BYTE buttonMap[16];
 
-	//
+	
 	string name = "Unknown";
 	bool isOpen;
 	bool debugEnabled;
 	int skipPackets;
 
-	// Pen tip button keep down
+	
 	int tipDownCounter;
 
-	// Tablet initialize buffers
+	
+	vector<vector<BYTE>> initFeatureReports;
+	vector<vector<BYTE>> initOutputReports;
 	BYTE *initFeature;
 	int initFeatureLength;
 	BYTE *initReport;
 	int initReportLength;
+	int initStringIds[8];
+	int initStringCount;
 
 	Tablet(string usbGUID, int stringId, string stringMatch);
-	Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength = 0);
+	Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength = 0, int stringId = 0, string stringMatch = "", int stringId2 = 0, string stringMatch2 = "");
 	Tablet();
 	~Tablet();
 

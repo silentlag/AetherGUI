@@ -1,16 +1,61 @@
 #include "stdafx.h"
 #include "HIDDevice.h"
+#include <regex>
 
 #define LOG_MODULE "HIDDevice"
 #include "Logger.h"
 
-HIDDevice::HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT Usage, int InputReportLength) : HIDDevice() {
+static string WideStringToUtf8(const WCHAR *value) {
+	if (value == NULL || value[0] == 0) {
+		return "";
+	}
+	int length = WideCharToMultiByte(CP_UTF8, 0, value, -1, NULL, 0, NULL, NULL);
+	if (length <= 1) {
+		return "";
+	}
+	string result(length - 1, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, value, -1, &result[0], length, NULL, NULL);
+	return result;
+}
+
+static bool ReadHidIndexedString(HANDLE handle, int stringId, string *result) {
+	if (stringId <= 0 || handle == NULL || handle == INVALID_HANDLE_VALUE) {
+		return false;
+	}
+	WCHAR stringBuffer[512];
+	memset(stringBuffer, 0, sizeof(stringBuffer));
+	if (!HidD_GetIndexedString(handle, stringId, stringBuffer, sizeof(stringBuffer))) {
+		return false;
+	}
+	if (result != NULL) {
+		*result = WideStringToUtf8(stringBuffer);
+	}
+	return true;
+}
+
+static bool DeviceStringMatches(const string &value, const string &pattern) {
+	if (pattern.empty()) {
+		return true;
+	}
+	try {
+		return regex_search(value, regex(pattern, regex_constants::icase));
+	}
+	catch (const regex_error &) {
+		return value.find(pattern) != string::npos;
+	}
+}
+
+HIDDevice::HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT Usage, int InputReportLength, int StringId, string StringMatch, int StringId2, string StringMatch2) : HIDDevice() {
 	this->vendorId = VendorId;
 	this->productId = ProductId;
 	this->usagePage = UsagePage;
 	this->usage = Usage;
 	this->inputReportLength = InputReportLength;
-	if (this->OpenDevice(&this->_deviceHandle, this->vendorId, this->productId, this->usagePage, this->usage, this->inputReportLength)) {
+	this->stringId = StringId;
+	this->stringMatch = StringMatch;
+	this->stringId2 = StringId2;
+	this->stringMatch2 = StringMatch2;
+	if (this->OpenDevice(&this->_deviceHandle, this->vendorId, this->productId, this->usagePage, this->usage, this->inputReportLength, this->stringId, this->stringMatch, this->stringId2, this->stringMatch2)) {
 		isOpen = true;
 	}
 }
@@ -19,13 +64,17 @@ HIDDevice::HIDDevice() {
 	isOpen = false;
 	_deviceHandle = NULL;
 	inputReportLength = 0;
+	stringId = 0;
+	stringMatch = "";
+	stringId2 = 0;
+	stringMatch2 = "";
 }
 
 HIDDevice::~HIDDevice() {
 	CloseDevice();
 }
 
-bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength) {
+bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength, int stringId, string stringMatch, int stringId2, string stringMatch2) {
 	HDEVINFO                         deviceInfo;
 	SP_DEVICE_INTERFACE_DATA         deviceInterfaceData;
 	PSP_DEVICE_INTERFACE_DETAIL_DATA deviceInterfaceDetailData;
@@ -55,14 +104,14 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 
 	HidD_GetHidGuid(&hidGuid);
 
-	// Setup device info
+	
 	deviceInfo = SetupDiGetClassDevs(&hidGuid, NULL, 0, DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
 	if (deviceInfo == INVALID_HANDLE_VALUE) {
 		LOG_ERROR("Invalid device info!\n");
 		return false;
 	}
 
-	// Enumerate device interface data
+	
 	dwMemberIdx = 0;
 	while (true) {
 		deviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
@@ -76,10 +125,10 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 
 		deviceInfoData.cbSize = sizeof(deviceInfoData);
 
-		// Get the required buffer size for device interface detail data
+		
 		SetupDiGetDeviceInterfaceDetail(deviceInfo, &deviceInterfaceData, NULL, 0, &dwSize, NULL);
 
-		// Allocate device interface detail data
+		
 		deviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(dwSize);
 		if (deviceInterfaceDetailData == NULL) {
 			dwMemberIdx++;
@@ -87,7 +136,7 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 		}
 		deviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
 
-		// Get interface detail
+		
 		if (SetupDiGetDeviceInterfaceDetail(deviceInfo, &deviceInterfaceData, deviceInterfaceDetailData, dwSize, &dwSize, &deviceInfoData)) {
 
 			TCHAR targetVidPidLower[64];
@@ -111,8 +160,8 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 				vendorPathCount++;
 			}
 
-			// Open metadata handle first. Some Wacom drivers block readable
-			// handles, but still allow capability inspection with zero access.
+			
+			
 			HANDLE inspectHandle = CreateFile(
 				deviceInterfaceDetailData->DevicePath,
 				0,
@@ -122,30 +171,30 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 				0,
 				NULL);
 
-			// HID handle valid?
+			
 			if (inspectHandle != INVALID_HANDLE_VALUE) {
 
-				// HID Attributes
+				
 				memset(&hidAttributes, 0, sizeof(hidAttributes));
 				hidAttributes.Size = sizeof(HIDD_ATTRIBUTES);
 				bool hasAttributes = HidD_GetAttributes(inspectHandle, &hidAttributes) != FALSE;
 
-				// HID Preparsed data
+				
 				hidPreparsedData = NULL;
 				bool hasPreparsedData = HidD_GetPreparsedData(inspectHandle, &hidPreparsedData) != FALSE;
 
-				// HID Capabilities
+				
 				memset(&hidCapabilities, 0, sizeof(hidCapabilities));
 				bool hasCapabilities = hasPreparsedData &&
 					HidP_GetCaps(hidPreparsedData, &hidCapabilities) == HIDP_STATUS_SUCCESS;
 
-				// Debug logging
+				
 				if (this->debugEnabled && hasAttributes && hasCapabilities) {
 
 					string manufacturerName = "";
 					string productName = "";
 
-					// HID manufacturer string
+					
 					if (HidD_GetManufacturerString(inspectHandle, &stringBytes, sizeof(stringBytes))) {
 						for (int i = 0; i < (int)sizeof(stringBytes); i += 2) {
 							if (stringBytes[i]) {
@@ -157,7 +206,7 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 						}
 					}
 
-					// HID product string
+					
 					if (HidD_GetProductString(inspectHandle, &stringBytes, sizeof(stringBytes))) {
 						for (int i = 0; i < (int)sizeof(stringBytes); i += 2) {
 							if (stringBytes[i]) {
@@ -192,7 +241,8 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 				int inputLengthDelta = inputReportLength > 0
 					? abs((int)hidCapabilities.InputReportByteLength - inputReportLength)
 					: 0;
-				bool inputLengthMatches = (inputReportLength <= 0) || inputLengthDelta <= 1;
+				bool inputLengthMatches = (inputReportLength <= 0) ||
+					((int)hidCapabilities.InputReportByteLength == inputReportLength);
 
 				int score = -1;
 				if (hasAttributes && hasCapabilities &&
@@ -213,26 +263,46 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 					hidAttributes.VendorID == vendorId &&
 					hidAttributes.ProductID == productId) {
 
-					if (usageMatches && inputLengthMatches) {
+					bool stringMatches = true;
+					if (stringId > 0 && !stringMatch.empty()) {
+						string indexedString = "";
+						stringMatches =
+							ReadHidIndexedString(inspectHandle, stringId, &indexedString) &&
+							DeviceStringMatches(indexedString, stringMatch);
+					}
+					if (stringMatches && stringId2 > 0 && !stringMatch2.empty()) {
+						string indexedString = "";
+						stringMatches =
+							ReadHidIndexedString(inspectHandle, stringId2, &indexedString) &&
+							DeviceStringMatches(indexedString, stringMatch2);
+					}
+
+					if (usageMatches && inputLengthMatches && stringMatches) {
 						score = usageWildcard ? 50 : 100;
 						if (inputReportLength > 0) {
 							score += 20 - inputLengthDelta;
 						}
+						if (stringId > 0 && !stringMatch.empty()) {
+							score += 30;
+						}
+						if (stringId2 > 0 && !stringMatch2.empty()) {
+							score += 30;
+						}
 					}
 					else if (usageWildcard && inputReportLength <= 0 && hidCapabilities.InputReportByteLength > 0) {
-						// Last-resort fallback for tablets that expose vendor-specific
-						// usage pages differently across Wacom driver versions.
+						
+						
 						score = 10;
 					}
 				}
 
-				// Keep the best readable HID interface for this tablet.
+				
 				if (score >= 0) {
 					targetMatchedCandidates++;
 					DWORD readWriteError = ERROR_SUCCESS;
 					DWORD readOnlyError = ERROR_SUCCESS;
 
-					// Open HID — try read+write first, fallback to read-only if blocked.
+					
 					deviceHandle = CreateFile(
 						deviceInterfaceDetailData->DevicePath,
 						GENERIC_READ | GENERIC_WRITE,
@@ -281,7 +351,7 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 					}
 				}
 
-				// Free HID preparsed data
+				
 				if (hidPreparsedData != NULL) {
 					HidD_FreePreparsedData(hidPreparsedData);
 				}
@@ -296,14 +366,14 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 			}
 		}
 
-		// Free memory
+		
 		free(deviceInterfaceDetailData);
 
-		// Get next interface data
+		
 		dwMemberIdx++;
 	}
 
-	// Destroy device info
+	
 	SetupDiDestroyDeviceInfoList(deviceInfo);
 
 	if ((!resultHandle || resultHandle == INVALID_HANDLE_VALUE) && (verboseTarget || targetPathCount > 0)) {
@@ -321,7 +391,7 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 			vendorMetadataCount);
 	}
 
-	// Copy found handle
+	
 	if (resultHandle && resultHandle != INVALID_HANDLE_VALUE) {
 		this->usagePage = resultUsagePage;
 		this->usage = resultUsage;
@@ -333,9 +403,9 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 	return false;
 }
 
-// Read HID report
+
 int HIDDevice::Read(void *buffer, int length) {
-	//return HidD_GetInputReport(_deviceHandle, buffer, length);
+	
 	DWORD bytesRead;
 	if (ReadFile(_deviceHandle, buffer, length, &bytesRead, 0)) {
 		return bytesRead;
@@ -343,7 +413,7 @@ int HIDDevice::Read(void *buffer, int length) {
 	return 0;
 }
 
-// Write HID report
+
 int HIDDevice::Write(void *buffer, int length) {
 	DWORD bytesWritten;
 	if (WriteFile(_deviceHandle, buffer, length, &bytesWritten, 0)) {
@@ -352,17 +422,21 @@ int HIDDevice::Write(void *buffer, int length) {
 	return 0;
 }
 
-// Set feature report
+
 bool HIDDevice::SetFeature(void *buffer, int length) {
 	return HidD_SetFeature(_deviceHandle, buffer, length);
 }
 
-// Get feature report
+
 bool HIDDevice::GetFeature(void *buffer, int length) {
 	return HidD_GetFeature(_deviceHandle, buffer, length);
 }
 
-// Close the device
+bool HIDDevice::GetIndexedString(int stringId, string *result) {
+	return ReadHidIndexedString(_deviceHandle, stringId, result);
+}
+
+
 void HIDDevice::CloseDevice() {
 	if (isOpen && _deviceHandle != NULL && _deviceHandle != INVALID_HANDLE_VALUE) {
 		try {

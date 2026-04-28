@@ -57,13 +57,13 @@ bool DriverBridge::Start(const std::string& exePath, const std::string& configFi
 	CloseHandle(hStdinRead);
 	CloseHandle(hStdoutWrite);
 
-	// Disable power throttling on the driver service process
-	// Prevents Windows 11 from reducing timer resolution when GUI loses focus
+	
+	
 	{
 		struct { ULONG Version; ULONG ControlMask; ULONG StateMask; } throttling = {};
 		throttling.Version = 1;
-		throttling.ControlMask = 0x1; // PROCESS_POWER_THROTTLING_EXECUTION_SPEED
-		throttling.StateMask = 0;     // disable throttling
+		throttling.ControlMask = 0x1; 
+		throttling.StateMask = 0;     
 		SetProcessInformation(hProcess, ProcessPowerThrottling, &throttling, sizeof(throttling));
 	}
 
@@ -175,7 +175,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 		maxPressure = atoi(status.substr(13).c_str());
 	}
 	else if (status.find("POS ") == 0) {
-		// Parse "POS x y pressure hz"
+		
 		float px = 0, py = 0, pp = 0, phz = 0;
 		if (sscanf_s(status.c_str() + 4, "%f %f %f %f", &px, &py, &pp, &phz) >= 2) {
 			penX.store(px);
@@ -184,7 +184,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 			if (phz > 0.1f) penHz.store(phz);
 			penActive.store(true);
 
-			// Add to trail
+			
 			{
 				std::lock_guard<std::mutex> lock(trailMutex);
 				TrailPoint tp;
@@ -194,7 +194,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 					trail.erase(trail.begin());
 			}
 		}
-		return; // Don't log POS lines to console
+		return; 
 	}
 }
 

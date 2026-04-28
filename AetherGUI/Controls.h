@@ -3,12 +3,12 @@
 #include "Theme.h"
 #include "Renderer.h"
 
-/// Check if point (px, py) lies inside rectangle (x, y, w, h)
+
 inline bool PointInRect(float px, float py, float x, float y, float w, float h) {
 	return px >= x && px <= x + w && py >= y && py <= y + h;
 }
 
-/// Global tooltip system — shows hint text after hovering 0.5s
+
 struct Tooltip {
 	static inline const wchar_t* text = nullptr;
 	static inline const wchar_t* pendingTip = nullptr;
@@ -20,7 +20,7 @@ struct Tooltip {
 	static void Show(float mx, float my, const wchar_t* tip, float dt) {
 		if (!tip || !tip[0]) return;
 		hoveredThisFrame = true;
-		// Reset timer if hovering a different tooltip
+		
 		if (pendingTip != tip) {
 			pendingTip = tip;
 			timer = 0;
@@ -35,7 +35,7 @@ struct Tooltip {
 		}
 	}
 	static void Reset() {
-		// Called at start of frame — only clear if nothing was hovered last frame
+		
 		if (!hoveredThisFrame) {
 			timer = 0;
 			visible = false;
@@ -49,10 +49,10 @@ struct Tooltip {
 		float maxW = 280.0f;
 		float rawW = (float)wcslen(text) * 5.6f + 16.0f;
 		float w = (rawW < maxW) ? rawW : maxW;
-		// Multi-line if text is long
+		
 		float h = (rawW > maxW) ? 36.0f : 22.0f;
 		float dx = x, dy = y;
-		// Clamp to window bounds
+		
 		if (dx + w > Theme::Runtime::WindowWidth - 8) dx = Theme::Runtime::WindowWidth - w - 8;
 		if (dx < 4) dx = 4;
 		if (dy + h > Theme::Runtime::WindowHeight - 8) dy -= h + 8;
@@ -63,7 +63,7 @@ struct Tooltip {
 	}
 };
 
-/// Animated on/off toggle switch with label and tooltip
+
 struct Toggle {
 	float x = 0, y = 0;
 	bool value = false;
@@ -73,12 +73,12 @@ struct Toggle {
 	const wchar_t* label = L"";
 	const wchar_t* tooltip = L"";
 
-	/// Set position, label text, and optional tooltip
+	
 	void Layout(float px, float py, const wchar_t* lbl, const wchar_t* tip = L"") {
 		x = px; y = py; label = lbl; tooltip = tip;
 	}
 
-	/// Process mouse input, animate, return true if value changed
+	
 	bool Update(float mx, float my, bool clicked, float dt) {
 		isHovered = PointInRect(mx, my, x, y, Theme::Size::ToggleWidth + 120, Theme::Size::ToggleHeight);
 		hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
@@ -106,7 +106,7 @@ struct Toggle {
 	}
 };
 
-/// Slider control with drag handle, inline value editing, and keyboard input
+
 struct Slider {
 	float x = 0, y = 0, width = 0;
 	float minVal = 0, maxVal = 1;
@@ -127,7 +127,7 @@ struct Slider {
 	float editBlinkT = 0;
 	bool isMouseDraggingText = false;
 
-	/// Set position, size, label, min/max range, initial value, and tooltip
+	
 	void Layout(float px, float py, float w, const wchar_t* lbl, float mn, float mx, float initial, const wchar_t* tip = L"") {
 		x = px; y = py; width = w; label = lbl;
 		minVal = mn; maxVal = mx; value = initial; animValue = initial; tooltip = tip;
@@ -142,7 +142,7 @@ struct Slider {
 		return end > start;
 	}
 
-	/// Enter text editing mode with current value pre-selected
+	
 	void BeginEdit() {
 		if (!editMode) {
 			memset(editBuffer, 0, sizeof(editBuffer));
@@ -211,7 +211,7 @@ struct Slider {
 		CloseClipboard();
 	}
 
-	/// Process drag/click input on slider track, return true if value changed
+	
 	bool Update(float mx, float my, bool mouseDown, bool clicked, float dt) {
 		float trackY = y + 20;
 		float trackH = Theme::Size::SliderHeight;
@@ -223,7 +223,7 @@ struct Slider {
 		editBlinkT += dt;
 		if (isHovered && tooltip[0]) Tooltip::Show(mx, my, tooltip, dt);
 
-		// Edit mode: handle click-to-position cursor and drag selection
+		
 		if (editMode) {
 			float editBoxX = x + width * 0.6f;
 			float charW = 7.2f;
@@ -258,7 +258,7 @@ struct Slider {
 		return false;
 	}
 
-	/// Process click on input-box variant of slider, return true if value changed
+	
 	bool UpdateInput(float mx, float my, bool mouseDown, bool clicked, float dt) {
 		float inputY = y + 16.0f, inputH = 26.0f;
 		bool hovered = PointInRect(mx, my, x, inputY, width, inputH);
@@ -271,7 +271,7 @@ struct Slider {
 		float boxPad = 8.0f;
 
 		if (editMode) {
-			// Click inside: position cursor, start drag
+			
 			if (clicked && hovered) {
 				int pos = (int)((mx - x - boxPad) / charW + 0.5f);
 				if (pos < 0) pos = 0; if (pos > BufferLength()) pos = BufferLength();
@@ -281,12 +281,12 @@ struct Slider {
 				editBlinkT = 0;
 				return false;
 			}
-			// Click outside: commit
+			
 			if (clicked && !hovered) {
 				isMouseDraggingText = false;
 				return CommitEdit();
 			}
-			// Drag to extend selection
+			
 			if (isMouseDraggingText && mouseDown && !clicked) {
 				int pos = (int)((mx - x - boxPad) / charW + 0.5f);
 				if (pos < 0) pos = 0; if (pos > BufferLength()) pos = BufferLength();
@@ -296,7 +296,7 @@ struct Slider {
 			return false;
 		}
 
-		// Not in edit mode: click to enter
+		
 		if (clicked && hovered) {
 			BeginEdit();
 			int pos = (int)((mx - x - boxPad) / charW + 0.5f);
@@ -333,7 +333,7 @@ struct Slider {
 		return false;
 	}
 
-	/// Apply edited text as new value, clamp to range, return true if changed
+	
 	bool CommitEdit() {
 		editMode = false;
 		float v = Clamp((float)_wtof(editBuffer), minVal, maxVal);
@@ -342,7 +342,7 @@ struct Slider {
 		return changed;
 	}
 
-	/// Remove trailing zeros and dot from formatted number string
+	
 	static void TrimTrailingZeros(wchar_t* buf) {
 		int len = (int)wcslen(buf);
 		bool hasDot = false;
@@ -366,17 +366,17 @@ struct Slider {
 			float charW = 7.2f;
 			float textX = editBoxX + 4;
 
-			// Draw selection highlight
+			
 			int selS = 0, selE = 0;
 			if (GetSelectionRange(selS, selE)) {
 				D2D1_COLOR_F sel = Theme::AccentPrimary(); sel.a = 0.3f;
 				r.FillRoundedRect(textX + selS * charW, y, (float)(selE - selS) * charW, 16, 2, sel);
 			}
 
-			// Draw text using monospace font so cursor aligns with characters
+			
 			r.DrawText(editBuffer, textX, y, editBoxW - 8, 18, Theme::TextPrimary(), r.pFontMono);
 
-			// Draw cursor
+			
 			if (fmod(editBlinkT, 1.0f) < 0.5f)
 				r.DrawLine(textX + editCursor * charW, y + 1, textX + editCursor * charW, y + 15, Theme::AccentPrimary(), 1.0f);
 		} else {
@@ -417,7 +417,7 @@ struct Slider {
 				r.FillRoundedRect(textX + start * charW, inputY + 4, (float)(end - start) * charW, inputH - 8, 2, sel);
 			}
 		}
-		// Use monospace font in edit mode so cursor/selection align with characters
+		
 		IDWriteTextFormat* inputFont = editMode ? r.pFontMono : r.pFontSmall;
 		r.DrawText(text, textX, inputY, textW, inputH, Theme::TextPrimary(), inputFont);
 		if (editMode && fmod(editBlinkT, 1.0f) < 0.5f)
@@ -425,7 +425,7 @@ struct Slider {
 	}
 };
 
-/// Animated button with hover/press effects and optional primary style
+
 struct Button {
 	float x = 0, y = 0, width = 0, height = 0;
 	const wchar_t* label = L"";
@@ -466,7 +466,7 @@ struct Button {
 	}
 };
 
-/// Vertical sidebar tab bar with icon tabs and active indicator
+
 struct TabBar {
 	struct Tab { const wchar_t* label; const wchar_t* icon; float hoverT = 0.0f; };
 	std::vector<Tab> tabs;
@@ -517,7 +517,7 @@ struct TabBar {
 	}
 };
 
-/// Section divider with uppercase title and horizontal line
+
 struct SectionHeader {
 	const wchar_t* title = L"";
 	float x = 0, y = 0, width = 0;
@@ -534,7 +534,7 @@ struct SectionHeader {
 	}
 };
 
-/// Horizontal segmented button group for exclusive selection
+
 struct RadioGroup {
 	float x = 0, y = 0;
 	int selected = 0;
@@ -573,7 +573,7 @@ struct RadioGroup {
 	}
 };
 
-/// Click-to-cycle selector that rotates through options
+
 struct CycleSelector {
 	float x = 0, y = 0, width = 0;
 	int selected = 0;
@@ -608,7 +608,7 @@ struct CycleSelector {
 	}
 };
 
-/// HSV color picker with hue bar and saturation/value square
+
 struct ColorPicker {
 	float x = 0, y = 0, width = 200, height = 120;
 	float hue = 0.62f, sat = 0.4f, val = 0.83f;
@@ -709,7 +709,7 @@ struct ColorPicker {
 	float GetTotalHeight() const { return height + 40; }
 };
 
-/// Single-line text input field with cursor, selection, and placeholder
+
 struct TextInput {
 	float x = 0, y = 0, width = 0;
 	wchar_t buffer[256] = {};
@@ -773,7 +773,7 @@ struct TextInput {
 			}
 		}
 
-		// Drag selection
+		
 		if (isDraggingText && mouseDown && !clicked && focused) {
 			int pos = (int)((mx - x - pad) / charW + 0.5f);
 			if (pos < 0) pos = 0; if (pos > BufLen()) pos = BufLen();
@@ -880,7 +880,7 @@ struct TextInput {
 		float charW = 7.2f;
 		float textX = x + pad;
 
-		// Draw selection highlight
+		
 		if (focused) {
 			int s = 0, e = 0;
 			if (GetSelRange(s, e)) {
@@ -889,11 +889,11 @@ struct TextInput {
 			}
 		}
 
-		// Draw text — use monospace font when focused for cursor alignment
+		
 		IDWriteTextFormat* textFont = focused ? r.pFontMono : r.pFontSmall;
 		r.DrawText(buffer, textX, y, width - pad * 2, h, Theme::TextPrimary(), textFont);
 
-		// Draw cursor
+		
 		if (focused && fmod(blinkT, 1.0f) < 0.5f)
 			r.DrawLine(textX + cursor * charW, y + 5, textX + cursor * charW, y + h - 5, Theme::AccentPrimary(), 1.0f);
 	}

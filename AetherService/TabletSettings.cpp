@@ -2,13 +2,14 @@
 #include "TabletSettings.h"
 
 
-//
-// Constructor
-//
+
+
+
 TabletSettings::TabletSettings() {
-	// Initial settings
+	
 	reportId = 0;
 	reportLength = 8;
+	reportOffset = 0;
 	detectMask = 0x00;
 	ignoreMask = 0x00;
 	maxX = 1;
@@ -24,8 +25,8 @@ TabletSettings::TabletSettings() {
 	invMaxY = 1.0;
 }
 
-//
-// Destructor
-//
+
+
+
 TabletSettings::~TabletSettings() {
 }

@@ -48,22 +48,22 @@ public:
 	} reportDigitizer;
 
 
-	// Position Integer
+	
 	typedef struct {
 		int x;
 		int y;
 	} PositionInt;
 
-	// Relative mouse data
+	
 	struct {
 		PositionInt currentPosition;
 		Vector2D lastPosition;
 		Vector2D targetPosition;
 		double sensitivity;
 		double resetDistance;
-		double accumX;        // fractional pixel accumulator X
-		double accumY;        // fractional pixel accumulator Y
-		bool firstReport;     // skip first delta (no previous position)
+		double accumX;        
+		double accumY;        
+		bool firstReport;     
 	} relativeData;
 
 

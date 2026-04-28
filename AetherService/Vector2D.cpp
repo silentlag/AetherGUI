@@ -1,17 +1,17 @@
 #include "stdafx.h"
 #include "Vector2D.h"
 
-//
-// Constructor
-//
+
+
+
 Vector2D::Vector2D() {
 	x = 0;
 	y = 0;
 }
 
-//
-// Destructor
-//
+
+
+
 Vector2D::~Vector2D() {
 }
 
