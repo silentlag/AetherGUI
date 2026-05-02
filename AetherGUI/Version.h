@@ -1,7 +1,7 @@
 #pragma once
 
-#define AETHERGUI_VERSION "1.0.0"
-#define AETHERGUI_VERSION_W L"1.0.0"
+#define AETHERGUI_VERSION "1.0.1"
+#define AETHERGUI_VERSION_W L"1.0.1"
 
 #define AETHERGUI_GITHUB_OWNER L"silentlag"
 #define AETHERGUI_GITHUB_REPO L"AetherGUI"

@@ -23,6 +23,11 @@
 </p>
 
 <p>
+  <strong>Latest update:</strong> safer screen-area bounds for resolution changes, fixed edge-clamped sliders,
+  and automatic service start when <code>AetherService.exe</code> is launched directly.
+</p>
+
+<p>
   <img src="AetherGUI/assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
 </p>
 
@@ -50,7 +55,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Native Plugin Manager</strong><br/>Animated lists · cached catalogs · install DLL filters · build source ports</td>
-    <td align="center"><strong>Modern Quality-of-Life</strong><br/>Multi-monitor mapping · DPI scaling · undo · autosave · input visualizer</td>
+    <td align="center"><strong>Modern Quality-of-Life</strong><br/>Safe area bounds · multi-monitor mapping · DPI scaling · undo · autosave · input visualizer</td>
   </tr>
 </table>
 
@@ -181,6 +186,14 @@
     <td align="center"><strong>GitHub plugin catalog</strong></td>
     <td align="center">The Plugin Manager can list Aether source filters and mapped OpenTabletDriver plugin ports from a configurable repository source, with HTTP caching to reduce repeated loading stalls.</td>
   </tr>
+  <tr>
+    <td align="center"><strong>Screen area safety</strong></td>
+    <td align="center">Screen mapping is clamped to the selected monitor/desktop. If resolution changes or coordinates are too large, the area is moved back inside the valid bounds.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Direct service launch</strong></td>
+    <td align="center">If <code>AetherService.exe</code> is opened without the GUI, it now starts automatically after detecting a tablet instead of waiting silently for a stdin <code>start</code> command.</td>
+  </tr>
 </table>
 
 <br/>
@@ -281,6 +294,8 @@
   Build the solution · Start <code>AetherGUI.exe</code> · Select output mode and tablet area
   <br/>
   Tune filters, overclock settings, and native/plugin filters from the GUI
+  <br/>
+  <strong>Recommended:</strong> launch <code>AetherGUI.exe</code>. Directly opening <code>AetherService.exe</code> is supported for diagnostics and will auto-start after tablet detection.
 </p>
 
 <table align="center">
@@ -314,6 +329,8 @@
   For games that use raw input, test both Absolute and Relative modes.
   Keep the overclock value at the highest rate your system can handle without frame-time spikes.
   Pen Rate Limit can be used separately for normal packet output; when Overclock is enabled, Overclock remains the active high-rate output timer.
+  <br/>
+  Screen Width/Height/X/Y are automatically constrained to the currently selected monitor or virtual desktop. For example, on a 1920x1080 display a 400px wide area cannot be moved past X=1520.
 </p>
 
 <br/>
@@ -328,6 +345,8 @@
   If 2000 Hz causes stutter, try 1500 Hz or 1000 Hz for a steadier frame time.
   <br/>
   Native plugins are loaded from local DLLs. Only install plugins from sources you trust.
+  <br/>
+  If <code>AetherService.exe</code> is opened directly and <code>init.cfg</code> is missing, the embedded tablet database is used and the service starts automatically after detection.
 </p>
 
 <br/>
@@ -358,6 +377,18 @@
   <tr>
     <td align="center"><strong>Plugin does not appear</strong></td>
     <td align="center">Use Reload in the Plugin Manager and verify the DLL exports the Aether plugin API.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Area goes outside the screen after changing resolution</strong></td>
+    <td align="center">Open the Area page and select the target monitor again. AetherGUI now clamps the mapping rectangle and recalculates X/Y limits automatically.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Screen X/Y sliders keep moving at the edge</strong></td>
+    <td align="center">Update to this release. The X/Y slider range now equals the real allowed range: desktop size minus mapped area size.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Service looks stuck after <code>End of embedded config</code></strong></td>
+    <td align="center">Update to this release. Direct service launches now auto-start. For normal use, run <code>AetherGUI.exe</code>.</td>
   </tr>
   <tr>
     <td align="center"><strong>OTD Ports tab loads slowly</strong></td>

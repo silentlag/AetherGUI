@@ -251,8 +251,14 @@ struct Slider {
 		if (isHovered && clicked) isDragging = true;
 		if (!mouseDown) isDragging = false;
 		if (isDragging) {
+			float range = maxVal - minVal;
+			if (range <= 0.0001f) {
+				value = minVal;
+				animValue = value;
+				return false;
+			}
 			float norm = Clamp((mx - x) / width, 0.0f, 1.0f);
-			float nv = minVal + norm * (maxVal - minVal);
+			float nv = minVal + norm * range;
 			if (nv != value) { value = nv; return true; }
 		}
 		return false;
@@ -393,7 +399,9 @@ struct Slider {
 		}
 
 		r.FillRoundedRect(x, trackY, width, trackH, trackH * 0.5f, Theme::BgElevated());
-		float norm = (animValue - minVal) / (maxVal - minVal);
+		float range = maxVal - minVal;
+		float norm = range > 0.0001f ? (animValue - minVal) / range : 0.0f;
+		norm = Clamp(norm, 0.0f, 1.0f);
 		float filledW = width * norm;
 		if (filledW > 2) r.FillRoundedRect(x, trackY, filledW, trackH, trackH * 0.5f, Theme::AccentPrimary());
 

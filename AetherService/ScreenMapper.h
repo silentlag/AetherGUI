@@ -20,6 +20,8 @@ public:
 
 	ScreenMapper(Tablet *t);
 	void SetRotation(double angle);
+	void RefreshVirtualScreen();
+	void ClampScreenAreaToVirtualScreen(bool refreshVirtualScreen = true);
 	bool GetRotatedTabletPosition(double *x, double *y);
 	bool GetScreenPosition(double *x, double *y);
 };

@@ -857,6 +857,65 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 
 
 
+static bool StartServiceRuntime(bool *running) {
+	if (running != NULL && *running) {
+		LOG_INFO("Driver is already started!\n");
+		return true;
+	}
+
+	if (tablet == NULL) {
+		LOG_ERROR("Tablet not found!\n");
+		CleanupAndExit(1);
+		return false;
+	}
+
+	EnsureAetherPluginDirectory();
+	{
+		lock_guard<mutex> lock(tabletStateMutex);
+		tablet->ReloadPluginFilters(GetAetherPluginDirectory());
+	}
+
+	if (!tablet->Init()) {
+		LOG_ERROR("Tablet init failed after retries!\n");
+		LOG_ERROR("Possible fixes:\n");
+		LOG_ERROR("1) Uninstall other tablet drivers (Wacom, XP-Pen, Huion).\n");
+		LOG_ERROR("2) Stop tablet services: net stop TabletInputService\n");
+		LOG_ERROR("3) Kill blocking processes: taskkill /F /IM WTabletServicePro.exe\n");
+		LOG_ERROR("4) Disable Windows Ink in Windows Settings.\n");
+		LOG_ERROR("5) Reconnect the tablet USB cable and try again.\n");
+		LOG_ERROR("Driver will continue without init (may work with some tablets).\n");
+		LOG_WARNING("Proceeding without init — some features may not work.\n");
+	}
+
+	mapper->tablet = tablet;
+
+	if (running != NULL)
+		*running = true;
+
+	if (tablet->filterTimedCount > 0) {
+		tablet->filterTimed[0]->callback = FilterTimerCallback;
+		if (overclockActive) {
+			tablet->filterTimed[0]->StopTimer();
+			StartOverclockTimer(overclockTargetHz);
+		}
+		else {
+			RefreshTimedOutputTimer();
+		}
+	}
+
+	tabletThread = new thread(RunTabletThread);
+	if (GetPriorityClass(GetCurrentProcess()) == HIGH_PRIORITY_CLASS) {
+		SetThreadPriority(tabletThread->native_handle(), THREAD_PRIORITY_HIGHEST);
+	}
+
+	LOG_INFO("AetherGUI service started!\n");
+	LogStatus();
+	return true;
+}
+
+
+
+
 int main(int argc, char**argv) {
 	string line;
 	string filename;
@@ -933,6 +992,11 @@ int main(int argc, char**argv) {
 		LOG_INFO("/ End of embedded config\n");
 	}
 
+	if (argc <= 1) {
+		LOG_INFO("No GUI/stdin config supplied; starting service automatically.\n");
+		StartServiceRuntime(&running);
+	}
+
 
 	
 	
@@ -960,69 +1024,7 @@ int main(int argc, char**argv) {
 			
 			if (cmd->is("start")) {
 				LOG_INFO(">> %s\n", cmd->line.c_str());
-
-				if (running) {
-					LOG_INFO("Driver is already started!\n");
-					delete cmd;
-					continue;
-				}
-
-				
-				if (tablet == NULL) {
-					LOG_ERROR("Tablet not found!\n");
-					CleanupAndExit(1);
-				}
-
-				EnsureAetherPluginDirectory();
-				{
-					lock_guard<mutex> lock(tabletStateMutex);
-					tablet->ReloadPluginFilters(GetAetherPluginDirectory());
-				}
-
-				
-				if (!tablet->Init()) {
-					LOG_ERROR("Tablet init failed after retries!\n");
-					LOG_ERROR("Possible fixes:\n");
-					LOG_ERROR("1) Uninstall other tablet drivers (Wacom, XP-Pen, Huion).\n");
-					LOG_ERROR("2) Stop tablet services: net stop TabletInputService\n");
-					LOG_ERROR("3) Kill blocking processes: taskkill /F /IM WTabletServicePro.exe\n");
-					LOG_ERROR("4) Disable Windows Ink in Windows Settings.\n");
-					LOG_ERROR("5) Reconnect the tablet USB cable and try again.\n");
-					LOG_ERROR("Driver will continue without init (may work with some tablets).\n");
-					LOG_WARNING("Proceeding without init — some features may not work.\n");
-				}
-
-				
-				mapper->tablet = tablet;
-
-				
-				running = true;
-
-				
-				if (tablet->filterTimedCount > 0) {
-					tablet->filterTimed[0]->callback = FilterTimerCallback;
-					if (overclockActive) {
-						tablet->filterTimed[0]->StopTimer();
-						StartOverclockTimer(overclockTargetHz);
-					}
-					else {
-						RefreshTimedOutputTimer();
-					}
-				}
-
-				
-				tabletThread = new thread(RunTabletThread);
-				if (GetPriorityClass(GetCurrentProcess()) == HIGH_PRIORITY_CLASS) {
-					SetThreadPriority(tabletThread->native_handle(), THREAD_PRIORITY_HIGHEST);
-				}
-
-				LOG_INFO("AetherGUI service started!\n");
-				LogStatus();
-
-
-				
-				
-				
+				StartServiceRuntime(&running);
 			}
 			else if (cmd->is("echo")) {
 				if (cmd->valueCount > 0) {

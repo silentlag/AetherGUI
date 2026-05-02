@@ -14,10 +14,7 @@ ScreenMapper::ScreenMapper(Tablet *t) {
 	this->tablet = t;
 
 	
-	areaVirtualScreen.width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-	areaVirtualScreen.height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-	areaVirtualScreen.x = 0;
-	areaVirtualScreen.y = 0;
+	RefreshVirtualScreen();
 
 	
 	areaTablet.width = 80;
@@ -52,6 +49,46 @@ void ScreenMapper::SetRotation(double angle) {
 	rotationMatrix[1] = -sin(angle);
 	rotationMatrix[2] = sin(angle);
 	rotationMatrix[3] = cos(angle);
+}
+
+
+
+
+void ScreenMapper::RefreshVirtualScreen() {
+	int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+	int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+	int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+	areaVirtualScreen.x = (double)left;
+	areaVirtualScreen.y = (double)top;
+	areaVirtualScreen.width = (double)(width > 0 ? width : GetSystemMetrics(SM_CXSCREEN));
+	areaVirtualScreen.height = (double)(height > 0 ? height : GetSystemMetrics(SM_CYSCREEN));
+
+	if (areaVirtualScreen.width < 1) areaVirtualScreen.width = 1920;
+	if (areaVirtualScreen.height < 1) areaVirtualScreen.height = 1080;
+}
+
+
+
+
+void ScreenMapper::ClampScreenAreaToVirtualScreen(bool refreshVirtualScreen) {
+	if (refreshVirtualScreen) RefreshVirtualScreen();
+
+	if (areaScreen.width < 1) areaScreen.width = 1;
+	if (areaScreen.height < 1) areaScreen.height = 1;
+	if (areaScreen.width > areaVirtualScreen.width) areaScreen.width = areaVirtualScreen.width;
+	if (areaScreen.height > areaVirtualScreen.height) areaScreen.height = areaVirtualScreen.height;
+
+	double minX = areaVirtualScreen.x;
+	double minY = areaVirtualScreen.y;
+	double maxX = areaVirtualScreen.x + areaVirtualScreen.width - areaScreen.width;
+	double maxY = areaVirtualScreen.y + areaVirtualScreen.height - areaScreen.height;
+
+	if (areaScreen.x < minX) areaScreen.x = minX;
+	if (areaScreen.y < minY) areaScreen.y = minY;
+	if (areaScreen.x > maxX) areaScreen.x = maxX;
+	if (areaScreen.y > maxY) areaScreen.y = maxY;
 }
 
 

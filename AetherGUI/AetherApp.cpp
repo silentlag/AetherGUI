@@ -1743,25 +1743,46 @@ float AetherApp::GetScreenAspectRatio() const {
 }
 
 void AetherApp::ClampScreenArea() {
-	float maxW = std::max(100.0f, detectedScreenW);
-	float maxH = std::max(100.0f, detectedScreenH);
+	float desktopW = std::max(100.0f, detectedScreenW);
+	float desktopH = std::max(100.0f, detectedScreenH);
+	float targetX = 0.0f;
+	float targetY = 0.0f;
+	float targetW = desktopW;
+	float targetH = desktopH;
 
-	area.screenWidth.maxVal = maxW;
-	area.screenHeight.maxVal = maxH;
-	area.screenX.maxVal = maxW;
-	area.screenY.maxVal = maxH;
+	if (selectedDisplayTarget >= 0 && selectedDisplayTarget < (int)displayTargets.size()) {
+		const DisplayTarget& target = displayTargets[selectedDisplayTarget];
+		targetX = target.x;
+		targetY = target.y;
+		targetW = std::max(100.0f, target.width);
+		targetH = std::max(100.0f, target.height);
+	}
 
-	area.screenWidth.value = Clamp(area.screenWidth.value, area.screenWidth.minVal, maxW);
-	area.screenHeight.value = Clamp(area.screenHeight.value, area.screenHeight.minVal, maxH);
+	area.screenWidth.maxVal = targetW;
+	area.screenHeight.maxVal = targetH;
 
-	// In normal mode keep the mapped area fully inside the virtual desktop.
-	// In Custom Values mode allow explicit offsets up to the desktop size even
-	// when width/height would extend past the edge. This lets users type values
-	// such as X=960 on a 1920px desktop with a 1080px-wide mapped area.
-	float maxX = area.customValues.value ? maxW : std::max(0.0f, detectedScreenW - area.screenWidth.value);
-	float maxY = area.customValues.value ? maxH : std::max(0.0f, detectedScreenH - area.screenHeight.value);
-	area.screenX.value = Clamp(area.screenX.value, 0.0f, maxX);
-	area.screenY.value = Clamp(area.screenY.value, 0.0f, maxY);
+	area.screenWidth.value = Clamp(area.screenWidth.value, area.screenWidth.minVal, targetW);
+	area.screenHeight.value = Clamp(area.screenHeight.value, area.screenHeight.minVal, targetH);
+
+	// The X/Y sliders must use the *real* allowed range, not the full desktop size.
+	// Otherwise the user can keep dragging the thumb past the point where the
+	// preview/driver area is already clamped to the screen edge.
+	float maxX = targetX + targetW - area.screenWidth.value;
+	float maxY = targetY + targetH - area.screenHeight.value;
+	if (maxX < targetX) maxX = targetX;
+	if (maxY < targetY) maxY = targetY;
+
+	area.screenX.minVal = targetX;
+	area.screenY.minVal = targetY;
+	area.screenX.maxVal = maxX;
+	area.screenY.maxVal = maxY;
+
+	// Always keep the mapped rectangle fully inside the selected monitor/desktop.
+	// If the user types coordinates that would place the area outside the current
+	// resolution (for example X=1700 with W=400 on a 1920px screen), move the
+	// rectangle back inside instead of letting the driver map to an unreachable zone.
+	area.screenX.value = Clamp(area.screenX.value, area.screenX.minVal, area.screenX.maxVal);
+	area.screenY.value = Clamp(area.screenY.value, area.screenY.minVal, area.screenY.maxVal);
 }
 
 void AetherApp::CenterScreenArea() {
@@ -1833,7 +1854,15 @@ void AetherApp::OnResize(UINT width, UINT height) {
 }
 
 void AetherApp::OnDisplayChange() {
+	RefreshDetectedScreen();
+	ClampScreenArea();
+	if (!area.lockAspect.value && area.screenHeight.value > 1.0f) {
+		area.aspectRatio.value = Clamp(area.screenWidth.value / area.screenHeight.value, area.aspectRatio.minVal, area.aspectRatio.maxVal);
+		area.aspectRatio.animValue = area.aspectRatio.value;
+	}
+	ApplyAspectLock(false);
 	SendDisplaySettingsToDriver();
+	AutoSaveConfig();
 }
 
 void AetherApp::OnMouseWheel(float delta) {
@@ -3906,8 +3935,7 @@ void AetherApp::DrawAreaPanel() {
 			float dy = (mouseY - dragStartMouseY) * dragScale;
 			area.screenX.value = dragStartValX + dx;
 			area.screenY.value = dragStartValY + dy;
-			if (area.screenX.value < 0) area.screenX.value = 0;
-			if (area.screenY.value < 0) area.screenY.value = 0;
+			ClampScreenArea();
 		}
 
 		float zoneAlpha = (hoveringScreenMap || (isDraggingArea && dragTarget == 1)) ? 0.34f : 0.22f;
@@ -3972,6 +4000,8 @@ void AetherApp::DrawAreaPanel() {
 		}
 
 		ClampScreenArea();
+		area.screenX.animValue = area.screenX.value;
+		area.screenY.animValue = area.screenY.value;
 		if ((screenWidthChanged || screenHeightChanged) && !screenXChanged && !screenYChanged && !isDraggingArea) {
 			if (area.autoCenter.value) {
 				CenterScreenArea();
@@ -3988,6 +4018,10 @@ void AetherApp::DrawAreaPanel() {
 			}
 		}
 		if (screenChanged) {
+			area.screenWidth.animValue = area.screenWidth.value;
+			area.screenHeight.animValue = area.screenHeight.value;
+			area.screenX.animValue = area.screenX.value;
+			area.screenY.animValue = area.screenY.value;
 			if ((screenWidthChanged || screenHeightChanged) && !area.lockAspect.value && area.screenHeight.value > 1.0f) {
 				area.aspectRatio.value = Clamp(area.screenWidth.value / area.screenHeight.value, area.aspectRatio.minVal, area.aspectRatio.maxVal);
 				area.aspectRatio.animValue = area.aspectRatio.value;

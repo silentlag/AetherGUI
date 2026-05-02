@@ -733,12 +733,25 @@ bool ProcessCommand(CommandLine *cmd) {
 		mapper->areaScreen.height = cmd->GetDouble(1, mapper->areaScreen.height);
 		mapper->areaScreen.x = cmd->GetDouble(2, mapper->areaScreen.x);
 		mapper->areaScreen.y = cmd->GetDouble(3, mapper->areaScreen.y);
+
+		double requestedW = mapper->areaScreen.width;
+		double requestedH = mapper->areaScreen.height;
+		double requestedX = mapper->areaScreen.x;
+		double requestedY = mapper->areaScreen.y;
+		mapper->ClampScreenAreaToVirtualScreen();
+
 		LOG_INFO("Screen area = (w=%0.2f, h=%0.2f, x=%0.2f, y=%0.2f)\n",
 			mapper->areaScreen.width,
 			mapper->areaScreen.height,
 			mapper->areaScreen.x,
 			mapper->areaScreen.y
 		);
+		if (requestedW != mapper->areaScreen.width || requestedH != mapper->areaScreen.height ||
+			requestedX != mapper->areaScreen.x || requestedY != mapper->areaScreen.y) {
+			LOG_INFO("Screen area was adjusted to fit current desktop bounds (%0.0fx%0.0f at %+0.0f,%+0.0f).\n",
+				mapper->areaVirtualScreen.width, mapper->areaVirtualScreen.height,
+				mapper->areaVirtualScreen.x, mapper->areaVirtualScreen.y);
+		}
 	}
 
 	
@@ -761,6 +774,9 @@ bool ProcessCommand(CommandLine *cmd) {
 		if (!CheckTablet()) return true;
 		mapper->areaVirtualScreen.width = cmd->GetDouble(0, mapper->areaVirtualScreen.width);
 		mapper->areaVirtualScreen.height = cmd->GetDouble(1, mapper->areaVirtualScreen.height);
+		mapper->areaVirtualScreen.x = 0;
+		mapper->areaVirtualScreen.y = 0;
+		mapper->ClampScreenAreaToVirtualScreen(false);
 		LOG_INFO("Desktop size = (%0.2f px x %0.2f px)\n",
 			mapper->areaVirtualScreen.width,
 			mapper->areaVirtualScreen.height
@@ -776,6 +792,13 @@ bool ProcessCommand(CommandLine *cmd) {
 			double virtualX = cmd->GetDouble(4, 0);
 			double virtualY = cmd->GetDouble(5, 0);
 			vmulti->SetMonitorInfo(primaryWidth, primaryHeight, virtualWidth, virtualHeight, virtualX, virtualY);
+			if (mapper != NULL) {
+				mapper->areaVirtualScreen.width = virtualWidth;
+				mapper->areaVirtualScreen.height = virtualHeight;
+				mapper->areaVirtualScreen.x = virtualX;
+				mapper->areaVirtualScreen.y = virtualY;
+				mapper->ClampScreenAreaToVirtualScreen(false);
+			}
 			LOG_INFO("Static monitor info = primary=%0.0fx%0.0f virtual=%0.0fx%0.0f offset=%+0.0f,%+0.0f\n",
 				vmulti->monitorInfo.primaryWidth, vmulti->monitorInfo.primaryHeight,
 				vmulti->monitorInfo.virtualWidth, vmulti->monitorInfo.virtualHeight,
