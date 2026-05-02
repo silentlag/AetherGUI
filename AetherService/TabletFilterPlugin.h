@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <mutex>
 #include <string>
 
 #include "AetherPluginApi.h"
@@ -27,6 +28,7 @@ public:
 	std::wstring path;
 	std::string name;
 	std::string description;
+	std::mutex pluginMutex;
 
 private:
 	HMODULE module;

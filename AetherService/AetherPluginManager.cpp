@@ -214,8 +214,20 @@ bool InstallAetherPluginDll(const std::wstring& sourcePath, std::wstring* instal
 	}
 
 	if (!CopyFileW(sourcePath.c_str(), destination.c_str(), FALSE)) {
-		LOG_ERROR("Failed to copy plugin DLL to: %ls\n", destination.c_str());
-		return false;
+		DWORD err = GetLastError();
+		if (err == ERROR_SHARING_VIOLATION || err == ERROR_ACCESS_DENIED) {
+			std::wstring oldPath = pluginDir + GetFileNameWithoutExtension(sourcePath) + L".old.dll";
+			DeleteFileW(oldPath.c_str());
+			MoveFileExW(destination.c_str(), oldPath.c_str(), MOVEFILE_REPLACE_EXISTING);
+			if (!CopyFileW(sourcePath.c_str(), destination.c_str(), FALSE)) {
+				LOG_ERROR("Failed to replace locked plugin DLL: %ls (error %lu)\n", destination.c_str(), GetLastError());
+				return false;
+			}
+		}
+		else {
+			LOG_ERROR("Failed to copy plugin DLL to: %ls (error %lu)\n", destination.c_str(), err);
+			return false;
+		}
 	}
 
 	if (installedPath != NULL)

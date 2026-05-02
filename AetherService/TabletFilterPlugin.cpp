@@ -4,6 +4,79 @@
 #define LOG_MODULE "Plugin"
 #include "Logger.h"
 
+static void* SafePluginCreate(AetherPluginCreateFn fn) {
+	if (fn == NULL)
+		return NULL;
+	__try {
+		return fn();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return NULL;
+	}
+}
+
+static void SafePluginDestroy(AetherPluginDestroyFn fn, void* instance, bool* crashed) {
+	if (crashed) *crashed = false;
+	if (fn == NULL || instance == NULL)
+		return;
+	__try {
+		fn(instance);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (crashed) *crashed = true;
+	}
+}
+
+static bool SafePluginReset(AetherPluginResetFn fn, void* instance, const AetherPluginPoint* point) {
+	if (fn == NULL)
+		return true;
+	__try {
+		fn(instance, point);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+static bool SafePluginSetDouble(AetherPluginSetDoubleFn fn, void* instance, const char* key, double value, int* result) {
+	if (result) *result = 0;
+	if (fn == NULL)
+		return true;
+	__try {
+		if (result) *result = fn(instance, key, value);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+static bool SafePluginSetString(AetherPluginSetStringFn fn, void* instance, const char* key, const char* value, int* result) {
+	if (result) *result = 0;
+	if (fn == NULL)
+		return true;
+	__try {
+		if (result) *result = fn(instance, key, value);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+static bool SafePluginProcess(AetherPluginProcessFn fn, void* instance, AetherPluginPoint* point) {
+	if (fn == NULL)
+		return true;
+	__try {
+		fn(instance, point);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 TabletFilterPlugin::TabletFilterPlugin() {
 	module = NULL;
 	instance = NULL;
@@ -29,7 +102,7 @@ bool TabletFilterPlugin::Load(const std::wstring& dllPath) {
 
 	module = LoadLibraryW(dllPath.c_str());
 	if (module == NULL) {
-		LOG_ERROR("Failed to load plugin DLL: %ls\n", dllPath.c_str());
+		LOG_ERROR("Failed to load plugin DLL: %ls (error %lu)\n", dllPath.c_str(), GetLastError());
 		return false;
 	}
 
@@ -58,8 +131,12 @@ bool TabletFilterPlugin::Load(const std::wstring& dllPath) {
 	name = info.name != NULL && info.name[0] ? info.name : "Unnamed plugin";
 	description = info.description != NULL ? info.description : "";
 
-	if (createFn != NULL)
-		instance = createFn();
+	instance = SafePluginCreate(createFn);
+	if (createFn != NULL && instance == NULL) {
+		LOG_ERROR("Plugin create crashed: %ls\n", dllPath.c_str());
+		Unload();
+		return false;
+	}
 
 	isEnabled = true;
 	isValid = true;
@@ -72,8 +149,10 @@ bool TabletFilterPlugin::Load(const std::wstring& dllPath) {
 
 void TabletFilterPlugin::Unload() {
 	if (module != NULL) {
-		if (destroyFn != NULL && instance != NULL)
-			destroyFn(instance);
+		bool destroyCrashed = false;
+		SafePluginDestroy(destroyFn, instance, &destroyCrashed);
+		if (destroyCrashed)
+			LOG_ERROR("Plugin destroy crashed: %ls\n", path.c_str());
 
 		FreeLibrary(module);
 	}
@@ -111,6 +190,7 @@ bool TabletFilterPlugin::GetPosition(Vector2D *outputVector) {
 }
 
 void TabletFilterPlugin::Reset(Vector2D pos) {
+	std::lock_guard<std::mutex> lock(pluginMutex);
 	position.Set(pos);
 	target.Set(pos);
 	firstUpdate = true;
@@ -129,23 +209,44 @@ void TabletFilterPlugin::Reset(Vector2D pos) {
 		point.hoverDistance = hoverDistance;
 		point.tiltX = 0;
 		point.tiltY = 0;
-		resetFn(instance, &point);
+		if (!SafePluginReset(resetFn, instance, &point)) {
+			LOG_ERROR("Plugin reset crashed: %s\n", name.c_str());
+			isEnabled = false;
+			isValid = false;
+		}
 	}
 }
 
 bool TabletFilterPlugin::SetDoubleOption(const std::string& key, double value) {
+	std::lock_guard<std::mutex> lock(pluginMutex);
 	if (setDoubleFn == NULL)
 		return false;
-	return setDoubleFn(instance, key.c_str(), value) != 0;
+	int result = 0;
+	if (!SafePluginSetDouble(setDoubleFn, instance, key.c_str(), value, &result)) {
+		LOG_ERROR("Plugin option crashed: %s.%s\n", name.c_str(), key.c_str());
+		isEnabled = false;
+		isValid = false;
+		return false;
+	}
+	return result != 0;
 }
 
 bool TabletFilterPlugin::SetStringOption(const std::string& key, const std::string& value) {
+	std::lock_guard<std::mutex> lock(pluginMutex);
 	if (setStringFn == NULL)
 		return false;
-	return setStringFn(instance, key.c_str(), value.c_str()) != 0;
+	int result = 0;
+	if (!SafePluginSetString(setStringFn, instance, key.c_str(), value.c_str(), &result)) {
+		LOG_ERROR("Plugin string option crashed: %s.%s\n", name.c_str(), key.c_str());
+		isEnabled = false;
+		isValid = false;
+		return false;
+	}
+	return result != 0;
 }
 
 void TabletFilterPlugin::Update() {
+	std::lock_guard<std::mutex> lock(pluginMutex);
 	if (processFn == NULL) {
 		position.Set(target);
 		return;
@@ -172,7 +273,21 @@ void TabletFilterPlugin::Update() {
 	point.tiltX = 0;
 	point.tiltY = 0;
 
-	processFn(instance, &point);
+	if (!SafePluginProcess(processFn, instance, &point)) {
+		LOG_ERROR("Plugin process crashed, disabling: %s\n", name.c_str());
+		isEnabled = false;
+		isValid = false;
+		position.Set(target);
+		return;
+	}
+
+	if (!std::isfinite(point.x) || !std::isfinite(point.y) || fabs(point.x) > 1000000000.0 || fabs(point.y) > 1000000000.0) {
+		LOG_ERROR("Plugin returned invalid position, disabling: %s\n", name.c_str());
+		isEnabled = false;
+		isValid = false;
+		position.Set(target);
+		return;
+	}
 
 	position.x = point.x;
 	position.y = point.y;

@@ -121,6 +121,14 @@ void Tablet::ResetPacketFilters() {
 
 
 void Tablet::ClearPluginFilters() {
+	for (int i = 0; i < filterPacketCount; ++i) {
+		for (size_t j = 0; j < pluginFilters.size(); ++j) {
+			if (filterPacket[i] == pluginFilters[j]) {
+				filterPacket[i] = NULL;
+				break;
+			}
+		}
+	}
 	for (size_t i = 0; i < pluginFilters.size(); i++) {
 		delete pluginFilters[i];
 	}
@@ -130,6 +138,8 @@ void Tablet::ClearPluginFilters() {
 
 
 void Tablet::ReloadPluginFilters(const std::wstring& pluginDirectory) {
+	StopOverclockTimer();
+	smoothing.StopTimer();
 	ClearPluginFilters();
 
 	DWORD attrs = GetFileAttributesW(pluginDirectory.c_str());
@@ -183,6 +193,7 @@ void Tablet::ReloadPluginFilters(const std::wstring& pluginDirectory) {
 	}
 
 	LOG_INFO("Loaded %d Aether plugin(s).\n", loaded);
+	RefreshTimedOutputTimer();
 }
 
 

@@ -1329,7 +1329,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		string selector = cmd->GetString(0, "");
 		int index = FindPluginFilterIndex(selector);
 		if (index < 0 || index >= (int)tablet->pluginFilters.size()) {
-			LOG_WARNING("Plugin not loaded: %s\n", selector.c_str());
+			LOG_DEBUG("Plugin not loaded yet, ignoring enable state: %s\n", selector.c_str());
 			return true;
 		}
 
@@ -1343,7 +1343,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		string selector = cmd->GetString(0, "");
 		int index = FindPluginFilterIndex(selector);
 		if (index < 0 || index >= (int)tablet->pluginFilters.size()) {
-			LOG_WARNING("Plugin not loaded: %s\n", selector.c_str());
+			LOG_DEBUG("Plugin not loaded yet, ignoring option: %s\n", selector.c_str());
 			return true;
 		}
 
