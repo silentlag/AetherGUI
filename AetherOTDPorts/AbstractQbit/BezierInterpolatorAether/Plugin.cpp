@@ -58,8 +58,10 @@ extern "C" __declspec(dllexport) void __cdecl AetherPluginReset(void* instance, 
 }
 
 extern "C" __declspec(dllexport) void __cdecl AetherPluginProcess(void* instance, AetherPluginPoint* point) {
-    BezierState* s = static_cast<BezierState*>(instance);
-    if (!s || !point || !s->enabled || !point->isValid) return;
+    if (!point || !point->isValid) return;
+    BezierState fallback;
+    BezierState* s = static_cast<BezierState*>(instance ? instance : &fallback);
+    if (!s->enabled) return;
 
     PushSample(s, point->x, point->y);
 

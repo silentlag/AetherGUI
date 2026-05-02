@@ -39,8 +39,10 @@ extern "C" __declspec(dllexport) void __cdecl AetherPluginReset(void* instance, 
 }
 
 extern "C" __declspec(dllexport) void __cdecl AetherPluginProcess(void* instance, AetherPluginPoint* point) {
-    RadialState* s = static_cast<RadialState*>(instance);
-    if (!s || !point || !s->enabled || !point->isValid) return;
+    if (!point || !point->isValid) return;
+    RadialState fallback;
+    RadialState* s = static_cast<RadialState*>(instance ? instance : &fallback);
+    if (!s->enabled) return;
 
     if (!s->initialized) {
         s->outX = point->x;
