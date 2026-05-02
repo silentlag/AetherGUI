@@ -19,7 +19,7 @@
 
 <p>
   AetherGUI pairs a small tablet service with a Direct2D-based interface for area mapping,
-  output modes, smoothing filters, profiles, and performance tuning.
+  output modes, smoothing filters, native plugin filters, profiles, and performance tuning.
 </p>
 
 <p>
@@ -47,6 +47,10 @@
   <tr>
     <td align="center"><strong>Embedded Tablet Configs</strong><br/>Fallback device database when external configs are missing</td>
     <td align="center"><strong>Raw Input Fixes</strong><br/>Relative-mode resets · invalid-position handling · reduced event coalescing</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Native Plugin Manager</strong><br/>Install DLL filters · build source ports · browse GitHub plugin catalogs</td>
+    <td align="center"><strong>Modern Quality-of-Life</strong><br/>Multi-monitor mapping · DPI scaling · undo · autosave · input visualizer</td>
   </tr>
 </table>
 
@@ -165,6 +169,46 @@
     <td align="center"><strong>Unknown Wacom variants</strong></td>
     <td align="center">The Console prints VID/PID, usage, and input report length so missing variants can be added quickly.</td>
   </tr>
+  <tr>
+    <td align="center"><strong>Native plugin filters</strong></td>
+    <td align="center">Aether DLL plugins can expose sliders/toggles through metadata and are applied in the packet filter pipeline.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>GitHub plugin catalog</strong></td>
+    <td align="center">The Plugin Manager can list Aether source filters and mapped OpenTabletDriver plugin ports from a configurable repository source.</td>
+  </tr>
+</table>
+
+<br/>
+
+<h2>· Plugin System ·</h2>
+
+<p>
+  AetherGUI includes a native plugin pipeline for custom packet filters. Plugins are installed into the local
+  <code>plugins/</code> folder next to the built application and can be enabled, disabled, configured, reloaded, or removed from the GUI.
+</p>
+
+<table align="center">
+  <tr>
+    <th align="center">Action</th>
+    <th align="center">What it does</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>Install DLL</strong></td>
+    <td align="center">Copies a native Aether plugin DLL into an isolated plugin folder and reloads filters.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Build Source</strong></td>
+    <td align="center">Builds a plugin source folder using a PowerShell build script, Visual Studio project/solution, or .NET project when available.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Plugin Manager</strong></td>
+    <td align="center">Browses installed filters, Aether source filters, and available OTD source ports with source/wiki links.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Plugin metadata</strong></td>
+    <td align="center">Plugins can expose option metadata so the GUI automatically creates sliders and toggles.</td>
+  </tr>
 </table>
 
 <br/>
@@ -216,7 +260,9 @@
 </table>
 
 <p>
-  Service output: <code>x64/Release/AetherService.exe</code>
+  Common output folder: <code>bin/Release/</code>
+  <br/>
+  Service output is also available from the Visual Studio project output folder and is copied next to the GUI when possible.
 </p>
 
 <br/>
@@ -226,8 +272,35 @@
 <p>
   Build the solution · Start <code>AetherGUI.exe</code> · Select output mode and tablet area
   <br/>
-  Tune filters and overclock settings · Restart the driver from the GUI when low-level settings change
+  Tune filters, overclock settings, and native/plugin filters from the GUI
 </p>
+
+<table align="center">
+  <tr>
+    <th align="center">Step</th>
+    <th align="center">Recommended flow</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>1</strong></td>
+    <td align="center">Open the app and let the service detect your tablet. Check the Console tab if detection fails.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>2</strong></td>
+    <td align="center">Choose Absolute, Relative, or Windows Ink output depending on the game/application.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>3</strong></td>
+    <td align="center">Select the target monitor or full desktop, then adjust the tablet area preview.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>4</strong></td>
+    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, or native plugins as needed.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>5</strong></td>
+    <td align="center">Save profiles from the Area page. Autosave keeps the current setup between launches.</td>
+  </tr>
+</table>
 
 <p>
   For games that use raw input, test both Absolute and Relative modes.
@@ -244,7 +317,40 @@
   If detection fails, check the GUI console for <code>Tablet found!</code> and HID warning lines.
   <br/>
   If 2000 Hz causes stutter, try 1500 Hz or 1000 Hz for a steadier frame time.
+  <br/>
+  Native plugins are loaded from local DLLs. Only install plugins from sources you trust.
 </p>
+
+<br/>
+
+<h2>· Troubleshooting ·</h2>
+
+<table align="center">
+  <tr>
+    <th align="center">Problem</th>
+    <th align="center">Try this</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>Tablet is not detected</strong></td>
+    <td align="center">Open Console, run HID diagnostics, and check whether another vendor driver is blocking the HID interface.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Windows Ink does not work</strong></td>
+    <td align="center">Install VMulti and restart AetherGUI. Absolute and Relative modes do not require VMulti.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Cursor feels jittery</strong></td>
+    <td align="center">Try Noise Reduction, Aether Smooth, Adaptive Filter, or a native smoothing plugin.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Game stutters at high Hz</strong></td>
+    <td align="center">Lower overclock target to 1000-1500 Hz or enable Pen Rate Limit.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Plugin does not appear</strong></td>
+    <td align="center">Use Reload in the Plugin Manager and verify the DLL exports the Aether plugin API.</td>
+  </tr>
+</table>
 
 <br/>
 
@@ -253,7 +359,7 @@
 <p>
   Inspired by Devocub Tablet Driver.
   <br/>
-  Community tablet metadata and testing reports helped improve device coverage (OpenTabletDriver base of supported tablets was used too).
+  Community tablet metadata and testing reports helped improve device coverage.
 </p>
 
 </div>
