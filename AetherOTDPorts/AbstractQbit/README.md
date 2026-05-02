@@ -25,7 +25,3 @@ powershell -ExecutionPolicy Bypass -File build.ps1
    - `BezierInterpolatorAether/`, or
    - `RadialFollowAether/`.
 5. AetherGUI builds the project, finds a valid Aether DLL, installs it into `plugins/`, reloads filters, and displays plugin options.
-
-## Notes
-
-The original C# OTD sources in `C:\Users\tsukuyomi\Desktop\111\filters` contain `BezierInterpolator` and `RadialFollow` projects. These C++ ports are native Aether-compatible versions for testing the install/build pipeline and filter behavior.
