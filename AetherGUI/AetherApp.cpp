@@ -246,7 +246,7 @@ static std::string QuoteCommandArg(const std::string& arg) {
 	return quoted;
 }
 
-static bool RunHiddenProcess(std::wstring commandLine, const std::wstring& workingDir, DWORD& exitCode) {
+static bool RunHiddenProcess(std::wstring commandLine, const std::wstring& workingDir, DWORD& exitCode, DWORD timeoutMs = 10 * 60 * 1000) {
 	exitCode = 1;
 	std::vector<wchar_t> cmd(commandLine.begin(), commandLine.end());
 	cmd.push_back(0);
@@ -272,8 +272,14 @@ static bool RunHiddenProcess(std::wstring commandLine, const std::wstring& worki
 	if (!started)
 		return false;
 
-	WaitForSingleObject(pi.hProcess, INFINITE);
-	GetExitCodeProcess(pi.hProcess, &exitCode);
+	DWORD waitResult = WaitForSingleObject(pi.hProcess, timeoutMs);
+	if (waitResult == WAIT_TIMEOUT) {
+		TerminateProcess(pi.hProcess, WAIT_TIMEOUT);
+		exitCode = WAIT_TIMEOUT;
+	}
+	else {
+		GetExitCodeProcess(pi.hProcess, &exitCode);
+	}
 	CloseHandle(pi.hThread);
 	CloseHandle(pi.hProcess);
 	return true;
@@ -346,6 +352,26 @@ static std::wstring FindBuildScript(const std::wstring& root) {
 			return entry.path().wstring();
 	}
 	return L"";
+}
+
+static std::wstring FindNearestBuildRoot(const std::wstring& folder) {
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	fs::path current(folder);
+	if (!fs::exists(current, ec))
+		return folder;
+	if (fs::is_regular_file(current, ec))
+		current = current.parent_path();
+
+	while (!current.empty()) {
+		if (!FindBuildScript(current.wstring()).empty() || !FindFirstSourceFile(current.wstring(), { L".sln", L".vcxproj", L".csproj" }).empty())
+			return current.wstring();
+		fs::path parent = current.parent_path();
+		if (parent == current)
+			break;
+		current = parent;
+	}
+	return folder;
 }
 
 static bool DllHasAetherExports(const std::wstring& path) {
@@ -473,20 +499,18 @@ static std::wstring FindBuiltAetherDll(const std::wstring& root) {
 }
 
 static bool BuildAetherPluginSourceFolder(const std::wstring& folder, std::wstring& dllPath, std::wstring& status) {
-	std::wstring previousDllPath;
-	std::wstring previousDllHash;
-	if (DirectoryExistsWide(folder)) {
-		previousDllPath = FindBuiltAetherDll(folder);
-		if (!previousDllPath.empty())
-			previousDllHash = HashFileWide(previousDllPath);
-	}
-
 	if (!DirectoryExistsWide(folder)) {
 		status = L"Source folder does not exist";
 		return false;
 	}
 
-	std::wstring script = FindBuildScript(folder);
+	std::wstring buildRoot = FindNearestBuildRoot(folder);
+	std::wstring previousDllPath = FindBuiltAetherDll(buildRoot);
+	std::wstring previousDllHash;
+	if (!previousDllPath.empty())
+		previousDllHash = HashFileWide(previousDllPath);
+
+	std::wstring script = FindBuildScript(buildRoot);
 	std::wstring commandLine;
 	std::wstring buildKind;
 	if (!script.empty()) {
@@ -494,19 +518,19 @@ static bool BuildAetherPluginSourceFolder(const std::wstring& folder, std::wstri
 		buildKind = L"PowerShell build script";
 	}
 	else {
-		std::wstring solution = FindFirstSourceFile(folder, { L".sln" });
+		std::wstring solution = FindFirstSourceFile(buildRoot, { L".sln" });
 		if (!solution.empty()) {
 			commandLine = QuoteArg(FindMSBuildPath()) + L" " + QuoteArg(solution) + L" /p:Configuration=Release /p:Platform=x64";
 			buildKind = L"Visual Studio solution";
 		}
 		else {
-			std::wstring vcxproj = FindFirstSourceFile(folder, { L".vcxproj" });
+			std::wstring vcxproj = FindFirstSourceFile(buildRoot, { L".vcxproj" });
 			if (!vcxproj.empty()) {
 				commandLine = QuoteArg(FindMSBuildPath()) + L" " + QuoteArg(vcxproj) + L" /p:Configuration=Release /p:Platform=x64";
 				buildKind = L"C++ project";
 			}
 			else {
-				std::wstring csproj = FindFirstSourceFile(folder, { L".csproj" });
+				std::wstring csproj = FindFirstSourceFile(buildRoot, { L".csproj" });
 				if (!csproj.empty()) {
 					commandLine = L"dotnet build " + QuoteArg(csproj) + L" -c Release";
 					buildKind = L".NET project";
@@ -521,18 +545,22 @@ static bool BuildAetherPluginSourceFolder(const std::wstring& folder, std::wstri
 	}
 
 	DWORD exitCode = 1;
-	if (!RunHiddenProcess(commandLine, folder, exitCode)) {
+	if (!RunHiddenProcess(commandLine, buildRoot, exitCode)) {
 		status = L"Failed to start " + buildKind;
 		return false;
 	}
 	if (exitCode != 0) {
-		wchar_t buffer[96];
-		swprintf_s(buffer, L"Build failed with exit code %lu", exitCode);
-		status = buffer;
+		if (exitCode == WAIT_TIMEOUT)
+			status = L"Build timed out and was stopped";
+		else {
+			wchar_t buffer[96];
+			swprintf_s(buffer, L"Build failed with exit code %lu", exitCode);
+			status = buffer;
+		}
 		return false;
 	}
 
-	dllPath = FindBuiltAetherDll(folder);
+	dllPath = FindBuiltAetherDll(buildRoot);
 	if (dllPath.empty()) {
 		status = L"Build completed, but no DLL was produced";
 		return false;
@@ -738,27 +766,37 @@ static std::string NormalizeVersionString(std::string version) {
 
 	// GitHub tags are often "v1.0.1" or "AetherGUI-v1.0.1" while the local
 	// version is usually "1.0.1". Compare only the numeric semantic part first.
-	size_t firstDigit = std::string::npos;
-	for (size_t i = 0; i < version.size(); ++i) {
-		if (version[i] >= '0' && version[i] <= '9') {
-			firstDigit = i;
-			break;
-		}
-	}
-	if (firstDigit == std::string::npos)
+	std::vector<int> numbers = ParseVersionNumbers(version);
+	if (numbers.empty())
 		return version;
 
-	std::string result;
-	for (size_t i = firstDigit; i < version.size(); ++i) {
-		char ch = version[i];
-		if ((ch >= '0' && ch <= '9') || ch == '.')
-			result.push_back(ch);
-		else
-			break;
+	// Ignore prefix numbers from names like "AetherGUI 2026 v1.0.1" by taking
+	// the last semantic-looking group. This prevents false update popups when a
+	// release title/tag contains dates or build IDs before the real version.
+	std::string best;
+	for (size_t start = 0; start < version.size(); ++start) {
+		if (version[start] < '0' || version[start] > '9')
+			continue;
+		size_t end = start;
+		int dots = 0;
+		while (end < version.size() && ((version[end] >= '0' && version[end] <= '9') || version[end] == '.')) {
+			if (version[end] == '.')
+				dots++;
+			end++;
+		}
+		if (dots >= 1)
+			best = version.substr(start, end - start);
+		start = end;
 	}
-	while (!result.empty() && result.back() == '.')
-		result.pop_back();
-	return result;
+	if (best.empty()) {
+		for (int number : numbers) {
+			if (!best.empty()) best += ".";
+			best += std::to_string(number);
+		}
+	}
+	while (!best.empty() && best.back() == '.')
+		best.pop_back();
+	return best;
 }
 
 static bool IsVersionNewer(const std::string& latest, const std::string& current) {
@@ -3035,14 +3073,29 @@ bool AetherApp::RefreshPluginCatalog() {
 	std::string sourcePrefix = pluginManagerTab == 0 ? "Plugins/" : "AetherOTDPorts/";
 	std::vector<std::string> allPaths = sourceTreeLoaded ? JsonTreePaths(sourceTreeJson, false) : std::vector<std::string>();
 	std::set<std::string> sourceFolders;
+	std::set<std::string> sourceBuildFolders;
 	for (const std::string& path : allPaths) {
 		if (path.find(sourcePrefix) != 0)
 			continue;
 		size_t nextSlash = path.find('/', sourcePrefix.size());
 		if (nextSlash == std::string::npos || nextSlash == sourcePrefix.size())
 			continue;
-		sourceFolders.insert(path.substr(sourcePrefix.size(), nextSlash - sourcePrefix.size()));
+
+		std::string topFolder = path.substr(sourcePrefix.size(), nextSlash - sourcePrefix.size());
+		sourceFolders.insert(topFolder);
+
+		std::string fileName = path.substr(path.find_last_of('/') + 1);
+		if (StringEndsWithNoCase(fileName, ".dll"))
+			sourceBuildFolders.insert(topFolder);
+		if (StringEndsWithNoCase(fileName, ".vcxproj") || StringEndsWithNoCase(fileName, ".sln") ||
+			StringEndsWithNoCase(fileName, ".csproj") || StringEndsWithNoCase(fileName, ".ps1")) {
+			size_t folderSlash = path.find_last_of('/');
+			if (folderSlash != std::string::npos && folderSlash > sourcePrefix.size())
+				sourceBuildFolders.insert(path.substr(sourcePrefix.size(), folderSlash - sourcePrefix.size()));
+		}
 	}
+	if (pluginManagerTab == 1 && !sourceBuildFolders.empty())
+		sourceFolders = sourceBuildFolders;
 
 	auto applySourceMetadata = [&](PluginCatalogEntry& entry) {
 		const char* metadataNames[] = { "aether-plugin.json", "plugin.json", "metadata.json" };
@@ -3074,7 +3127,12 @@ bool AetherApp::RefreshPluginCatalog() {
 	auto findPortFolder = [&](const PluginCatalogEntry& entry) -> std::string {
 		std::wstring identity = entry.name + L" " + entry.owner + L" " + entry.description;
 		for (const std::string& folder : sourceFolders) {
-			if (CatalogNamesMatch(identity, Utf8ToWide(folder)))
+			std::wstring folderWide = Utf8ToWide(folder);
+			std::wstring folderName = folderWide;
+			size_t slash = folderName.find_last_of(L"/");
+			if (slash != std::wstring::npos)
+				folderName = folderName.substr(slash + 1);
+			if (CatalogNamesMatch(identity, folderWide) || CatalogNamesMatch(identity, folderName))
 				return folder;
 		}
 		return std::string();
@@ -3122,19 +3180,42 @@ bool AetherApp::RefreshPluginCatalog() {
 		}
 	}
 	else {
+		for (const std::string& folder : sourceFolders) {
+			PluginCatalogEntry entry;
+			entry.name = Utf8ToWide(folder);
+			size_t slash = entry.name.find_last_of(L"/");
+			if (slash != std::wstring::npos)
+				entry.name = entry.name.substr(slash + 1);
+			entry.owner = sourceOwner;
+			entry.description = L"Aether native port for an OpenTabletDriver plugin.";
+			entry.driverVersion = L"Aether";
+			entry.sourcePath = sourcePrefix + folder;
+			entry.sourcePort = true;
+			entry.nativeAvailable = true;
+			entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
+			applySourceMetadata(entry);
+			pluginCatalogEntries.push_back(entry);
+			loaded++;
+		}
+
 		std::wstring otdOwner = L"OpenTabletDriver";
 		std::wstring otdName = L"Plugin-Repository";
 		std::wstring otdRef = L"master";
 		std::wstring otdTreePath = L"/repos/" + otdOwner + L"/" + otdName + L"/git/trees/" + otdRef + L"?recursive=1";
 		std::string otdTreeJson;
 		if (!HttpGetUtf8(L"api.github.com", otdTreePath, otdTreeJson)) {
-			pluginCatalogStatus = L"Failed to load OTD plugin repository";
-			return false;
+			pluginCatalogStatus = pluginCatalogEntries.empty()
+				? L"Failed to load OTD plugin repository"
+				: (std::to_wstring(pluginCatalogEntries.size()) + L" Aether OTD source port(s); failed to load OTD metadata");
+			UpdatePluginCatalogInstallState();
+			return !pluginCatalogEntries.empty();
 		}
 
 		std::vector<std::string> paths = JsonTreePaths(otdTreeJson);
 		std::set<std::wstring> names;
-		int metadataRequestBudget = 96;
+		for (const PluginCatalogEntry& port : pluginCatalogEntries)
+			names.insert(CatalogToken(port.name + L" " + Utf8ToWide(port.sourcePath)) + L"|port");
+		int metadataRequestBudget = 220;
 		for (const std::string& path : paths) {
 			if (path.find("Repository/0.6.0.0/") == std::string::npos &&
 				path.find("Repository/0.6.6.0/") == std::string::npos &&
@@ -3161,19 +3242,42 @@ bool AetherApp::RefreshPluginCatalog() {
 			entry.license = Utf8ToWide(JsonStringValue(json, "LicenseIdentifier"));
 			if (entry.name.empty())
 				continue;
-			std::wstring token = CatalogToken(entry.name);
-			if (!names.insert(token).second)
-				continue;
 
 			std::string portFolder = findPortFolder(entry);
+			std::wstring token = CatalogToken(entry.name + L" " + (portFolder.empty() ? L"" : Utf8ToWide(portFolder)));
 			if (!portFolder.empty()) {
 				entry.sourcePath = sourcePrefix + portFolder;
 				entry.sourcePort = true;
 				entry.nativeAvailable = true;
 				entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
 				applySourceMetadata(entry);
+
+				bool merged = false;
+				std::wstring portIdentity = Utf8ToWide(portFolder);
+				for (PluginCatalogEntry& existing : pluginCatalogEntries) {
+					if (existing.sourcePath == entry.sourcePath || CatalogNamesMatch(existing.name + L" " + Utf8ToWide(existing.sourcePath), portIdentity)) {
+						existing.name = entry.name;
+						existing.owner = entry.owner.empty() ? existing.owner : entry.owner;
+						existing.description = entry.description.empty() ? existing.description : entry.description;
+						existing.version = entry.version;
+						existing.driverVersion = entry.driverVersion;
+						existing.downloadUrl = entry.downloadUrl;
+						existing.wikiUrl = entry.wikiUrl;
+						existing.license = entry.license;
+						existing.sourcePath = entry.sourcePath;
+						existing.sourcePort = true;
+						existing.nativeAvailable = true;
+						existing.repositoryUrl = entry.repositoryUrl;
+						merged = true;
+						break;
+					}
+				}
+				if (merged)
+					continue;
 			}
 
+			if (!names.insert(token).second)
+				continue;
 			pluginCatalogEntries.push_back(entry);
 			loaded++;
 		}
@@ -3402,6 +3506,13 @@ bool AetherApp::DownloadGitHubSourcePort(const PluginCatalogEntry& entry, std::w
 		return false;
 	}
 
+	std::wstring prebuiltDll = FindBuiltAetherDll(downloadRoot);
+	if (!prebuiltDll.empty() && DllHasAetherExports(prebuiltDll)) {
+		folderPath = prebuiltDll;
+		status = L"Downloaded prebuilt Aether DLL";
+		return true;
+	}
+
 	folderPath = downloadRoot;
 	status = L"Downloaded " + std::to_wstring(downloaded) + L" source file(s)";
 	return true;
@@ -3420,7 +3531,14 @@ bool AetherApp::InstallRepositoryPlugin(PluginCatalogEntry& entry) {
 		}
 
 		std::wstring dllPath;
-		if (!BuildAetherPluginSourceFolder(sourceFolder, dllPath, status)) {
+		if (StringEndsWithNoCase(WideToUtf8(sourceFolder), ".dll")) {
+			dllPath = sourceFolder;
+			if (!DllHasAetherExports(dllPath)) {
+				pluginCatalogStatus = L"Downloaded DLL is not an Aether native plugin";
+				return false;
+			}
+		}
+		else if (!BuildAetherPluginSourceFolder(sourceFolder, dllPath, status)) {
 			pluginCatalogStatus = status;
 			return false;
 		}
