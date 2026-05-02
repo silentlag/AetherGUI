@@ -4,6 +4,16 @@
 #include "Controls.h"
 #include "DriverBridge.h"
 
+#ifndef WM_AETHER_UPDATE_AVAILABLE
+#define WM_AETHER_UPDATE_AVAILABLE (WM_APP + 42)
+#endif
+
+struct PendingUpdateInfo {
+	std::wstring latestTag;
+	std::wstring currentVersion;
+	std::wstring releaseUrl;
+};
+
 class AetherApp {
 public:
 	HWND hWnd = nullptr;
@@ -183,6 +193,8 @@ public:
 
 	Button saveConfigBtn;
 	Button loadConfigBtn;
+	Button updateOpenBtn;
+	Button updateLaterBtn;
 	Button installPluginBtn;
 	Button installSourcePluginBtn;
 	Button reloadPluginBtn;
@@ -217,6 +229,8 @@ public:
 		bool nativeAvailable = false;
 		bool sourcePort = false;
 		bool installed = false;
+		bool needsUpdate = false;
+		std::wstring installedIdentity;
 	};
 	struct PluginEntry {
 		struct PluginOption {
@@ -247,6 +261,10 @@ public:
 	bool pluginListDirty = true;
 	bool pluginManagerOpen = false;
 	bool pluginSourceEditorOpen = false;
+	bool updateModalOpen = false;
+	std::wstring updateLatestTag;
+	std::wstring updateCurrentVersion;
+	std::wstring updateReleaseUrl;
 	float pluginCatalogScrollY = 0.0f;
 	float pluginCatalogDragStartY = 0.0f;
 	float pluginCatalogDragStartOffset = 0.0f;
@@ -477,11 +495,13 @@ private:
 
 	void DrawPluginSourceModal();
 
+	void DrawUpdateModal();
+
 	bool DeleteInstalledPlugin(size_t index);
 
 	std::wstring GetPluginDirectory() const;
 
-	bool InstallRepositoryPlugin(const PluginCatalogEntry& entry);
+	bool InstallRepositoryPlugin(PluginCatalogEntry& entry);
 
 	bool DownloadGitHubSourcePort(const PluginCatalogEntry& entry, std::wstring& folderPath, std::wstring& status);
 
@@ -526,7 +546,12 @@ private:
 	
 	void SendStaticMonitorInfoToDriver();
 	
+public:
 	bool StartDriverService();
+
+	void ShowUpdateModal(const std::wstring& latestTag, const std::wstring& currentVersion, const std::wstring& releaseUrl);
+
+private:
 	
 	void SendStartupSettingsToDriver();
 	

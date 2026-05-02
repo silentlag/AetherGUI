@@ -24,6 +24,7 @@
 
 <p>
   <strong>Latest update:</strong> safer screen-area bounds for resolution changes, fixed edge-clamped sliders,
+  native OTD test ports, improved update notifications, a richer tray menu,
   and automatic service start when <code>AetherService.exe</code> is launched directly.
 </p>
 
@@ -55,7 +56,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Native Plugin Manager</strong><br/>Animated lists · cached catalogs · install DLL filters · build source ports</td>
-    <td align="center"><strong>Modern Quality-of-Life</strong><br/>Safe area bounds · multi-monitor mapping · DPI scaling · undo · autosave · input visualizer</td>
+    <td align="center"><strong>Modern Quality-of-Life</strong><br/>Safe area bounds · themed updater · tray controls · DPI scaling · undo · autosave</td>
   </tr>
 </table>
 
@@ -194,6 +195,14 @@
     <td align="center"><strong>Direct service launch</strong></td>
     <td align="center">If <code>AetherService.exe</code> is opened without the GUI, it now starts automatically after detecting a tablet instead of waiting silently for a stdin <code>start</code> command.</td>
   </tr>
+  <tr>
+    <td align="center"><strong>Themed update prompt</strong></td>
+    <td align="center">GitHub update notifications now use an in-app Aether-style modal instead of a plain Windows message box.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Tray menu</strong></td>
+    <td align="center">The tray icon menu now includes Open, Start/Stop driver, Plugins, Console, and Exit actions.</td>
+  </tr>
 </table>
 
 <br/>
@@ -203,6 +212,9 @@
 <p>
   AetherGUI includes a native plugin pipeline for custom packet filters. Plugins are installed into the local
   <code>plugins/</code> folder next to the built application and can be enabled, disabled, configured, reloaded, or removed from the GUI.
+  A source-build template for porting OpenTabletDriver filters is included in <code>AetherPluginTemplate/</code>.
+  Test native ports for <code>BezierInterpolator</code> and <code>RadialFollow</code> are included in <code>AetherOTDPorts/</code>.
+  These ports can be tested through <strong>Filters -> Plugins -> Build Source</strong>.
 </p>
 
 <table align="center">
@@ -216,7 +228,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Build Source</strong></td>
-    <td align="center">Builds a plugin source folder using a PowerShell build script, Visual Studio project/solution, or .NET project when available.</td>
+    <td align="center">Builds a plugin source folder using a PowerShell build script, Visual Studio project/solution, or .NET project when available. Use <code>AetherPluginTemplate/</code> as a starting point for OTD filter ports.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin Manager</strong></td>
@@ -335,6 +347,50 @@
 
 <br/>
 
+<h2>· Tray Menu ·</h2>
+
+<p>
+  AetherGUI keeps running in the tray when minimized or closed. Right-click the tray icon for quick actions:
+</p>
+
+<table align="center">
+  <tr>
+    <th align="center">Action</th>
+    <th align="center">Description</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>Open Aether</strong></td>
+    <td align="center">Restores the main control panel.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Start / Stop driver</strong></td>
+    <td align="center">Starts or stops the tablet service without opening extra windows.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Plugins</strong></td>
+    <td align="center">Opens the app directly to Filters and shows the Plugin Manager.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Console</strong></td>
+    <td align="center">Opens the Console tab for logs and manual commands.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Exit Aether</strong></td>
+    <td align="center">Fully closes the GUI and removes the tray icon.</td>
+  </tr>
+</table>
+
+<br/>
+
+<h2>· Updates ·</h2>
+
+<p>
+  AetherGUI checks GitHub releases on startup. If a newer release is available, the app shows a themed in-app update modal with the current and latest versions.
+  The update check normalizes tags such as <code>v1.0.1</code> and <code>AetherGUI-v1.0.1</code>, so matching versions no longer trigger a false update popup.
+</p>
+
+<br/>
+
 <h2>· Notes ·</h2>
 
 <p>
@@ -389,6 +445,14 @@
   <tr>
     <td align="center"><strong>Service looks stuck after <code>End of embedded config</code></strong></td>
     <td align="center">Update to this release. Direct service launches now auto-start. For normal use, run <code>AetherGUI.exe</code>.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Update popup appears even when versions match</strong></td>
+    <td align="center">Update to this release. GitHub tags are now normalized before comparison, so <code>v1.0.1</code> equals <code>1.0.1</code>.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Need quick access while minimized</strong></td>
+    <td align="center">Use the tray icon. The tray menu can restore the GUI, start/stop the driver, open Plugins, open Console, or exit.</td>
   </tr>
   <tr>
     <td align="center"><strong>OTD Ports tab loads slowly</strong></td>

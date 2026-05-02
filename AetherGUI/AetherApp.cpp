@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <set>
 #pragma comment(lib, "hid.lib")
@@ -96,6 +97,34 @@ static bool DirectoryExistsWide(const std::wstring& path) {
 	return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+static uint64_t Fnv1aAppend(uint64_t hash, const void* data, size_t size) {
+	const unsigned char* bytes = static_cast<const unsigned char*>(data);
+	for (size_t i = 0; i < size; ++i) {
+		hash ^= bytes[i];
+		hash *= 1099511628211ull;
+	}
+	return hash;
+}
+
+static std::wstring HashFileWide(const std::wstring& path) {
+	std::ifstream in(path, std::ios::binary);
+	if (!in.good())
+		return L"";
+
+	uint64_t hash = 14695981039346656037ull;
+	char buffer[8192];
+	while (in.good()) {
+		in.read(buffer, sizeof(buffer));
+		std::streamsize read = in.gcount();
+		if (read > 0)
+			hash = Fnv1aAppend(hash, buffer, (size_t)read);
+	}
+
+	wchar_t text[32];
+	swprintf_s(text, L"%016llX", (unsigned long long)hash);
+	return text;
+}
+
 static std::wstring QuoteArg(const std::wstring& arg) {
 	return L"\"" + arg + L"\"";
 }
@@ -125,6 +154,22 @@ static std::wstring CatalogToken(const std::wstring& text) {
 			result.push_back(LowerAscii(ch));
 	}
 	return result;
+}
+
+static std::wstring NormalizePluginIdentity(const std::wstring& text) {
+	std::wstring token = CatalogToken(text);
+	const std::wstring suffixes[] = { L"aether", L"native", L"plugin", L"filter", L"filters", L"port", L"otd" };
+	bool changed = true;
+	while (changed && !token.empty()) {
+		changed = false;
+		for (const std::wstring& suffix : suffixes) {
+			if (token.length() > suffix.length() + 3 && token.rfind(suffix) == token.length() - suffix.length()) {
+				token.resize(token.length() - suffix.length());
+				changed = true;
+			}
+		}
+	}
+	return token;
 }
 
 static std::vector<std::wstring> CatalogWords(const std::wstring& text) {
@@ -166,6 +211,12 @@ static bool CatalogNamesMatch(const std::wstring& left, const std::wstring& righ
 	if (leftToken.empty() || rightToken.empty())
 		return false;
 	if (leftToken == rightToken || leftToken.find(rightToken) != std::wstring::npos || rightToken.find(leftToken) != std::wstring::npos)
+		return true;
+
+	std::wstring leftIdentity = NormalizePluginIdentity(left);
+	std::wstring rightIdentity = NormalizePluginIdentity(right);
+	if (!leftIdentity.empty() && !rightIdentity.empty() &&
+		(leftIdentity == rightIdentity || leftIdentity.find(rightIdentity) != std::wstring::npos || rightIdentity.find(leftIdentity) != std::wstring::npos))
 		return true;
 
 	std::vector<std::wstring> leftWords = CatalogWords(left);
@@ -340,6 +391,8 @@ typedef int(__cdecl* AetherGuiPluginGetOptionCountFn)();
 typedef int(__cdecl* AetherGuiPluginGetOptionInfoFn)(int index, AetherGuiPluginOptionInfo* info);
 
 static bool ReadAetherPluginMetadata(const std::wstring& path, std::wstring& name, std::wstring& description, std::vector<PluginOptionMetadata>& options) {
+	name.clear();
+	description.clear();
 	options.clear();
 
 	HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
@@ -420,6 +473,14 @@ static std::wstring FindBuiltAetherDll(const std::wstring& root) {
 }
 
 static bool BuildAetherPluginSourceFolder(const std::wstring& folder, std::wstring& dllPath, std::wstring& status) {
+	std::wstring previousDllPath;
+	std::wstring previousDllHash;
+	if (DirectoryExistsWide(folder)) {
+		previousDllPath = FindBuiltAetherDll(folder);
+		if (!previousDllPath.empty())
+			previousDllHash = HashFileWide(previousDllPath);
+	}
+
 	if (!DirectoryExistsWide(folder)) {
 		status = L"Source folder does not exist";
 		return false;
@@ -474,6 +535,10 @@ static bool BuildAetherPluginSourceFolder(const std::wstring& folder, std::wstri
 	dllPath = FindBuiltAetherDll(folder);
 	if (dllPath.empty()) {
 		status = L"Build completed, but no DLL was produced";
+		return false;
+	}
+	if (dllPath == previousDllPath && !previousDllHash.empty() && HashFileWide(dllPath) == previousDllHash) {
+		status = L"Build finished, but output DLL did not change. Check if the source folder is included in the project/build script.";
 		return false;
 	}
 	if (!DllHasAetherExports(dllPath)) {
@@ -668,9 +733,42 @@ static std::vector<int> ParseVersionNumbers(const std::string& version) {
 	return numbers;
 }
 
+static std::string NormalizeVersionString(std::string version) {
+	std::transform(version.begin(), version.end(), version.begin(), [](unsigned char ch) { return (char)std::tolower(ch); });
+
+	// GitHub tags are often "v1.0.1" or "AetherGUI-v1.0.1" while the local
+	// version is usually "1.0.1". Compare only the numeric semantic part first.
+	size_t firstDigit = std::string::npos;
+	for (size_t i = 0; i < version.size(); ++i) {
+		if (version[i] >= '0' && version[i] <= '9') {
+			firstDigit = i;
+			break;
+		}
+	}
+	if (firstDigit == std::string::npos)
+		return version;
+
+	std::string result;
+	for (size_t i = firstDigit; i < version.size(); ++i) {
+		char ch = version[i];
+		if ((ch >= '0' && ch <= '9') || ch == '.')
+			result.push_back(ch);
+		else
+			break;
+	}
+	while (!result.empty() && result.back() == '.')
+		result.pop_back();
+	return result;
+}
+
 static bool IsVersionNewer(const std::string& latest, const std::string& current) {
-	std::vector<int> latestNumbers = ParseVersionNumbers(latest);
-	std::vector<int> currentNumbers = ParseVersionNumbers(current);
+	std::string latestNormalized = NormalizeVersionString(latest);
+	std::string currentNormalized = NormalizeVersionString(current);
+	if (!latestNormalized.empty() && latestNormalized == currentNormalized)
+		return false;
+
+	std::vector<int> latestNumbers = ParseVersionNumbers(latestNormalized.empty() ? latest : latestNormalized);
+	std::vector<int> currentNumbers = ParseVersionNumbers(currentNormalized.empty() ? current : currentNormalized);
 	if (latestNumbers.empty() || currentNumbers.empty())
 		return false;
 
@@ -768,24 +866,15 @@ static void StartUpdateCheck(HWND hwnd) {
 		if (!IsWindow(hwnd))
 			return;
 
-		std::wstring latestTag = Utf8ToWide(latest.tag);
-		std::wstring message =
-			L"A new AetherGUI update is available.\n\n"
-			L"Current version: " AETHERGUI_VERSION_W L"\n"
-			L"Latest version: " + latestTag + L"\n\n"
-			L"Open the GitHub release page?";
+		PendingUpdateInfo* info = new PendingUpdateInfo();
+		info->latestTag = Utf8ToWide(latest.tag);
+		info->currentVersion = AETHERGUI_VERSION_W;
+		info->releaseUrl = latest.htmlUrl.empty()
+			? std::wstring(AETHERGUI_GITHUB_RELEASES_URL)
+			: Utf8ToWide(latest.htmlUrl);
 
-		int result = MessageBoxW(
-			hwnd,
-			message.c_str(),
-			L"AetherGUI Update Available",
-			MB_ICONINFORMATION | MB_YESNO | MB_SETFOREGROUND);
-
-		if (result == IDYES) {
-			std::wstring url = latest.htmlUrl.empty()
-				? std::wstring(AETHERGUI_GITHUB_RELEASES_URL)
-				: Utf8ToWide(latest.htmlUrl);
-			ShellExecuteW(hwnd, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		if (!PostMessageW(hwnd, WM_AETHER_UPDATE_AVAILABLE, 0, reinterpret_cast<LPARAM>(info))) {
+			delete info;
 		}
 	}).detach();
 }
@@ -1041,6 +1130,8 @@ void AetherApp::InitControls() {
 	pluginManagerApplySourceBtn.Layout(0, 0, 120, 28, L"Apply", true, L"Apply repository source");
 	pluginManagerCancelSourceBtn.Layout(0, 0, 120, 28, L"Cancel", false, L"Cancel source changes");
 	pluginManagerInstallRepoBtn.Layout(0, 0, 120, 28, L"Install", true, L"Install selected repository plugin when native Aether port is available");
+	updateOpenBtn.Layout(0, 0, 140, 30, L"Open Release", true, L"Open the latest GitHub release page");
+	updateLaterBtn.Layout(0, 0, 100, 30, L"Later", false, L"Close this update notification");
 	pluginRepoOwnerInput.Layout(0, 0, 240, L"Owner");
 	pluginRepoNameInput.Layout(0, 0, 240, L"Name");
 	pluginRepoRefInput.Layout(0, 0, 240, L"Ref");
@@ -2030,6 +2121,10 @@ void AetherApp::OnKeyDown(int vk) {
 		if (pluginRepoNameInput.OnKeyDown(vk)) return;
 		if (pluginRepoRefInput.OnKeyDown(vk)) return;
 	}
+	if (updateModalOpen && vk == VK_ESCAPE) {
+		updateModalOpen = false;
+		return;
+	}
 	if (pluginManagerOpen && vk == VK_ESCAPE) {
 		pluginManagerOpen = false;
 		return;
@@ -2153,7 +2248,7 @@ void AetherApp::Tick() {
 	DrawHeader();
 
 	int oldTab = sidebar.activeIndex;
-	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen;
+	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen;
 	bool frameClick = mouseClicked;
 	if (modalOpen)
 		mouseClicked = false;
@@ -2235,6 +2330,8 @@ void AetherApp::Tick() {
 		DrawPluginManagerModal();
 	if (pluginSourceEditorOpen)
 		DrawPluginSourceModal();
+	if (updateModalOpen)
+		DrawUpdateModal();
 	Tooltip::Draw(renderer);
 	renderer.EndFrame();
 
@@ -2879,11 +2976,18 @@ void AetherApp::SendPluginOptions(size_t pluginIndex) {
 void AetherApp::UpdatePluginCatalogInstallState() {
 	for (auto& catalog : pluginCatalogEntries) {
 		catalog.installed = false;
+		catalog.needsUpdate = false;
+		catalog.installedIdentity.clear();
+
 		std::wstring catalogIdentity = catalog.name + L" " + Utf8ToWide(catalog.sourcePath);
+		std::wstring catalogToken = NormalizePluginIdentity(catalog.name + L" " + Utf8ToWide(catalog.sourcePath));
 		for (const auto& plugin : pluginEntries) {
 			std::wstring pluginIdentity = plugin.key + L" " + plugin.name + L" " + plugin.dllName;
 			if (CatalogNamesMatch(pluginIdentity, catalogIdentity)) {
 				catalog.installed = true;
+				catalog.installedIdentity = plugin.key;
+				std::wstring pluginToken = NormalizePluginIdentity(plugin.name + L" " + plugin.dllName + L" " + plugin.key);
+				catalog.needsUpdate = catalog.sourcePort && !catalogToken.empty() && !pluginToken.empty() && pluginToken != catalogToken;
 				break;
 			}
 		}
@@ -2928,7 +3032,7 @@ bool AetherApp::RefreshPluginCatalog() {
 		return false;
 	}
 
-	std::string sourcePrefix = pluginManagerTab == 0 ? "Plugins/" : "OTDPlugins/";
+	std::string sourcePrefix = pluginManagerTab == 0 ? "Plugins/" : "AetherOTDPorts/";
 	std::vector<std::string> allPaths = sourceTreeLoaded ? JsonTreePaths(sourceTreeJson, false) : std::vector<std::string>();
 	std::set<std::string> sourceFolders;
 	for (const std::string& path : allPaths) {
@@ -3223,13 +3327,20 @@ bool AetherApp::InstallPluginSourceWithDialog() {
 
 void AetherApp::OpenExternalUrl(const std::wstring& url) {
 	if (url.empty()) {
-		pluginCatalogStatus = L"No URL available for selected plugin";
+		pluginCatalogStatus = L"No URL available";
 		return;
 	}
 
 	HINSTANCE result = ShellExecuteW(hWnd, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 	if ((INT_PTR)result <= 32)
 		pluginCatalogStatus = L"Failed to open URL";
+}
+
+void AetherApp::ShowUpdateModal(const std::wstring& latestTag, const std::wstring& currentVersion, const std::wstring& releaseUrl) {
+	updateLatestTag = latestTag;
+	updateCurrentVersion = currentVersion;
+	updateReleaseUrl = releaseUrl;
+	updateModalOpen = true;
 }
 
 bool AetherApp::DownloadGitHubSourcePort(const PluginCatalogEntry& entry, std::wstring& folderPath, std::wstring& status) {
@@ -3296,11 +3407,9 @@ bool AetherApp::DownloadGitHubSourcePort(const PluginCatalogEntry& entry, std::w
 	return true;
 }
 
-bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
-	if (entry.installed) {
-		pluginCatalogStatus = L"Plugin is already installed";
-		return true;
-	}
+bool AetherApp::InstallRepositoryPlugin(PluginCatalogEntry& entry) {
+	bool replacingInstalled = entry.installed;
+	std::wstring replaceKey = entry.installedIdentity;
 
 	if (entry.sourcePort) {
 		std::wstring sourceFolder;
@@ -3323,6 +3432,9 @@ bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
 			return false;
 		}
 
+		if (replacingInstalled && !replaceKey.empty())
+			driver.SendCommand("PluginEnable " + QuoteCommandArg(WideToUtf8(replaceKey)) + " off");
+
 		driver.SendCommand("PluginInstall \"" + WideToUtf8(dllPath) + "\"");
 		driver.SendCommand("PluginReload");
 		driver.SendCommand("PluginList");
@@ -3330,7 +3442,9 @@ bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
 		RefreshPluginList();
 		SendPluginSettings();
 		UpdatePluginCatalogInstallState();
-		pluginCatalogStatus = L"Built and installed source port";
+		pluginCatalogStatus = replacingInstalled ? L"Rebuilt and replaced installed source port" : L"Built and installed source port";
+		entry.installed = true;
+		entry.needsUpdate = false;
 		return true;
 	}
 
@@ -3356,6 +3470,14 @@ bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
 	else if (WideContainsNoCase(identity, L"Devocub") || WideContainsNoCase(identity, L"Antichatter")) {
 		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
 		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_DevocubAntichatter.dll";
+	}
+	else if (WideContainsNoCase(identity, L"Bezier")) {
+		sourceDir = desktop111 + L"AetherGUI\\AetherOTDPorts\\BezierInterpolatorAether";
+		expectedDll = sourceDir + L"\\bin\\Release\\BezierInterpolatorAether.dll";
+	}
+	else if (WideContainsNoCase(identity, L"Radial") || WideContainsNoCase(identity, L"Follow")) {
+		sourceDir = desktop111 + L"AetherGUI\\AetherOTDPorts\\RadialFollowAether";
+		expectedDll = sourceDir + L"\\bin\\Release\\RadialFollowAether.dll";
 	}
 
 	if (sourceDir.empty()) {
@@ -3400,6 +3522,8 @@ bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
 		return false;
 	}
 
+	if (replacingInstalled && !replaceKey.empty())
+		driver.SendCommand("PluginEnable " + QuoteCommandArg(WideToUtf8(replaceKey)) + " off");
 	driver.SendCommand("PluginInstall \"" + WideToUtf8(expectedDll) + "\"");
 	driver.SendCommand("PluginReload");
 	driver.SendCommand("PluginList");
@@ -3407,7 +3531,9 @@ bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
 	RefreshPluginList();
 	SendPluginSettings();
 	UpdatePluginCatalogInstallState();
-	pluginCatalogStatus = L"Installed native Aether port";
+	pluginCatalogStatus = replacingInstalled ? L"Rebuilt and replaced native Aether port" : L"Installed native Aether port";
+	entry.installed = true;
+	entry.needsUpdate = false;
 	return true;
 }
 
@@ -4840,6 +4966,51 @@ void AetherApp::DrawPluginSourceModal() {
 	pluginManagerApplySourceBtn.Draw(renderer);
 }
 
+void AetherApp::DrawUpdateModal() {
+	float overlayW = Theme::Runtime::WindowWidth;
+	float overlayH = Theme::Runtime::WindowHeight;
+	renderer.FillRect(0, 0, overlayW, overlayH, D2D1::ColorF(0, 0, 0, 0.52f));
+
+	float w = std::min(520.0f, overlayW - 36.0f);
+	float h = 260.0f;
+	float x = (overlayW - w) * 0.5f;
+	float y = (overlayH - h) * 0.5f;
+
+	renderer.FillRoundedRect(x, y, w, h, 12, Theme::BgSurface());
+	renderer.DrawRoundedRect(x, y, w, h, 12, Theme::BorderAccent(), 1.2f);
+
+	D2D1_COLOR_F glow = Theme::AccentGlow();
+	glow.a = 0.16f;
+	renderer.FillCircle(x + 54, y + 54, 28, glow);
+	renderer.FillCircle(x + 54, y + 54, 18, Theme::AccentDim());
+	renderer.DrawText(L"\xE895", x + 42, y + 40, 24, 28, Theme::AccentPrimary(), renderer.pFontIcon, Renderer::AlignCenter);
+
+	renderer.DrawText(L"AetherGUI update available", x + 92, y + 24, w - 116, 28, Theme::TextPrimary(), renderer.pFontBody);
+	renderer.DrawText(L"A new GitHub release was found. You can open the release page now or continue using the current version.",
+		x + 92, y + 56, w - 116, 46, Theme::TextMuted(), renderer.pFontSmall);
+
+	renderer.FillRoundedRect(x + 18, y + 120, w - 36, 70, 8, Theme::BgElevated());
+	renderer.DrawRoundedRect(x + 18, y + 120, w - 36, 70, 8, Theme::BorderSubtle());
+	renderer.DrawText(L"Current", x + 34, y + 132, 120, 20, Theme::TextMuted(), renderer.pFontSmall);
+	renderer.DrawText(updateCurrentVersion.empty() ? L"unknown" : updateCurrentVersion.c_str(), x + 160, y + 132, w - 200, 20, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+	renderer.DrawText(L"Latest", x + 34, y + 160, 120, 20, Theme::TextMuted(), renderer.pFontSmall);
+	renderer.DrawText(updateLatestTag.empty() ? L"unknown" : updateLatestTag.c_str(), x + 160, y + 160, w - 200, 20, Theme::AccentPrimary(), renderer.pFontSmall, Renderer::AlignRight);
+
+	float btnY = y + h - 48;
+	updateLaterBtn.Layout(x + w - 250, btnY, 100, 30, L"Later", false);
+	if (updateLaterBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		updateModalOpen = false;
+	}
+	updateLaterBtn.Draw(renderer);
+
+	updateOpenBtn.Layout(x + w - 140, btnY, 122, 30, L"Open Release", true);
+	if (updateOpenBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		OpenExternalUrl(updateReleaseUrl);
+		updateModalOpen = false;
+	}
+	updateOpenBtn.Draw(renderer);
+}
+
 void AetherApp::DrawPluginManagerModal() {
 	float overlayW = Theme::Runtime::WindowWidth;
 	float overlayH = Theme::Runtime::WindowHeight;
@@ -4874,7 +5045,7 @@ void AetherApp::DrawPluginManagerModal() {
 	}
 	pluginManagerOtdTabBtn.Draw(renderer);
 
-	std::wstring sourceFolder = pluginManagerTab == 0 ? L"Plugins" : L"OTDPlugins";
+	std::wstring sourceFolder = pluginManagerTab == 0 ? L"Plugins" : L"AetherOTDPorts";
 	std::wstring source = IsDefaultPluginRepoOwner(pluginRepoOwner)
 		? (L"Default GitHub catalog / " + sourceFolder + L" @ " + pluginRepoRef)
 		: (pluginRepoOwner + L"/" + pluginRepoName + L" / " + sourceFolder + L" @ " + pluginRepoRef);
@@ -5040,7 +5211,7 @@ void AetherApp::DrawPluginManagerModal() {
 			renderer.DrawText(entry.name.c_str(), rowX + 8, ry, listW - 64, 26, nameColor, renderer.pFontSmall);
 			D2D1_COLOR_F stateColor = entry.installed ? Theme::Success() : (entry.sourcePort ? Theme::AccentPrimary() : Theme::TextMuted());
 			stateColor.a *= catalogAlpha * rowEase;
-			renderer.DrawText(entry.installed ? L"ON" : (entry.sourcePort ? L"SRC" : L"TODO"), listX + listW - 54, ry, 42, 26,
+			renderer.DrawText(entry.installed ? (entry.needsUpdate ? L"UPD" : L"ON") : (entry.sourcePort ? L"SRC" : L"TODO"), listX + listW - 54, ry, 42, 26,
 				stateColor, renderer.pFontSmall, Renderer::AlignRight);
 			if (hovered && mouseClicked)
 				selectedCatalogIndex = i;
@@ -5097,12 +5268,14 @@ void AetherApp::DrawPluginManagerModal() {
 			OpenExternalUrl(entry.wikiUrl);
 		pluginManagerWikiBtn.Draw(renderer);
 		dy += 42;
-		const wchar_t* state = entry.installed ? L"Installed" : (entry.sourcePort ? L"Ready to download, build, and install" : L"Port is not available yet. Needs an Aether C++ port.");
+		const wchar_t* state = entry.installed
+			? (entry.needsUpdate ? L"Installed, but GitHub source port differs. Reinstall will rebuild and replace it." : L"Installed")
+			: (entry.sourcePort ? L"Ready to download, build, and install" : L"Port is not available yet. Needs an Aether C++ port.");
 		renderer.DrawText(state, detailX + 14, dy, detailW - 28, 26,
-			entry.installed ? Theme::Success() : (entry.sourcePort ? Theme::AccentPrimary() : Theme::Warning()), renderer.pFontSmall);
+			entry.installed ? (entry.needsUpdate ? Theme::Warning() : Theme::Success()) : (entry.sourcePort ? Theme::AccentPrimary() : Theme::Warning()), renderer.pFontSmall);
 
-		if (!entry.installed && entry.sourcePort) {
-			pluginManagerInstallRepoBtn.Layout(detailX + detailW - 124, y + h - 46, 112, 30, L"Install", true);
+		if ((!entry.installed || entry.needsUpdate) && entry.sourcePort) {
+			pluginManagerInstallRepoBtn.Layout(detailX + detailW - 124, y + h - 46, 112, 30, entry.installed ? L"Reinstall" : L"Install", true);
 			if (pluginManagerInstallRepoBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 				InstallRepositoryPlugin(entry);
 			}

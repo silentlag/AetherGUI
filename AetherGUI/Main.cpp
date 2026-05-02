@@ -129,8 +129,12 @@ bool isRunning = true;
 
 
 #define WM_TRAYICON (WM_USER + 1)
-#define ID_TRAY_SHOW  4001
-#define ID_TRAY_EXIT  4002
+#define ID_TRAY_SHOW     4001
+#define ID_TRAY_START    4002
+#define ID_TRAY_STOP     4003
+#define ID_TRAY_PLUGINS  4004
+#define ID_TRAY_CONSOLE  4005
+#define ID_TRAY_EXIT     4006
 NOTIFYICONDATAW nid = {};
 bool trayCreated = false;
 bool windowHidden = false;
@@ -180,12 +184,25 @@ void ShowTrayMenu(HWND hWnd) {
 	POINT pt;
 	GetCursorPos(&pt);
 	HMENU hMenu = CreatePopupMenu();
-	AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, L"Show Aether");
+
+	MENUITEMINFOW title = {};
+	title.cbSize = sizeof(title);
+	title.fMask = MIIM_STRING | MIIM_STATE;
+	title.fState = MFS_DISABLED;
+	title.dwTypeData = const_cast<LPWSTR>(L"Aether Tablet Driver");
+	InsertMenuItemW(hMenu, 0, TRUE, &title);
 	AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
+
+	AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, windowHidden ? L"Open Aether" : L"Show Aether");
+	AppendMenuW(hMenu, MF_STRING, app.driver.isConnected ? ID_TRAY_STOP : ID_TRAY_START,
+		app.driver.isConnected ? L"Stop driver" : L"Start driver");
+	AppendMenuW(hMenu, MF_STRING, ID_TRAY_PLUGINS, L"Plugins");
+	AppendMenuW(hMenu, MF_STRING, ID_TRAY_CONSOLE, L"Console");
+	AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"Exit Aether");
 	
 	SetForegroundWindow(hWnd);
-	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, nullptr);
+	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, nullptr);
 	DestroyMenu(hMenu);
 }
 
@@ -357,11 +374,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		if (LOWORD(wParam) == ID_TRAY_SHOW) {
 			RestoreFromTray(hWnd);
 		}
+		else if (LOWORD(wParam) == ID_TRAY_START) {
+			app.autoStartEnabled = true;
+			app.autoStartRetryTimer = 0.0f;
+			app.StartDriverService();
+		}
+		else if (LOWORD(wParam) == ID_TRAY_STOP) {
+			app.autoStartEnabled = false;
+			app.driver.Stop();
+		}
+		else if (LOWORD(wParam) == ID_TRAY_PLUGINS) {
+			RestoreFromTray(hWnd);
+			app.sidebar.activeIndex = 1;
+			app.pluginManagerOpen = true;
+		}
+		else if (LOWORD(wParam) == ID_TRAY_CONSOLE) {
+			RestoreFromTray(hWnd);
+			app.sidebar.activeIndex = 3;
+		}
 		else if (LOWORD(wParam) == ID_TRAY_EXIT) {
 			RemoveTrayIcon();
 			DestroyWindow(hWnd);
 		}
 		return 0;
+
+	case WM_AETHER_UPDATE_AVAILABLE: {
+		PendingUpdateInfo* info = reinterpret_cast<PendingUpdateInfo*>(lParam);
+		if (info) {
+			app.ShowUpdateModal(info->latestTag, info->currentVersion, info->releaseUrl);
+			delete info;
+			if (windowHidden)
+				RestoreFromTray(hWnd);
+		}
+		return 0;
+	}
 
 	case WM_CLOSE:
 		MinimizeToTray(hWnd);
