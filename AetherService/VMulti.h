@@ -83,8 +83,7 @@ public:
 	int lastButtons;
 	int pendingButtons;
 	bool buttonsChanged;
-
-
+	bool monitorInfoLocked;
 
 	VMulti();
 	~VMulti();
@@ -92,6 +91,7 @@ public:
 	void ResetRelativeData(double x, double y);
 	void InvalidateRelativeData();
 	void UpdateMonitorInfo();
+	void SetMonitorInfo(double primaryWidth, double primaryHeight, double virtualWidth, double virtualHeight, double virtualX, double virtualY);
 	void CreateReport(BYTE buttons, double x, double y, double pressure);
 	int ResetReport();
 	int WriteReport();

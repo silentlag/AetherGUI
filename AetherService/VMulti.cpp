@@ -15,6 +15,7 @@ VMulti::VMulti() {
 	lastButtons = 0;
 	pendingButtons = 0;
 	buttonsChanged = false;
+	monitorInfoLocked = false;
 
 	mode = ModeAbsoluteMouse;
 
@@ -109,11 +110,10 @@ void VMulti::InvalidateRelativeData() {
 	relativeData.firstReport = true;
 }
 
-
-
-
-
 void VMulti::UpdateMonitorInfo() {
+	if (monitorInfoLocked) {
+		return;
+	}
 	monitorInfo.primaryWidth = GetSystemMetrics(SM_CXSCREEN);
 	monitorInfo.primaryHeight = GetSystemMetrics(SM_CYSCREEN);
 	monitorInfo.virtualWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -122,9 +122,15 @@ void VMulti::UpdateMonitorInfo() {
 	monitorInfo.virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
 }
 
-
-
-
+void VMulti::SetMonitorInfo(double primaryWidth, double primaryHeight, double virtualWidth, double virtualHeight, double virtualX, double virtualY) {
+	monitorInfo.primaryWidth = primaryWidth;
+	monitorInfo.primaryHeight = primaryHeight;
+	monitorInfo.virtualWidth = virtualWidth;
+	monitorInfo.virtualHeight = virtualHeight;
+	monitorInfo.virtualX = virtualX;
+	monitorInfo.virtualY = virtualY;
+	monitorInfoLocked = true;
+}
 
 void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 	double dx, dy, distance;

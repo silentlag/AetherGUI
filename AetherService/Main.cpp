@@ -10,6 +10,7 @@
 #include "CommandLine.h"
 #include "ProcessCommand.h"
 #include "EmbeddedConfig.h"
+#include "AetherPluginManager.h"
 
 #include <atomic>
 
@@ -49,6 +50,15 @@ double overclockTargetHz = 1000.0;
 static atomic<bool> overclockTimerRunning(false);
 static thread *overclockTimerThread = NULL;
 
+bool penRateLimitActive = false;
+double penRateLimitHz = 133.0;
+static mutex penRateLimitMutex;
+static chrono::steady_clock::time_point lastPenOutputTime = chrono::steady_clock::now() - chrono::seconds(1);
+static chrono::steady_clock::time_point outputHzWindowStart = chrono::steady_clock::now();
+static int outputHzPacketCount = 0;
+static double measuredOutputRate = 0;
+static atomic<bool> penRateTimerRunning(false);
+static thread *penRateTimerThread = NULL;
 
 
 
@@ -218,13 +228,195 @@ void StopOverclockTimer() {
 }
 
 void StartOverclockTimer(double targetHz) {
-	if (targetHz < 125.0) targetHz = 125.0;
+	if (targetHz < 30.0) targetHz = 30.0;
 	if (targetHz > 2000.0) targetHz = 2000.0;
 
 	StopOverclockTimer();
 	overclockTargetHz = targetHz;
 	overclockTimerRunning.store(true);
 	overclockTimerThread = new thread(OverclockTimerLoop);
+}
+
+static void PenRateTimerLoop() {
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+
+	typedef chrono::steady_clock Clock;
+	double targetHz = penRateLimitHz;
+	if (targetHz < 30.0) targetHz = 30.0;
+	if (targetHz > 1000.0) targetHz = 1000.0;
+	Clock::duration interval = chrono::duration_cast<Clock::duration>(
+		chrono::duration<double, milli>(1000.0 / targetHz));
+	if (interval.count() < 1) {
+		interval = Clock::duration(1);
+	}
+
+	HANDLE waitTimer = CreateWaitableTimerExW(
+		NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+	if (waitTimer == NULL) {
+		waitTimer = CreateWaitableTimerW(NULL, FALSE, NULL);
+	}
+
+	Clock::time_point nextTick = Clock::now();
+	while (penRateTimerRunning.load()) {
+		FilterTimerCallback(0, 0, 0, 0, 0);
+		nextTick += interval;
+
+		Clock::time_point now = Clock::now();
+		if (now > nextTick + interval * 4) {
+			nextTick = now + interval;
+		}
+
+		now = Clock::now();
+		if (now < nextTick) {
+			long long remaining100ns = chrono::duration_cast<chrono::nanoseconds>(nextTick - now).count() / 100;
+			if (remaining100ns < 1) remaining100ns = 1;
+
+			if (waitTimer != NULL) {
+				LARGE_INTEGER dueTime;
+				dueTime.QuadPart = -remaining100ns;
+				if (SetWaitableTimer(waitTimer, &dueTime, 0, NULL, NULL, FALSE)) {
+					WaitForSingleObject(waitTimer, INFINITE);
+				}
+				else {
+					Sleep(0);
+				}
+			}
+			else {
+				Sleep(0);
+			}
+		}
+	}
+
+	if (waitTimer != NULL) {
+		CloseHandle(waitTimer);
+	}
+}
+
+static void StopPenRateTimer() {
+	penRateTimerRunning.store(false);
+	if (penRateTimerThread != NULL) {
+		if (penRateTimerThread->joinable()) {
+			if (penRateTimerThread->get_id() == this_thread::get_id()) {
+				penRateTimerThread->detach();
+			}
+			else {
+				penRateTimerThread->join();
+			}
+		}
+		delete penRateTimerThread;
+		penRateTimerThread = NULL;
+	}
+}
+
+static void StartPenRateTimer(double targetHz) {
+	if (targetHz < 30.0) targetHz = 30.0;
+	if (targetHz > 1000.0) targetHz = 1000.0;
+
+	StopPenRateTimer();
+	penRateLimitHz = targetHz;
+	penRateTimerRunning.store(true);
+	penRateTimerThread = new thread(PenRateTimerLoop);
+}
+
+void ResetPenRateLimiter() {
+	lock_guard<mutex> lock(penRateLimitMutex);
+	double hz = penRateLimitHz;
+	if (hz < 30.0) hz = 30.0;
+	if (hz > 1000.0) hz = 1000.0;
+
+	auto interval = chrono::duration_cast<chrono::steady_clock::duration>(
+		chrono::duration<double, milli>(1000.0 / hz));
+	lastPenOutputTime = chrono::steady_clock::now() - interval;
+	outputHzWindowStart = chrono::steady_clock::now();
+	outputHzPacketCount = 0;
+	measuredOutputRate = 0;
+}
+
+int WritePenReport(bool force) {
+	if (vmulti == NULL)
+		return 0;
+
+	auto now = chrono::steady_clock::now();
+	if (penRateLimitActive && !force && vmulti->mode != VMulti::ModeRelativeMouse) {
+		double hz = penRateLimitHz;
+		if (hz < 30.0) hz = 30.0;
+		if (hz > 1000.0) hz = 1000.0;
+
+		auto interval = chrono::duration_cast<chrono::steady_clock::duration>(
+			chrono::duration<double, milli>(1000.0 / hz));
+		lock_guard<mutex> lock(penRateLimitMutex);
+		if (now - lastPenOutputTime < interval)
+			return 0;
+		lastPenOutputTime = now;
+	}
+	else {
+		lock_guard<mutex> lock(penRateLimitMutex);
+		lastPenOutputTime = now;
+	}
+
+	int result = vmulti->WriteReport();
+	if (result > 0) {
+		lock_guard<mutex> lock(penRateLimitMutex);
+		outputHzPacketCount++;
+		double windowMs = chrono::duration<double, milli>(now - outputHzWindowStart).count();
+		if (windowMs >= 500.0) {
+			measuredOutputRate = (double)outputHzPacketCount / (windowMs / 1000.0);
+			outputHzPacketCount = 0;
+			outputHzWindowStart = now;
+		}
+	}
+	return result;
+}
+
+bool IsTimedOutputEnabled() {
+	if (tablet == NULL) return false;
+	if (overclockActive) return true;
+	if (penRateLimitActive) return true;
+	for (int filterIndex = 0; filterIndex < tablet->filterTimedCount; filterIndex++) {
+		TabletFilter *filter = tablet->filterTimed[filterIndex];
+		if (filter == NULL) continue;
+		if (filter->isEnabled) return true;
+		if (filter == &tablet->smoothing && tablet->smoothing.AntichatterEnabled) return true;
+	}
+	return false;
+}
+
+void RefreshTimedOutputTimer() {
+	if (tablet == NULL || tablet->filterTimedCount <= 0 || tablet->filterTimed[0] == NULL)
+		return;
+	if (tablet->filterTimed[0]->callback == NULL)
+		return;
+
+	if (overclockActive) {
+		StopPenRateTimer();
+		tablet->filterTimed[0]->StopTimer();
+		return;
+	}
+
+	StopOverclockTimer();
+
+	if (penRateLimitActive) {
+		double hz = penRateLimitHz;
+		if (hz < 30.0) hz = 30.0;
+		if (hz > 1000.0) hz = 1000.0;
+		double interval = 1000.0 / hz;
+		for (int fi = 0; fi < tablet->filterTimedCount; fi++) {
+			tablet->filterTimed[fi]->timerInterval = interval;
+		}
+		tablet->smoothing.SetLatency(tablet->smoothing.latency);
+		tablet->filterTimed[0]->StopTimer();
+		StartPenRateTimer(hz);
+		return;
+	}
+
+	StopPenRateTimer();
+
+	if (IsTimedOutputEnabled()) {
+		tablet->filterTimed[0]->StartTimer();
+	}
+	else {
+		tablet->filterTimed[0]->StopTimer();
+	}
 }
 
 
@@ -337,6 +529,7 @@ void RunTabletThread() {
 				for (int filterIndex = 0; filterIndex < tablet->filterPacketCount; filterIndex++) {
 					filter = tablet->filterPacket[filterIndex];
 					if (filter != NULL && filter->isEnabled) {
+						filter->SetReportState(tablet->state.buttons, tablet->state.pressure, tablet->state.z);
 						filter->SetTarget(tablet->state.position, tablet->state.z);
 						filter->Update();
 						filter->GetPosition(&tablet->state.position);
@@ -351,11 +544,7 @@ void RunTabletThread() {
 
 
 		
-		filterTimedEnabled = false;
-		for (int filterIndex = 0; filterIndex < tablet->filterTimedCount; filterIndex++) {
-			if (tablet->filterTimed[filterIndex]->isEnabled)
-				filterTimedEnabled = true;
-		}
+		filterTimedEnabled = IsTimedOutputEnabled();
 
 		static Vector2D last;
 		if ( 
@@ -384,11 +573,12 @@ void RunTabletThread() {
 			}
 
 			if (posDelta >= 16.0) { 
+				double statusRate = penRateLimitActive ? measuredOutputRate : measuredReportRate;
 				printf("[STATUS] POS %0.4f %0.4f %0.4f %0.1f\n",
 					tablet->state.position.x,
 					tablet->state.position.y,
 					tablet->state.pressure,
-					measuredReportRate);
+					statusRate);
 				fflush(stdout);
 				lastPosReport = posNow;
 			}
@@ -414,7 +604,7 @@ void RunTabletThread() {
 				vmulti->CreateReport(tablet->state.buttons, x, y, tablet->state.pressure);
 
 				
-				vmulti->WriteReport();
+				WritePenReport(false);
 
 
 
@@ -431,7 +621,7 @@ void RunTabletThread() {
 					vmulti->CreateReport(tablet->state.buttons, x, y, tablet->state.pressure);
 
 					
-					vmulti->WriteReport();
+					WritePenReport(vmulti->buttonsChanged || !tablet->state.isValid);
 				}
 				
 			}
@@ -446,6 +636,9 @@ void RunTabletThread() {
 
 static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
 {
+	if (!IsTimedOutputEnabled())
+		return;
+
 	Vector2D position, position_prev;
 	double z;
 	TabletFilter *filter;
@@ -492,7 +685,11 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 		filter = tablet->filterTimed[filterIndex];
 
 		
-		if (!filter->isEnabled) continue; 
+		bool filterActive = filter->isEnabled;
+		if (filter == &tablet->smoothing && tablet->smoothing.AntichatterEnabled) {
+			filterActive = true;
+		}
+		if (!filterActive) continue; 
 
 
 		if (noMovement > 35)
@@ -503,6 +700,7 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 		}
 
 		
+		filter->SetReportState(tablet->state.buttons, tablet->state.pressure, z);
 		filter->SetTarget(position, z);
 
 		
@@ -587,18 +785,18 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 		
 		if (!stateValid) {
 			if (vmulti->buttonsChanged) {
-				vmulti->WriteReport();
+				WritePenReport(true);
 			}
 		} else if (overclockActive) {
 			if (vmulti->HasReportChanged() || vmulti->buttonsChanged) {
-				vmulti->WriteReport();
+				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 			}
 		} else if (vmulti->HasReportChanged()
 			|| vmulti->buttonsChanged
 			|| vmulti->reportRelativeMouse.x != 0
 			|| vmulti->reportRelativeMouse.y != 0
 			) {
-			vmulti->WriteReport();
+			WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 		}
 
 
@@ -628,7 +826,7 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 			vmulti->CreateReport(buttons, interpX, interpY, interpPressure);
 
 			if (stateValid) {
-				vmulti->WriteReport();
+				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 			}
 		}
 		
@@ -648,7 +846,7 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 			);
 
 			if ((vmulti->HasReportChanged() || vmulti->buttonsChanged) && stateValid) {
-				vmulti->WriteReport();
+				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 			}
 		}
 	}
@@ -775,6 +973,12 @@ int main(int argc, char**argv) {
 					CleanupAndExit(1);
 				}
 
+				EnsureAetherPluginDirectory();
+				{
+					lock_guard<mutex> lock(tabletStateMutex);
+					tablet->ReloadPluginFilters(GetAetherPluginDirectory());
+				}
+
 				
 				if (!tablet->Init()) {
 					LOG_ERROR("Tablet init failed after retries!\n");
@@ -802,7 +1006,7 @@ int main(int argc, char**argv) {
 						StartOverclockTimer(overclockTargetHz);
 					}
 					else {
-						tablet->filterTimed[0]->StartTimer();
+						RefreshTimedOutputTimer();
 					}
 				}
 

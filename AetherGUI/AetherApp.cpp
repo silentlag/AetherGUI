@@ -4,6 +4,12 @@
 #include <SetupAPI.h>
 #include <hidsdi.h>
 #include <winhttp.h>
+#include <shobjidl.h>
+#include <cctype>
+#include <cstring>
+#include <filesystem>
+#include <map>
+#include <set>
 #pragma comment(lib, "hid.lib")
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "winhttp.lib")
@@ -47,6 +53,553 @@ static std::wstring Utf8ToWide(const std::string& text) {
 	std::wstring result(size, L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), &result[0], size);
 	return result;
+}
+
+static std::wstring LowerWide(std::wstring text) {
+	if (!text.empty())
+		CharLowerBuffW(&text[0], (DWORD)text.size());
+	return text;
+}
+
+static bool WideContainsNoCase(const std::wstring& text, const wchar_t* needle) {
+	if (needle == nullptr || needle[0] == 0)
+		return false;
+	return LowerWide(text).find(LowerWide(std::wstring(needle))) != std::wstring::npos;
+}
+
+static bool IsDefaultPluginRepoOwner(const std::wstring& owner) {
+	return owner.empty() || LowerWide(owner) == L"opentabletdriver";
+}
+
+static bool StringEndsWithNoCase(const std::string& text, const char* suffix) {
+	size_t suffixLen = strlen(suffix);
+	if (text.size() < suffixLen)
+		return false;
+	std::string tail = text.substr(text.size() - suffixLen);
+	std::transform(tail.begin(), tail.end(), tail.begin(), [](unsigned char ch) { return (char)std::tolower(ch); });
+	std::string lowSuffix = suffix;
+	std::transform(lowSuffix.begin(), lowSuffix.end(), lowSuffix.begin(), [](unsigned char ch) { return (char)std::tolower(ch); });
+	return tail == lowSuffix;
+}
+
+static std::wstring JoinPathForDisplay(const std::wstring& left, const std::wstring& right) {
+	return left.empty() ? right : (left + L"\\" + right);
+}
+
+static bool FileExistsWide(const std::wstring& path) {
+	DWORD attrs = GetFileAttributesW(path.c_str());
+	return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static bool DirectoryExistsWide(const std::wstring& path) {
+	DWORD attrs = GetFileAttributesW(path.c_str());
+	return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static std::wstring QuoteArg(const std::wstring& arg) {
+	return L"\"" + arg + L"\"";
+}
+
+static std::wstring SanitizePathSegment(std::wstring text) {
+	if (text.empty())
+		return L"Plugin";
+	for (wchar_t& ch : text) {
+		if (ch == L'<' || ch == L'>' || ch == L':' || ch == L'"' || ch == L'/' || ch == L'\\' || ch == L'|' || ch == L'?' || ch == L'*')
+			ch = L'_';
+	}
+	return text;
+}
+
+static bool IsAsciiAlphaNum(wchar_t ch) {
+	return (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'0' && ch <= L'9');
+}
+
+static wchar_t LowerAscii(wchar_t ch) {
+	return (ch >= L'A' && ch <= L'Z') ? (wchar_t)(ch - L'A' + L'a') : ch;
+}
+
+static std::wstring CatalogToken(const std::wstring& text) {
+	std::wstring result;
+	for (wchar_t ch : text) {
+		if (IsAsciiAlphaNum(ch))
+			result.push_back(LowerAscii(ch));
+	}
+	return result;
+}
+
+static std::vector<std::wstring> CatalogWords(const std::wstring& text) {
+	std::vector<std::wstring> words;
+	std::wstring word;
+	wchar_t prev = 0;
+	for (wchar_t raw : text) {
+		if (!IsAsciiAlphaNum(raw)) {
+			if (!word.empty()) {
+				words.push_back(word);
+				word.clear();
+			}
+			prev = 0;
+			continue;
+		}
+
+		bool newCamelWord = prev >= L'a' && prev <= L'z' && raw >= L'A' && raw <= L'Z';
+		if (newCamelWord && !word.empty()) {
+			words.push_back(word);
+			word.clear();
+		}
+		word.push_back(LowerAscii(raw));
+		prev = raw;
+	}
+	if (!word.empty())
+		words.push_back(word);
+	return words;
+}
+
+static bool IsCatalogStopWord(const std::wstring& word) {
+	return word == L"otd" || word == L"aether" || word == L"plugin" ||
+		word == L"plugins" || word == L"filter" || word == L"filters" ||
+		word == L"native" || word == L"driver" || word == L"smoothing";
+}
+
+static bool CatalogNamesMatch(const std::wstring& left, const std::wstring& right) {
+	std::wstring leftToken = CatalogToken(left);
+	std::wstring rightToken = CatalogToken(right);
+	if (leftToken.empty() || rightToken.empty())
+		return false;
+	if (leftToken == rightToken || leftToken.find(rightToken) != std::wstring::npos || rightToken.find(leftToken) != std::wstring::npos)
+		return true;
+
+	std::vector<std::wstring> leftWords = CatalogWords(left);
+	std::vector<std::wstring> rightWords = CatalogWords(right);
+	for (const std::wstring& lw : leftWords) {
+		if (lw.length() < 5 || IsCatalogStopWord(lw))
+			continue;
+		for (const std::wstring& rw : rightWords) {
+			if (rw.length() < 5 || IsCatalogStopWord(rw))
+				continue;
+			if (lw == rw)
+				return true;
+		}
+	}
+	return false;
+}
+
+static std::string QuoteCommandArg(const std::string& arg) {
+	std::string quoted = "\"";
+	for (char ch : arg) {
+		if (ch == '"')
+			quoted += "\\\"";
+		else
+			quoted += ch;
+	}
+	quoted += "\"";
+	return quoted;
+}
+
+static bool RunHiddenProcess(std::wstring commandLine, const std::wstring& workingDir, DWORD& exitCode) {
+	exitCode = 1;
+	std::vector<wchar_t> cmd(commandLine.begin(), commandLine.end());
+	cmd.push_back(0);
+
+	STARTUPINFOW si = {};
+	PROCESS_INFORMATION pi = {};
+	si.cb = sizeof(si);
+	si.dwFlags = STARTF_USESHOWWINDOW;
+	si.wShowWindow = SW_HIDE;
+
+	BOOL started = CreateProcessW(
+		nullptr,
+		cmd.data(),
+		nullptr,
+		nullptr,
+		FALSE,
+		CREATE_NO_WINDOW,
+		nullptr,
+		workingDir.empty() ? nullptr : workingDir.c_str(),
+		&si,
+		&pi);
+
+	if (!started)
+		return false;
+
+	WaitForSingleObject(pi.hProcess, INFINITE);
+	GetExitCodeProcess(pi.hProcess, &exitCode);
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	return true;
+}
+
+static std::wstring FindMSBuildPath() {
+	const wchar_t* paths[] = {
+		L"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\18\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\MSBuild\\Current\\Bin\\MSBuild.exe",
+		L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\MSBuild\\Current\\Bin\\MSBuild.exe"
+	};
+	for (const wchar_t* path : paths) {
+		if (FileExistsWide(path))
+			return path;
+	}
+	return L"MSBuild.exe";
+}
+
+static std::wstring FindFirstSourceFile(const std::wstring& root, const std::vector<std::wstring>& extensions) {
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	fs::path rootPath(root);
+	if (!fs::exists(rootPath, ec))
+		return L"";
+
+	for (const auto& ext : extensions) {
+		for (const auto& entry : fs::directory_iterator(rootPath, fs::directory_options::skip_permission_denied, ec)) {
+			if (ec)
+				break;
+			if (entry.is_regular_file(ec) && LowerWide(entry.path().extension().wstring()) == ext)
+				return entry.path().wstring();
+		}
+	}
+
+	for (const auto& ext : extensions) {
+		for (const auto& entry : fs::recursive_directory_iterator(rootPath, fs::directory_options::skip_permission_denied, ec)) {
+			if (ec)
+				break;
+			if (!entry.is_regular_file(ec))
+				continue;
+			if (LowerWide(entry.path().extension().wstring()) == ext)
+				return entry.path().wstring();
+		}
+	}
+
+	return L"";
+}
+
+static std::wstring FindBuildScript(const std::wstring& root) {
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	const wchar_t* names[] = { L"build_aether_plugin.ps1", L"build_tabletdriverfilters_plugins.ps1", L"build.ps1", L"Build.ps1" };
+	for (const wchar_t* name : names) {
+		fs::path candidate = fs::path(root) / name;
+		if (fs::exists(candidate, ec) && fs::is_regular_file(candidate, ec))
+			return candidate.wstring();
+	}
+	for (const auto& entry : fs::recursive_directory_iterator(fs::path(root), fs::directory_options::skip_permission_denied, ec)) {
+		if (ec)
+			break;
+		if (!entry.is_regular_file(ec))
+			continue;
+		std::wstring fileName = LowerWide(entry.path().filename().wstring());
+		if (fileName == L"build_aether_plugin.ps1" || fileName == L"build_tabletdriverfilters_plugins.ps1")
+			return entry.path().wstring();
+	}
+	return L"";
+}
+
+static bool DllHasAetherExports(const std::wstring& path) {
+	HMODULE module = LoadLibraryExW(path.c_str(), nullptr, DONT_RESOLVE_DLL_REFERENCES);
+	if (!module)
+		return false;
+	bool hasExports = GetProcAddress(module, "AetherPluginGetInfo") != nullptr &&
+		GetProcAddress(module, "AetherPluginProcess") != nullptr;
+	FreeLibrary(module);
+	return hasExports;
+}
+
+struct AetherGuiPluginInfo {
+	int apiVersion;
+	const char* name;
+	const char* description;
+};
+
+struct AetherGuiPluginOptionInfo {
+	int apiVersion;
+	const char* key;
+	const char* label;
+	int type;
+	double minValue;
+	double maxValue;
+	double defaultValue;
+	const char* format;
+	const char* description;
+};
+
+struct PluginOptionMetadata {
+	int type = 0;
+	std::string key;
+	std::wstring label;
+	float minValue = 0.0f;
+	float maxValue = 1.0f;
+	float defaultValue = 0.0f;
+	std::wstring format = L"%.2f";
+};
+
+typedef int(__cdecl* AetherGuiPluginGetInfoFn)(AetherGuiPluginInfo* info);
+typedef int(__cdecl* AetherGuiPluginGetOptionCountFn)();
+typedef int(__cdecl* AetherGuiPluginGetOptionInfoFn)(int index, AetherGuiPluginOptionInfo* info);
+
+static bool ReadAetherPluginMetadata(const std::wstring& path, std::wstring& name, std::wstring& description, std::vector<PluginOptionMetadata>& options) {
+	options.clear();
+
+	HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
+	if (!module)
+		module = LoadLibraryW(path.c_str());
+	if (!module)
+		return false;
+
+	if (auto getInfo = (AetherGuiPluginGetInfoFn)GetProcAddress(module, "AetherPluginGetInfo")) {
+		AetherGuiPluginInfo info = {};
+		if (getInfo(&info)) {
+			if (info.name && info.name[0])
+				name = Utf8ToWide(info.name);
+			if (info.description && info.description[0])
+				description = Utf8ToWide(info.description);
+		}
+	}
+
+	auto getOptionCount = (AetherGuiPluginGetOptionCountFn)GetProcAddress(module, "AetherPluginGetOptionCount");
+	auto getOptionInfo = (AetherGuiPluginGetOptionInfoFn)GetProcAddress(module, "AetherPluginGetOptionInfo");
+	if (getOptionCount && getOptionInfo) {
+		int count = getOptionCount();
+		if (count < 0)
+			count = 0;
+		if (count > 64)
+			count = 64;
+
+		for (int i = 0; i < count; ++i) {
+			AetherGuiPluginOptionInfo info = {};
+			if (!getOptionInfo(i, &info) || !info.key || !info.key[0])
+				continue;
+
+			PluginOptionMetadata option;
+			option.type = info.type;
+			option.key = info.key;
+			option.label = Utf8ToWide(info.label && info.label[0] ? info.label : info.key);
+			option.minValue = (float)info.minValue;
+			option.maxValue = (float)info.maxValue;
+			option.defaultValue = (float)info.defaultValue;
+			if (option.maxValue < option.minValue)
+				std::swap(option.minValue, option.maxValue);
+			if (info.format && info.format[0])
+				option.format = Utf8ToWide(info.format);
+			options.push_back(option);
+		}
+	}
+
+	FreeLibrary(module);
+	return !name.empty() || !description.empty() || !options.empty();
+}
+
+static std::wstring FindBuiltAetherDll(const std::wstring& root) {
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	std::wstring newestFallback;
+	fs::file_time_type newestTime = fs::file_time_type::min();
+
+	for (const auto& entry : fs::recursive_directory_iterator(fs::path(root), fs::directory_options::skip_permission_denied, ec)) {
+		if (ec)
+			break;
+		if (!entry.is_regular_file(ec))
+			continue;
+		if (LowerWide(entry.path().extension().wstring()) != L".dll")
+			continue;
+
+		std::wstring path = entry.path().wstring();
+		if (DllHasAetherExports(path))
+			return path;
+
+		fs::file_time_type writeTime = entry.last_write_time(ec);
+		if (!ec && writeTime > newestTime) {
+			newestTime = writeTime;
+			newestFallback = path;
+		}
+	}
+
+	return newestFallback;
+}
+
+static bool BuildAetherPluginSourceFolder(const std::wstring& folder, std::wstring& dllPath, std::wstring& status) {
+	if (!DirectoryExistsWide(folder)) {
+		status = L"Source folder does not exist";
+		return false;
+	}
+
+	std::wstring script = FindBuildScript(folder);
+	std::wstring commandLine;
+	std::wstring buildKind;
+	if (!script.empty()) {
+		commandLine = L"powershell.exe -ExecutionPolicy Bypass -File " + QuoteArg(script);
+		buildKind = L"PowerShell build script";
+	}
+	else {
+		std::wstring solution = FindFirstSourceFile(folder, { L".sln" });
+		if (!solution.empty()) {
+			commandLine = QuoteArg(FindMSBuildPath()) + L" " + QuoteArg(solution) + L" /p:Configuration=Release /p:Platform=x64";
+			buildKind = L"Visual Studio solution";
+		}
+		else {
+			std::wstring vcxproj = FindFirstSourceFile(folder, { L".vcxproj" });
+			if (!vcxproj.empty()) {
+				commandLine = QuoteArg(FindMSBuildPath()) + L" " + QuoteArg(vcxproj) + L" /p:Configuration=Release /p:Platform=x64";
+				buildKind = L"C++ project";
+			}
+			else {
+				std::wstring csproj = FindFirstSourceFile(folder, { L".csproj" });
+				if (!csproj.empty()) {
+					commandLine = L"dotnet build " + QuoteArg(csproj) + L" -c Release";
+					buildKind = L".NET project";
+				}
+			}
+		}
+	}
+
+	if (commandLine.empty()) {
+		status = L"No build script, solution, vcxproj or csproj found";
+		return false;
+	}
+
+	DWORD exitCode = 1;
+	if (!RunHiddenProcess(commandLine, folder, exitCode)) {
+		status = L"Failed to start " + buildKind;
+		return false;
+	}
+	if (exitCode != 0) {
+		wchar_t buffer[96];
+		swprintf_s(buffer, L"Build failed with exit code %lu", exitCode);
+		status = buffer;
+		return false;
+	}
+
+	dllPath = FindBuiltAetherDll(folder);
+	if (dllPath.empty()) {
+		status = L"Build completed, but no DLL was produced";
+		return false;
+	}
+	if (!DllHasAetherExports(dllPath)) {
+		status = L"Built DLL is not an Aether native plugin";
+		return false;
+	}
+
+	status = L"Built and installed " + Ellipsize(std::filesystem::path(dllPath).filename().wstring(), 42);
+	return true;
+}
+
+static std::map<std::wstring, std::string> g_httpUtf8Cache;
+static std::mutex g_httpUtf8CacheMutex;
+
+static bool HttpGetUtf8(const wchar_t* host, const std::wstring& path, std::string& body) {
+	body.clear();
+	std::wstring cacheKey = std::wstring(host ? host : L"") + L"|" + path;
+	{
+		std::lock_guard<std::mutex> lock(g_httpUtf8CacheMutex);
+		auto cached = g_httpUtf8Cache.find(cacheKey);
+		if (cached != g_httpUtf8Cache.end()) {
+			body = cached->second;
+			return !body.empty();
+		}
+	}
+	HINTERNET session = WinHttpOpen(
+		L"AetherGUI/" AETHERGUI_VERSION_W,
+		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME,
+		WINHTTP_NO_PROXY_BYPASS,
+		0);
+	if (!session)
+		return false;
+
+	bool ok = false;
+	HINTERNET connect = WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+	if (connect) {
+		HINTERNET request = WinHttpOpenRequest(
+			connect,
+			L"GET",
+			path.c_str(),
+			nullptr,
+			WINHTTP_NO_REFERER,
+			WINHTTP_DEFAULT_ACCEPT_TYPES,
+			WINHTTP_FLAG_SECURE);
+
+		if (request) {
+			LPCWSTR headers =
+				L"User-Agent: AetherGUI/" AETHERGUI_VERSION_W L"\r\n"
+				L"Accept: application/vnd.github+json\r\n"
+				L"X-GitHub-Api-Version: 2022-11-28\r\n";
+
+			if (WinHttpSendRequest(request, headers, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+				WinHttpReceiveResponse(request, nullptr)) {
+
+				DWORD status = 0;
+				DWORD statusSize = sizeof(status);
+				WinHttpQueryHeaders(
+					request,
+					WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+					WINHTTP_HEADER_NAME_BY_INDEX,
+					&status,
+					&statusSize,
+					WINHTTP_NO_HEADER_INDEX);
+
+				if (status == 200) {
+					DWORD available = 0;
+					while (WinHttpQueryDataAvailable(request, &available) && available > 0) {
+						std::string chunk(available, '\0');
+						DWORD read = 0;
+						if (!WinHttpReadData(request, &chunk[0], available, &read) || read == 0)
+							break;
+						chunk.resize(read);
+						body += chunk;
+					}
+					ok = !body.empty();
+				}
+			}
+			WinHttpCloseHandle(request);
+		}
+		WinHttpCloseHandle(connect);
+	}
+
+	WinHttpCloseHandle(session);
+	if (ok) {
+		std::lock_guard<std::mutex> lock(g_httpUtf8CacheMutex);
+		if (g_httpUtf8Cache.size() > 256)
+			g_httpUtf8Cache.clear();
+		g_httpUtf8Cache[cacheKey] = body;
+	}
+	return ok;
+}
+
+static std::vector<std::string> JsonTreePaths(const std::string& json, bool jsonOnly = true) {
+	std::vector<std::string> paths;
+	std::string marker = "\"path\"";
+	size_t pos = 0;
+	while ((pos = json.find(marker, pos)) != std::string::npos) {
+		pos = json.find(':', pos + marker.size());
+		if (pos == std::string::npos) break;
+		pos = json.find('"', pos + 1);
+		if (pos == std::string::npos) break;
+		std::string path;
+		bool escaping = false;
+		for (size_t i = pos + 1; i < json.size(); i++) {
+			char ch = json[i];
+			if (escaping) {
+				path.push_back(ch);
+				escaping = false;
+			}
+			else if (ch == '\\') {
+				escaping = true;
+			}
+			else if (ch == '"') {
+				pos = i + 1;
+				break;
+			}
+			else {
+				path.push_back(ch);
+			}
+		}
+
+		if (!jsonOnly || StringEndsWithNoCase(path, ".json"))
+			paths.push_back(path);
+	}
+	return paths;
 }
 
 static std::string JsonStringValue(const std::string& json, const char* key) {
@@ -312,12 +865,17 @@ bool AetherApp::Initialize(HWND hwnd) {
 
 	srand((unsigned)GetTickCount());
 	for (int i = 0; i < MAX_STARS; i++) stars[i].active = false;
+	twinkleStarsInitialized = false;
 	starSpawnTimer = 1.0f + (rand() % 300) / 100.0f;
 
 	RefreshDetectedScreen();
 
 	InitControls();
+	EnsureConfigDirectory();
+	RefreshConfigFiles();
 	AutoLoadConfig();
+	ApplyDpiScale();
+	InitializeSettingsUndo();
 	StartUpdateCheck(hWnd);
 
 	
@@ -381,9 +939,13 @@ void AetherApp::InitControls() {
 	area.screenX.Layout(cx + hw + Theme::Size::Padding, 0, hw, L"Screen X", 0, 7680, 0, L"Horizontal offset for multi-monitor setups");
 	area.screenY.Layout(cx + hw + Theme::Size::Padding, 0, hw, L"Screen Y", 0, 4320, 0, L"Vertical offset for multi-monitor setups");
 	area.rotation.Layout(cx, 0, cw, L"Rotation", -180, 180, 0, L"Rotate the tablet area in degrees");
+	area.aspectRatio.Layout(cx, 0, hw, L"Aspect Ratio", 0.50f, 3.00f, Clamp(detectedScreenW / detectedScreenH, 0.50f, 3.00f), L"Target tablet area proportion when Aspect Ratio is enabled");
+	area.aspectRatio.format = L"%.3f";
 	area.customValues.Layout(cx, 0, L"Custom Values", L"Show advanced position controls");
 	area.customValues.value = false;
-	area.lockAspect.Layout(cx, 0, L"Lock Aspect Ratio", L"Keep tablet area proportional to screen");
+	area.autoCenter.Layout(cx, 0, L"Auto Center", L"Keep the screen area centered when resolution values change");
+	area.autoCenter.value = true;
+	area.lockAspect.Layout(cx, 0, L"Aspect Ratio", L"Keep tablet area at the selected proportion");
 
 	filters.smoothingEnabled.Layout(cx, 0, L"Smoothing", L"Low-pass filter to reduce cursor jitter");
 	filters.smoothingLatency.Layout(cx, 0, hw, L"Latency (ms)", 0, 100, 2, L"Time to reach target position. Higher = smoother but more lag");
@@ -428,6 +990,9 @@ void AetherApp::InitControls() {
 	outputMode.AddOption(L"Windows Ink");
 	outputMode.selected = 0;
 
+	dpiScale.Layout(cx, 0, cw, L"DPI Scale (%)", 75.0f, 200.0f, Clamp(GetSystemDpiScale() * 100.0f, 75.0f, 200.0f), L"Scale the interface for high-DPI and custom resolution setups");
+	dpiScale.format = L"%.0f";
+
 	const wchar_t* btnOpts[] = { L"Disable", L"Mouse 1", L"Mouse 2", L"Mouse 3", L"Mouse 4", L"Mouse 5", L"Mouse Wheel" };
 	buttonTip.Layout(cx, 0, hw, L"Pen Tip", L"Action when pen tip touches the tablet");
 	buttonBottom.Layout(cx, 0, hw, L"Bottom Button", L"Action for the lower pen barrel button");
@@ -453,9 +1018,38 @@ void AetherApp::InitControls() {
 	overclockEnabled.Layout(cx, 0, L"Overclock", L"Boost driver timer rate for smoother cursor movement");
 	overclockHz.Layout(cx, 0, hw, L"Target Rate (Hz)", 125, 2000, 1000, L"Target timer frequency. Higher = smoother. Actual rate depends on USB polling");
 	overclockHz.format = L"%.0f";
+	penRateLimitEnabled.Layout(cx, 0, L"Pen Rate Limit", L"Cap outgoing pen reports for tablets that feel too smooth at high Hz");
+	penRateLimitHz.Layout(cx, 0, hw, L"Limit Rate (Hz)", 30, 1000, 133, L"Output report cap. Example: 133 Hz gives Gaomon a Wacom-like cadence");
+	penRateLimitHz.format = L"%.0f";
 
 	saveConfigBtn.Layout(0, 0, 100, 28, L"Save Config", false, L"Save all current settings to disk");
 	loadConfigBtn.Layout(0, 0, 100, 28, L"Load Config", false, L"Reload settings from the saved config file");
+	installPluginBtn.Layout(0, 0, 100, 28, L"Install DLL", false, L"Install a native Aether plugin DLL");
+	installSourcePluginBtn.Layout(0, 0, 120, 28, L"Build Source", false, L"Build an Aether plugin source folder and install the produced DLL");
+	reloadPluginBtn.Layout(0, 0, 100, 28, L"Reload", false, L"Reload native Aether plugins");
+	listPluginBtn.Layout(0, 0, 100, 28, L"List", false, L"Open plugin manager");
+	pluginManagerInstallBtn.Layout(0, 0, 120, 28, L"Install DLL", true, L"Install a native Aether plugin DLL");
+	pluginManagerInstallSourceBtn.Layout(0, 0, 120, 28, L"Build Source", false, L"Build an Aether plugin source folder and install the produced DLL");
+	pluginManagerRefreshBtn.Layout(0, 0, 120, 28, L"Refresh", false, L"Reload installed plugin filters");
+	pluginManagerDeleteBtn.Layout(0, 0, 120, 28, L"Uninstall", false, L"Remove the selected plugin");
+	pluginManagerCloseBtn.Layout(0, 0, 120, 28, L"Close", false, L"Close plugin manager");
+	pluginManagerSourceBtn.Layout(0, 0, 120, 28, L"Source", false, L"Switch repository source");
+	pluginManagerAetherTabBtn.Layout(0, 0, 120, 28, L"Aether Filters", true, L"Installed native Aether filters");
+	pluginManagerOtdTabBtn.Layout(0, 0, 120, 28, L"OTD Ports", false, L"GitHub source ports in OTDPlugins");
+	pluginManagerSourceCodeBtn.Layout(0, 0, 120, 28, L"Source Code", false, L"Open selected plugin source code");
+	pluginManagerWikiBtn.Layout(0, 0, 120, 28, L"Wiki", false, L"Open selected plugin wiki");
+	pluginManagerApplySourceBtn.Layout(0, 0, 120, 28, L"Apply", true, L"Apply repository source");
+	pluginManagerCancelSourceBtn.Layout(0, 0, 120, 28, L"Cancel", false, L"Cancel source changes");
+	pluginManagerInstallRepoBtn.Layout(0, 0, 120, 28, L"Install", true, L"Install selected repository plugin when native Aether port is available");
+	pluginRepoOwnerInput.Layout(0, 0, 240, L"Owner");
+	pluginRepoNameInput.Layout(0, 0, 240, L"Name");
+	pluginRepoRefInput.Layout(0, 0, 240, L"Ref");
+	wcscpy_s(pluginRepoOwnerInput.buffer, pluginRepoOwner.c_str());
+	pluginRepoOwnerInput.cursor = (int)pluginRepoOwner.length();
+	wcscpy_s(pluginRepoNameInput.buffer, pluginRepoName.c_str());
+	pluginRepoNameInput.cursor = (int)pluginRepoName.length();
+	wcscpy_s(pluginRepoRefInput.buffer, pluginRepoRef.c_str());
+	pluginRepoRefInput.cursor = (int)pluginRepoRef.length();
 
 	consoleInput.Layout(cx, 0, cw, L"Type command...");
 
@@ -473,6 +1067,11 @@ void AetherApp::InitControls() {
 	aether.snappingEnabled.Layout(cx, 0, L"Dynamic Snapping", L"Zero lag during fast aim snaps");
 	aether.snappingInner.Layout(cx, 0, hw, L"Snap Radius (Min)", 0.0f, 5.0f, 0.5f, L"Area where smoothing is strongest");
 	aether.snappingOuter.Layout(cx + hw + 16, 0, hw, L"Snap Radius (Max)", 0.5f, 20.0f, 3.0f, L"Beyond this smoothing is disabled");
+	aether.rhythmFlowEnabled.Layout(cx, 0, L"Rhythm Flow", L"osu-inspired motion filter: calm on micro-jitter, quick on sharp turns");
+	aether.rhythmFlowStrength.Layout(cx, 0, hw, L"Flow Strength", 0.0f, 1.0f, 0.35f, L"Base smoothing on calm motion");
+	aether.rhythmFlowRelease.Layout(cx + hw + 16, 0, hw, L"Turn Release", 0.0f, 1.0f, 0.75f, L"How quickly smoothing opens on direction changes");
+	aether.rhythmFlowJitter.Layout(cx, 0, hw, L"Jitter Window (mm)", 0.0f, 1.5f, 0.18f, L"Small raw movement range treated as hand tremor");
+	aether.rhythmFlowJitter.format = L"%.2f";
 	aether.suppressionEnabled.Layout(cx, 0, L"Suppression", L"Lock cursor when below threshold");
 	aether.suppressionTime.Layout(cx, 0, hw, L"Time (ms)", 0.0f, 50.0f, 5.0f, L"Jitter suppression window");
 
@@ -512,19 +1111,392 @@ void AetherApp::InitControls() {
 	}
 
 	
-	const wchar_t* profileNames[] = { L"Default", L"Drawing", L"Aim", L"Custom" };
-	for (int i = 0; i < MAX_PROFILES; i++) {
-		profiles[i].name = profileNames[i];
-		profiles[i].exists = (i == 0);
-		profileBtns[i].Layout(0, 0, 80, 26, profileNames[i], false);
-	}
-
-	
 	visualizerToggle.Layout(cx, 0, L"Input Visualizer", L"Show pen trail overlay on tablet area");
 
 }
 
+void AetherApp::CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const {
+	snapshot.sliders.clear();
+	snapshot.ints.clear();
+	snapshot.toggles.clear();
+
+	auto slider = [&](const Slider& control) { snapshot.sliders.push_back(control.value); };
+	auto toggle = [&](const Toggle& control) { snapshot.toggles.push_back(control.value); };
+
+	slider(area.tabletWidth); slider(area.tabletHeight); slider(area.tabletX); slider(area.tabletY);
+	slider(area.screenWidth); slider(area.screenHeight); slider(area.screenX); slider(area.screenY);
+	slider(area.rotation); slider(area.aspectRatio);
+	slider(tipThreshold); slider(overclockHz); slider(penRateLimitHz); slider(dpiScale);
+	slider(filters.smoothingLatency); slider(filters.smoothingInterval);
+	slider(filters.antichatterStrength); slider(filters.antichatterMultiplier);
+	slider(filters.antichatterOffsetX); slider(filters.antichatterOffsetY);
+	slider(filters.noiseBuffer); slider(filters.noiseThreshold); slider(filters.noiseIterations);
+	slider(filters.velCurveMinSpeed); slider(filters.velCurveMaxSpeed);
+	slider(filters.velCurveSmoothing); slider(filters.velCurveSharpness);
+	slider(filters.snapRadius); slider(filters.snapSmooth);
+	slider(filters.reconStrength); slider(filters.reconVelSmooth);
+	slider(filters.reconAccelCap); slider(filters.reconPredTime);
+	slider(filters.adaptiveProcessNoise); slider(filters.adaptiveMeasNoise); slider(filters.adaptiveVelWeight);
+	slider(aether.lagRemovalStrength); slider(aether.stabilizerStability); slider(aether.stabilizerSensitivity);
+	slider(aether.snappingInner); slider(aether.snappingOuter); slider(aether.suppressionTime);
+	slider(aether.rhythmFlowStrength); slider(aether.rhythmFlowRelease); slider(aether.rhythmFlowJitter);
+	snapshot.sliders.push_back(Theme::Custom::AccentR);
+	snapshot.sliders.push_back(Theme::Custom::AccentG);
+	snapshot.sliders.push_back(Theme::Custom::AccentB);
+
+	toggle(area.customValues); toggle(area.autoCenter); toggle(area.lockAspect);
+	toggle(forceFullArea); toggle(areaClipping); toggle(areaLimiting);
+	toggle(overclockEnabled); toggle(penRateLimitEnabled);
+	toggle(filters.smoothingEnabled); toggle(filters.antichatterEnabled); toggle(filters.noiseEnabled);
+	toggle(filters.velCurveEnabled); toggle(filters.snapEnabled); toggle(filters.reconstructorEnabled);
+	toggle(filters.adaptiveEnabled);
+	toggle(aether.enabled); toggle(aether.lagRemovalEnabled); toggle(aether.stabilizerEnabled);
+	toggle(aether.snappingEnabled); toggle(aether.suppressionEnabled);
+	toggle(aether.rhythmFlowEnabled);
+	toggle(visualizerToggle);
+
+	snapshot.ints.push_back(outputMode.selected);
+	snapshot.ints.push_back(buttonTip.selected);
+	snapshot.ints.push_back(buttonBottom.selected);
+	snapshot.ints.push_back(buttonTop.selected);
+	snapshot.ints.push_back(currentTheme);
+	snapshot.ints.push_back(particleStyle);
+	snapshot.ints.push_back(selectedDisplayTarget);
+}
+
+bool AetherApp::SettingsSnapshotsEqual(const SettingsSnapshot& a, const SettingsSnapshot& b) const {
+	if (a.sliders.size() != b.sliders.size() || a.ints != b.ints || a.toggles != b.toggles)
+		return false;
+	for (size_t i = 0; i < a.sliders.size(); i++) {
+		if (fabsf(a.sliders[i] - b.sliders[i]) > 0.0005f)
+			return false;
+	}
+	return true;
+}
+
+void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
+	size_t s = 0, t = 0, n = 0;
+	float snapshotAccentR = Theme::Custom::AccentR;
+	float snapshotAccentG = Theme::Custom::AccentG;
+	float snapshotAccentB = Theme::Custom::AccentB;
+	auto setSlider = [&](Slider& control) {
+		if (s >= snapshot.sliders.size()) return;
+		control.value = Clamp(snapshot.sliders[s++], control.minVal, control.maxVal);
+		control.animValue = control.value;
+		control.editMode = false;
+	};
+	auto setToggle = [&](Toggle& control) {
+		if (t >= snapshot.toggles.size()) return;
+		control.value = snapshot.toggles[t++];
+		control.animT = control.value ? 1.0f : 0.0f;
+	};
+	auto nextInt = [&]() -> int {
+		if (n >= snapshot.ints.size()) return 0;
+		return snapshot.ints[n++];
+	};
+
+	setSlider(area.tabletWidth); setSlider(area.tabletHeight); setSlider(area.tabletX); setSlider(area.tabletY);
+	setSlider(area.screenWidth); setSlider(area.screenHeight); setSlider(area.screenX); setSlider(area.screenY);
+	setSlider(area.rotation); setSlider(area.aspectRatio);
+	setSlider(tipThreshold); setSlider(overclockHz); setSlider(penRateLimitHz); setSlider(dpiScale);
+	setSlider(filters.smoothingLatency); setSlider(filters.smoothingInterval);
+	setSlider(filters.antichatterStrength); setSlider(filters.antichatterMultiplier);
+	setSlider(filters.antichatterOffsetX); setSlider(filters.antichatterOffsetY);
+	setSlider(filters.noiseBuffer); setSlider(filters.noiseThreshold); setSlider(filters.noiseIterations);
+	setSlider(filters.velCurveMinSpeed); setSlider(filters.velCurveMaxSpeed);
+	setSlider(filters.velCurveSmoothing); setSlider(filters.velCurveSharpness);
+	setSlider(filters.snapRadius); setSlider(filters.snapSmooth);
+	setSlider(filters.reconStrength); setSlider(filters.reconVelSmooth);
+	setSlider(filters.reconAccelCap); setSlider(filters.reconPredTime);
+	setSlider(filters.adaptiveProcessNoise); setSlider(filters.adaptiveMeasNoise); setSlider(filters.adaptiveVelWeight);
+	setSlider(aether.lagRemovalStrength); setSlider(aether.stabilizerStability); setSlider(aether.stabilizerSensitivity);
+	setSlider(aether.snappingInner); setSlider(aether.snappingOuter); setSlider(aether.suppressionTime);
+	setSlider(aether.rhythmFlowStrength); setSlider(aether.rhythmFlowRelease); setSlider(aether.rhythmFlowJitter);
+	if (s + 2 < snapshot.sliders.size()) {
+		snapshotAccentR = Clamp(snapshot.sliders[s++], 0.0f, 1.0f);
+		snapshotAccentG = Clamp(snapshot.sliders[s++], 0.0f, 1.0f);
+		snapshotAccentB = Clamp(snapshot.sliders[s++], 0.0f, 1.0f);
+	}
+
+	setToggle(area.customValues); setToggle(area.autoCenter); setToggle(area.lockAspect);
+	setToggle(forceFullArea); setToggle(areaClipping); setToggle(areaLimiting);
+	setToggle(overclockEnabled); setToggle(penRateLimitEnabled);
+	setToggle(filters.smoothingEnabled); setToggle(filters.antichatterEnabled); setToggle(filters.noiseEnabled);
+	setToggle(filters.velCurveEnabled); setToggle(filters.snapEnabled); setToggle(filters.reconstructorEnabled);
+	setToggle(filters.adaptiveEnabled);
+	setToggle(aether.enabled); setToggle(aether.lagRemovalEnabled); setToggle(aether.stabilizerEnabled);
+	setToggle(aether.snappingEnabled); setToggle(aether.suppressionEnabled);
+	setToggle(aether.rhythmFlowEnabled);
+	setToggle(visualizerToggle);
+
+	outputMode.selected = (int)Clamp((float)nextInt(), 0.0f, (float)std::max(0, outputMode.optionCount - 1));
+	buttonTip.selected = (int)Clamp((float)nextInt(), 0.0f, (float)std::max(0, buttonTip.optionCount - 1));
+	buttonBottom.selected = (int)Clamp((float)nextInt(), 0.0f, (float)std::max(0, buttonBottom.optionCount - 1));
+	buttonTop.selected = (int)Clamp((float)nextInt(), 0.0f, (float)std::max(0, buttonTop.optionCount - 1));
+	currentTheme = (int)Clamp((float)nextInt(), 0.0f, (float)std::max(0, uiThemeCount - 1));
+	particleStyle = (int)Clamp((float)nextInt(), 0.0f, 3.0f);
+	if (!displayTargets.empty())
+		selectedDisplayTarget = (int)Clamp((float)nextInt(), 0.0f, (float)((int)displayTargets.size() - 1));
+
+	if (currentTheme >= 0 && currentTheme < uiThemeCount) {
+		Theme::ApplyTheme(uiThemes[currentTheme]);
+		if (hWnd) { extern void ApplyAetherWindowTheme(HWND); ApplyAetherWindowTheme(hWnd); }
+	}
+	Theme::Custom::SetAccent(snapshotAccentR, snapshotAccentG, snapshotAccentB);
+	accentPicker.SetRGB(Theme::Custom::AccentR, Theme::Custom::AccentG, Theme::Custom::AccentB);
+	ApplyDpiScale();
+	ClampScreenArea();
+	ApplyAspectLock(false);
+}
+
+void AetherApp::TrackSettingsUndo() {
+	if (applyingUndo)
+		return;
+
+	SettingsSnapshot current;
+	CaptureSettingsSnapshot(current);
+	if (!hasSettingsSnapshot) {
+		lastSettingsSnapshot = current;
+		hasSettingsSnapshot = true;
+		return;
+	}
+	if (SettingsSnapshotsEqual(lastSettingsSnapshot, current))
+		return;
+
+	undoStack.push_back(lastSettingsSnapshot);
+	if (undoStack.size() > 80)
+		undoStack.erase(undoStack.begin());
+	lastSettingsSnapshot = current;
+}
+
+void AetherApp::PushUndoCheckpoint() {
+	SettingsSnapshot current;
+	CaptureSettingsSnapshot(current);
+	if (!hasSettingsSnapshot) {
+		lastSettingsSnapshot = current;
+		hasSettingsSnapshot = true;
+		return;
+	}
+
+	if (undoStack.empty() || !SettingsSnapshotsEqual(undoStack.back(), current)) {
+		undoStack.push_back(current);
+		if (undoStack.size() > 80)
+			undoStack.erase(undoStack.begin());
+	}
+	lastSettingsSnapshot = current;
+}
+
+void AetherApp::InitializeSettingsUndo() {
+	undoStack.clear();
+	CaptureSettingsSnapshot(lastSettingsSnapshot);
+	hasSettingsSnapshot = true;
+}
+
+void AetherApp::UndoLastSettingsChange() {
+	if (undoStack.empty())
+		return;
+
+	SettingsSnapshot snapshot = undoStack.back();
+	undoStack.pop_back();
+	applyingUndo = true;
+	ApplySettingsSnapshot(snapshot);
+	ApplyAllSettings();
+	AutoSaveConfig();
+	applyingUndo = false;
+	lastSettingsSnapshot = snapshot;
+	hasSettingsSnapshot = true;
+}
+
+bool AetherApp::IsTextEditingActive() const {
+	if (slotHexInput.focused || hexColorInput.focused || consoleInput.focused)
+		return true;
+
+	const Slider* sliders[] = {
+		&area.tabletWidth, &area.tabletHeight, &area.tabletX, &area.tabletY,
+		&area.screenWidth, &area.screenHeight, &area.screenX, &area.screenY,
+		&area.rotation, &area.aspectRatio, &dpiScale, &tipThreshold, &overclockHz, &penRateLimitHz,
+		&filters.smoothingLatency, &filters.smoothingInterval,
+		&filters.antichatterStrength, &filters.antichatterMultiplier,
+		&filters.antichatterOffsetX, &filters.antichatterOffsetY,
+		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
+		&filters.velCurveMinSpeed, &filters.velCurveMaxSpeed,
+		&filters.velCurveSmoothing, &filters.velCurveSharpness,
+		&filters.snapRadius, &filters.snapSmooth,
+		&filters.reconStrength, &filters.reconVelSmooth,
+		&filters.reconAccelCap, &filters.reconPredTime,
+		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
+		&aether.lagRemovalStrength, &aether.stabilizerStability, &aether.stabilizerSensitivity,
+		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime,
+		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter
+	};
+	for (const Slider* slider : sliders) {
+		if (slider->editMode)
+			return true;
+	}
+	return false;
+}
+
+bool AetherApp::FocusNextEditableRow(bool reverse) {
+	std::vector<Slider*> rows;
+	auto add = [&](Slider& slider) { rows.push_back(&slider); };
+
+	switch (sidebar.activeIndex) {
+	case 0:
+		add(area.screenWidth);
+		add(area.screenHeight);
+		if (area.customValues.value) {
+			add(area.screenX);
+			add(area.screenY);
+		}
+		add(area.tabletWidth);
+		add(area.tabletHeight);
+		add(area.tabletX);
+		add(area.tabletY);
+		add(area.rotation);
+		if (area.lockAspect.value)
+			add(area.aspectRatio);
+		break;
+	case 1:
+		if (filters.smoothingEnabled.value) {
+			add(filters.smoothingLatency);
+			add(filters.smoothingInterval);
+		}
+		if (filters.antichatterEnabled.value) {
+			add(filters.antichatterStrength);
+			add(filters.antichatterMultiplier);
+			add(filters.antichatterOffsetX);
+			add(filters.antichatterOffsetY);
+		}
+		if (filters.noiseEnabled.value) {
+			add(filters.noiseBuffer);
+			add(filters.noiseThreshold);
+			add(filters.noiseIterations);
+		}
+		if (filters.velCurveEnabled.value) {
+			add(filters.velCurveMinSpeed);
+			add(filters.velCurveMaxSpeed);
+			add(filters.velCurveSmoothing);
+			add(filters.velCurveSharpness);
+		}
+		if (filters.reconstructorEnabled.value) {
+			add(filters.reconStrength);
+			add(filters.reconVelSmooth);
+			add(filters.reconAccelCap);
+			add(filters.reconPredTime);
+		}
+		if (filters.adaptiveEnabled.value) {
+			add(filters.adaptiveProcessNoise);
+			add(filters.adaptiveMeasNoise);
+			add(filters.adaptiveVelWeight);
+		}
+		if (aether.enabled.value) {
+			if (aether.lagRemovalEnabled.value)
+				add(aether.lagRemovalStrength);
+			if (aether.stabilizerEnabled.value) {
+				add(aether.stabilizerStability);
+				add(aether.stabilizerSensitivity);
+			}
+			if (aether.snappingEnabled.value) {
+				add(aether.snappingInner);
+				add(aether.snappingOuter);
+			}
+			if (aether.rhythmFlowEnabled.value) {
+				add(aether.rhythmFlowStrength);
+				add(aether.rhythmFlowRelease);
+				add(aether.rhythmFlowJitter);
+			}
+			if (aether.suppressionEnabled.value)
+				add(aether.suppressionTime);
+		}
+		if (overclockEnabled.value)
+			add(overclockHz);
+		if (penRateLimitEnabled.value)
+			add(penRateLimitHz);
+		break;
+	case 2:
+		add(tipThreshold);
+		add(dpiScale);
+		break;
+	default:
+		break;
+	}
+
+	if (rows.empty())
+		return false;
+
+	int active = -1;
+	for (int i = 0; i < (int)rows.size(); i++) {
+		if (rows[i]->editMode) {
+			active = i;
+			break;
+		}
+	}
+	if (active < 0)
+		return false;
+
+	bool changed = rows[active]->CommitEdit();
+	int next = active + (reverse ? -1 : 1);
+	if (next < 0) next = (int)rows.size() - 1;
+	if (next >= (int)rows.size()) next = 0;
+	rows[next]->BeginEdit();
+
+	if (changed) {
+		if (rows[active] == &dpiScale) {
+			ApplyDpiScale();
+			AutoSaveConfig();
+		}
+		else {
+			if (sidebar.activeIndex == 0)
+				ApplyAspectLock(rows[active] == &area.tabletHeight);
+			ApplyAllSettings();
+		}
+	}
+	return true;
+}
+
+void AetherApp::SwitchTabByKeyboard(int direction) {
+	if (sidebar.tabs.empty())
+		return;
+
+	int oldTab = sidebar.activeIndex;
+	int count = (int)sidebar.tabs.size();
+	int next = (oldTab + direction) % count;
+	if (next < 0) next += count;
+	if (next == oldTab)
+		return;
+
+	prevTab = oldTab;
+	sidebar.activeIndex = next;
+	tabTransitionT = 0.0f;
+	tabSlideOffset = (next > oldTab) ? 40.0f : -40.0f;
+}
+
+float AetherApp::GetSystemDpiScale() const {
+	HWND target = hWnd ? hWnd : nullptr;
+	HDC hdc = GetDC(target);
+	float scale = 1.0f;
+	if (hdc) {
+		scale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
+		ReleaseDC(target, hdc);
+	}
+	return Clamp(scale, 0.75f, 2.50f);
+}
+
+float AetherApp::GetSelectedDpiScale() const {
+	return Clamp(dpiScale.value / 100.0f, 0.75f, 2.00f);
+}
+
+void AetherApp::ApplyDpiScale() {
+	if (!renderer.pDWriteFactory)
+		return;
+	renderer.SetDpiScale(GetSelectedDpiScale());
+}
+
 void AetherApp::OnMouseMove(float x, float y) {
+	if (isPluginCatalogDragScrolling) {
+		pluginCatalogScrollY = pluginCatalogDragStartOffset + (pluginCatalogDragStartY - y);
+		ClampPluginCatalogScroll();
+	}
 	
 	if (isDragScrolling) {
 		float dy = dragScrollStartY - y; 
@@ -543,11 +1515,14 @@ void AetherApp::OnMouseMove(float x, float y) {
 	mouseX = x; mouseY = y;
 }
 void AetherApp::OnMouseDown() {
+	if (hWnd)
+		SetFocus(hWnd);
 	mouseDown = true;
 	mouseClicked = true;
 }
 void AetherApp::OnMouseUp() {
 	mouseDown = false;
+	isPluginCatalogDragScrolling = false;
 	if (isDraggingArea) {
 		isDraggingArea = false;
 		dragTarget = 0;
@@ -599,11 +1574,15 @@ void AetherApp::RefreshDetectedScreen() {
 	int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
 	int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
 	int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+	int primaryWidth = GetSystemMetrics(SM_CXSCREEN);
+	int primaryHeight = GetSystemMetrics(SM_CYSCREEN);
 
 	virtualScreenX = (float)left;
 	virtualScreenY = (float)top;
-	detectedScreenW = (float)((width > 0) ? width : GetSystemMetrics(SM_CXSCREEN));
-	detectedScreenH = (float)((height > 0) ? height : GetSystemMetrics(SM_CYSCREEN));
+	primaryScreenW = (float)((primaryWidth > 0) ? primaryWidth : 1920);
+	primaryScreenH = (float)((primaryHeight > 0) ? primaryHeight : 1080);
+	detectedScreenW = (float)((width > 0) ? width : primaryScreenW);
+	detectedScreenH = (float)((height > 0) ? height : primaryScreenH);
 
 	displayTargets.clear();
 	DisplayTarget desktop;
@@ -631,10 +1610,8 @@ void AetherApp::SendDisplaySettingsToDriver() {
 	char cmd[256];
 	sprintf_s(cmd, "DesktopSize %.0f %.0f", detectedScreenW, detectedScreenH);
 	driver.SendCommand(cmd);
+	SendStaticMonitorInfoToDriver();
 
-	
-	
-	
 	float actualScreenX = area.screenX.value + virtualScreenX;
 	float actualScreenY = area.screenY.value + virtualScreenY;
 	sprintf_s(cmd, "ScreenArea %.0f %.0f %.0f %.0f",
@@ -644,6 +1621,21 @@ void AetherApp::SendDisplaySettingsToDriver() {
 	driver.SendCommand("UpdateMonitorInfo");
 }
 
+void AetherApp::SendStaticMonitorInfoToDriver() {
+	if (!driver.isConnected)
+		return;
+
+	char cmd[256];
+	sprintf_s(cmd, "StaticMonitorInfo %.0f %.0f %.0f %.0f %.0f %.0f",
+		primaryScreenW,
+		primaryScreenH,
+		detectedScreenW,
+		detectedScreenH,
+		virtualScreenX,
+		virtualScreenY);
+	driver.SendCommand(cmd);
+}
+
 void AetherApp::SendStartupSettingsToDriver() {
 	if (!driver.isConnected)
 		return;
@@ -651,8 +1643,8 @@ void AetherApp::SendStartupSettingsToDriver() {
 	char cmd[256];
 	sprintf_s(cmd, "DesktopSize %.0f %.0f", detectedScreenW, detectedScreenH);
 	driver.SendCommand(cmd);
+	SendStaticMonitorInfoToDriver();
 
-	
 	float actualScreenX = area.screenX.value + virtualScreenX;
 	float actualScreenY = area.screenY.value + virtualScreenY;
 	sprintf_s(cmd, "ScreenArea %.0f %.0f %.0f %.0f",
@@ -685,8 +1677,13 @@ void AetherApp::SendStartupSettingsToDriver() {
 	driver.SendCommand(cmd);
 	sprintf_s(cmd, "Overclock %s %.0f", overclockEnabled.value ? "on" : "off", overclockHz.value);
 	driver.SendCommand(cmd);
+	sprintf_s(cmd, "PenRateLimit %s %.0f", penRateLimitEnabled.value ? "on" : "off", penRateLimitHz.value);
+	driver.SendCommand(cmd);
 
 	SendFilterSettings();
+	driver.SendCommand("PluginReload");
+	Sleep(80);
+	SendPluginSettings();
 
 	driver.SendCommand("start");
 }
@@ -702,6 +1699,8 @@ bool AetherApp::StartDriverService() {
 
 	Sleep(800);
 	SendStartupSettingsToDriver();
+	autoStartRetryCount = 0;
+	autoStartRetryTimer = 0.0f;
 	return true;
 }
 
@@ -720,6 +1719,10 @@ void AetherApp::ApplyDisplayTarget(int index) {
 	area.screenHeight.value = target.height;
 	area.screenX.value = target.x;
 	area.screenY.value = target.y;
+	if (!area.lockAspect.value && target.height > 1.0f) {
+		area.aspectRatio.value = Clamp(target.width / target.height, area.aspectRatio.minVal, area.aspectRatio.maxVal);
+		area.aspectRatio.animValue = area.aspectRatio.value;
+	}
 
 	ClampScreenArea();
 	ApplyAspectLock(false);
@@ -727,6 +1730,9 @@ void AetherApp::ApplyDisplayTarget(int index) {
 }
 
 float AetherApp::GetScreenAspectRatio() const {
+	if (area.lockAspect.value)
+		return Clamp(area.aspectRatio.value, 0.50f, 3.00f);
+
 	float screenW = area.screenWidth.value;
 	float screenH = area.screenHeight.value;
 
@@ -748,17 +1754,33 @@ void AetherApp::ClampScreenArea() {
 	area.screenWidth.value = Clamp(area.screenWidth.value, area.screenWidth.minVal, maxW);
 	area.screenHeight.value = Clamp(area.screenHeight.value, area.screenHeight.minVal, maxH);
 
-	float maxX = std::max(0.0f, detectedScreenW - area.screenWidth.value);
-	float maxY = std::max(0.0f, detectedScreenH - area.screenHeight.value);
+	// In normal mode keep the mapped area fully inside the virtual desktop.
+	// In Custom Values mode allow explicit offsets up to the desktop size even
+	// when width/height would extend past the edge. This lets users type values
+	// such as X=960 on a 1920px desktop with a 1080px-wide mapped area.
+	float maxX = area.customValues.value ? maxW : std::max(0.0f, detectedScreenW - area.screenWidth.value);
+	float maxY = area.customValues.value ? maxH : std::max(0.0f, detectedScreenH - area.screenHeight.value);
 	area.screenX.value = Clamp(area.screenX.value, 0.0f, maxX);
 	area.screenY.value = Clamp(area.screenY.value, 0.0f, maxY);
 }
 
 void AetherApp::CenterScreenArea() {
-	float maxX = std::max(0.0f, detectedScreenW - area.screenWidth.value);
-	float maxY = std::max(0.0f, detectedScreenH - area.screenHeight.value);
-	area.screenX.value = maxX * 0.5f;
-	area.screenY.value = maxY * 0.5f;
+	float targetX = 0.0f;
+	float targetY = 0.0f;
+	float targetW = detectedScreenW;
+	float targetH = detectedScreenH;
+	if (selectedDisplayTarget >= 0 && selectedDisplayTarget < (int)displayTargets.size()) {
+		const DisplayTarget& target = displayTargets[selectedDisplayTarget];
+		targetX = target.x;
+		targetY = target.y;
+		targetW = target.width;
+		targetH = target.height;
+	}
+
+	float offsetX = std::max(0.0f, targetW - area.screenWidth.value) * 0.5f;
+	float offsetY = std::max(0.0f, targetH - area.screenHeight.value) * 0.5f;
+	area.screenX.value = targetX + offsetX;
+	area.screenY.value = targetY + offsetY;
 	ClampScreenArea();
 }
 
@@ -805,30 +1827,31 @@ void AetherApp::OnResize(UINT width, UINT height) {
 	clientWidth = (float)width;
 	clientHeight = (float)height;
 	Theme::Runtime::SetWindowSize(clientWidth, clientHeight);
+	ApplyDpiScale();
 	renderer.Resize(width, height);
 	ClampScrollOffsets();
 }
 
 void AetherApp::OnDisplayChange() {
-	float oldW = detectedScreenW;
-	float oldH = detectedScreenH;
-	RefreshDetectedScreen();
-
-	if (selectedDisplayTarget > 0 && selectedDisplayTarget < (int)displayTargets.size()) {
-		ApplyDisplayTarget(selectedDisplayTarget);
-		return;
-	}
-
-	if (fabsf(area.screenWidth.value - oldW) < 1.0f) area.screenWidth.value = detectedScreenW;
-	if (fabsf(area.screenHeight.value - oldH) < 1.0f) area.screenHeight.value = detectedScreenH;
-	ClampScreenArea();
-	ApplyAspectLock(false);
-
 	SendDisplaySettingsToDriver();
 }
+
 void AetherApp::OnMouseWheel(float delta) {
 	scrollDelta += delta;
 	float scrollSpeed = 40.0f;
+	if (pluginManagerOpen && !pluginSourceEditorOpen) {
+		float overlayW = Theme::Runtime::WindowWidth;
+		float overlayH = Theme::Runtime::WindowHeight;
+		float w = std::min(960.0f, overlayW - 36.0f);
+		float h = std::min(650.0f, overlayH - 54.0f);
+		float x = (overlayW - w) * 0.5f;
+		float y = (overlayH - h) * 0.5f;
+		if (PointInRect(mouseX, mouseY, x + 14.0f, y + 88.0f, w - 28.0f, h - 148.0f)) {
+			pluginCatalogScrollY -= delta * scrollSpeed;
+			ClampPluginCatalogScroll();
+			return;
+		}
+	}
 	switch (sidebar.activeIndex) {
 	case 0: areaScrollY -= delta * scrollSpeed; break;
 	case 1: filterScrollY -= delta * scrollSpeed; break;
@@ -840,23 +1863,83 @@ void AetherApp::OnMouseWheel(float delta) {
 }
 
 void AetherApp::OnChar(wchar_t ch) {
-	area.tabletWidth.OnChar(ch); area.tabletHeight.OnChar(ch);
-	area.tabletX.OnChar(ch); area.tabletY.OnChar(ch);
-	area.screenWidth.OnChar(ch); area.screenHeight.OnChar(ch);
-	area.screenX.OnChar(ch); area.screenY.OnChar(ch);
-	area.rotation.OnChar(ch);
-	tipThreshold.OnChar(ch);
-	overclockHz.OnChar(ch);
-	filters.smoothingLatency.OnChar(ch); filters.smoothingInterval.OnChar(ch);
-	filters.antichatterStrength.OnChar(ch); filters.antichatterMultiplier.OnChar(ch);
-	filters.antichatterOffsetX.OnChar(ch); filters.antichatterOffsetY.OnChar(ch);
-	filters.noiseBuffer.OnChar(ch); filters.noiseThreshold.OnChar(ch); filters.noiseIterations.OnChar(ch);
-	filters.snapRadius.OnChar(ch); filters.snapSmooth.OnChar(ch);
-	filters.reconStrength.OnChar(ch); filters.reconVelSmooth.OnChar(ch);
-	filters.reconAccelCap.OnChar(ch); filters.reconPredTime.OnChar(ch);
-	filters.adaptiveProcessNoise.OnChar(ch); filters.adaptiveMeasNoise.OnChar(ch); filters.adaptiveVelWeight.OnChar(ch);
-	aether.lagRemovalStrength.OnChar(ch); aether.stabilizerStability.OnChar(ch); aether.stabilizerSensitivity.OnChar(ch);
-	aether.snappingInner.OnChar(ch); aether.snappingOuter.OnChar(ch); aether.suppressionTime.OnChar(ch);
+	if (pluginSourceEditorOpen) {
+		pluginRepoOwnerInput.OnChar(ch);
+		pluginRepoNameInput.OnChar(ch);
+		pluginRepoRefInput.OnChar(ch);
+		return;
+	}
+
+	bool tabletWidthCommitted = area.tabletWidth.OnChar(ch);
+	bool tabletHeightCommitted = area.tabletHeight.OnChar(ch);
+	bool tabletXCommitted = area.tabletX.OnChar(ch);
+	bool tabletYCommitted = area.tabletY.OnChar(ch);
+	bool screenWidthCommitted = area.screenWidth.OnChar(ch);
+	bool screenHeightCommitted = area.screenHeight.OnChar(ch);
+	bool screenXCommitted = area.screenX.OnChar(ch);
+	bool screenYCommitted = area.screenY.OnChar(ch);
+	bool rotationCommitted = area.rotation.OnChar(ch);
+	bool aspectCommitted = area.aspectRatio.OnChar(ch);
+	bool dpiCommitted = dpiScale.OnChar(ch);
+	bool settingsCommitted = tipThreshold.OnChar(ch);
+	bool filterCommitted = overclockHz.OnChar(ch);
+	filterCommitted |= penRateLimitHz.OnChar(ch);
+
+	filterCommitted |= filters.smoothingLatency.OnChar(ch); filterCommitted |= filters.smoothingInterval.OnChar(ch);
+	filterCommitted |= filters.antichatterStrength.OnChar(ch); filterCommitted |= filters.antichatterMultiplier.OnChar(ch);
+	filterCommitted |= filters.antichatterOffsetX.OnChar(ch); filterCommitted |= filters.antichatterOffsetY.OnChar(ch);
+	filterCommitted |= filters.noiseBuffer.OnChar(ch); filterCommitted |= filters.noiseThreshold.OnChar(ch); filterCommitted |= filters.noiseIterations.OnChar(ch);
+	filterCommitted |= filters.velCurveMinSpeed.OnChar(ch); filterCommitted |= filters.velCurveMaxSpeed.OnChar(ch);
+	filterCommitted |= filters.velCurveSmoothing.OnChar(ch); filterCommitted |= filters.velCurveSharpness.OnChar(ch);
+	filterCommitted |= filters.snapRadius.OnChar(ch); filterCommitted |= filters.snapSmooth.OnChar(ch);
+	filterCommitted |= filters.reconStrength.OnChar(ch); filterCommitted |= filters.reconVelSmooth.OnChar(ch);
+	filterCommitted |= filters.reconAccelCap.OnChar(ch); filterCommitted |= filters.reconPredTime.OnChar(ch);
+	filterCommitted |= filters.adaptiveProcessNoise.OnChar(ch); filterCommitted |= filters.adaptiveMeasNoise.OnChar(ch); filterCommitted |= filters.adaptiveVelWeight.OnChar(ch);
+	filterCommitted |= aether.lagRemovalStrength.OnChar(ch); filterCommitted |= aether.stabilizerStability.OnChar(ch); filterCommitted |= aether.stabilizerSensitivity.OnChar(ch);
+	filterCommitted |= aether.snappingInner.OnChar(ch); filterCommitted |= aether.snappingOuter.OnChar(ch); filterCommitted |= aether.suppressionTime.OnChar(ch);
+	filterCommitted |= aether.rhythmFlowStrength.OnChar(ch); filterCommitted |= aether.rhythmFlowRelease.OnChar(ch); filterCommitted |= aether.rhythmFlowJitter.OnChar(ch);
+	for (size_t pluginIndex = 0; pluginIndex < pluginEntries.size(); ++pluginIndex) {
+		for (auto& option : pluginEntries[pluginIndex].options) {
+			if (option.kind == PluginEntry::PluginOption::SliderOption && option.slider.OnChar(ch)) {
+				SendPluginOption(pluginIndex, option);
+				filterCommitted = true;
+			}
+		}
+	}
+
+	bool areaCommitted =
+		tabletWidthCommitted || tabletHeightCommitted || tabletXCommitted || tabletYCommitted ||
+		screenWidthCommitted || screenHeightCommitted || screenXCommitted || screenYCommitted ||
+		rotationCommitted || aspectCommitted;
+
+	if (screenWidthCommitted || screenHeightCommitted) {
+		if (area.autoCenter.value) {
+			CenterScreenArea();
+		}
+		else if (area.customValues.value) {
+			ClampScreenArea();
+		}
+		else {
+			CenterScreenArea();
+		}
+		if (!area.lockAspect.value && area.screenHeight.value > 1.0f) {
+			area.aspectRatio.value = Clamp(area.screenWidth.value / area.screenHeight.value, area.aspectRatio.minVal, area.aspectRatio.maxVal);
+			area.aspectRatio.animValue = area.aspectRatio.value;
+		}
+	}
+
+	if (areaCommitted) {
+		if (tabletWidthCommitted || tabletHeightCommitted || aspectCommitted || area.lockAspect.value)
+			ApplyAspectLock(tabletHeightCommitted && !tabletWidthCommitted);
+		ApplyAllSettings();
+	}
+	else if (dpiCommitted) {
+		ApplyDpiScale();
+		AutoSaveConfig();
+	}
+	else if (settingsCommitted || filterCommitted) {
+		ApplyAllSettings();
+	}
 
 	
 	if (slotHexInput.OnChar(ch)) {
@@ -909,23 +1992,56 @@ void AetherApp::OnChar(wchar_t ch) {
 void AetherApp::OnKeyDown(int vk) {
 	bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
 	bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+	if (pluginSourceEditorOpen) {
+		if (vk == VK_ESCAPE) {
+			pluginSourceEditorOpen = false;
+			return;
+		}
+		if (pluginRepoOwnerInput.OnKeyDown(vk)) return;
+		if (pluginRepoNameInput.OnKeyDown(vk)) return;
+		if (pluginRepoRefInput.OnKeyDown(vk)) return;
+	}
+	if (pluginManagerOpen && vk == VK_ESCAPE) {
+		pluginManagerOpen = false;
+		return;
+	}
+	if (ctrl && vk == 'Z' && !slotHexInput.focused && !hexColorInput.focused && !consoleInput.focused) {
+		UndoLastSettingsChange();
+		return;
+	}
+	if (vk == VK_TAB) {
+		if (FocusNextEditableRow(shift))
+			return;
+		if (!IsTextEditingActive())
+			SwitchTabByKeyboard(shift ? -1 : 1);
+		return;
+	}
+
 	Slider* editableSliders[] = {
 		&area.tabletWidth, &area.tabletHeight, &area.tabletX, &area.tabletY,
 		&area.screenWidth, &area.screenHeight, &area.screenX, &area.screenY,
-		&area.rotation, &tipThreshold, &overclockHz,
+		&area.rotation, &area.aspectRatio, &dpiScale, &tipThreshold, &overclockHz, &penRateLimitHz,
 		&filters.smoothingLatency, &filters.smoothingInterval,
 		&filters.antichatterStrength, &filters.antichatterMultiplier,
 		&filters.antichatterOffsetX, &filters.antichatterOffsetY,
 		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
+		&filters.velCurveMinSpeed, &filters.velCurveMaxSpeed,
+		&filters.velCurveSmoothing, &filters.velCurveSharpness,
 		&filters.snapRadius, &filters.snapSmooth,
 		&filters.reconStrength, &filters.reconVelSmooth,
 		&filters.reconAccelCap, &filters.reconPredTime,
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
 		&aether.lagRemovalStrength, &aether.stabilizerStability, &aether.stabilizerSensitivity,
-		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime
+		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime,
+		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter
 	};
 	for (Slider* slider : editableSliders) {
 		if (slider->OnKeyDown(vk, ctrl, shift)) return;
+	}
+	for (auto& plugin : pluginEntries) {
+		for (auto& option : plugin.options) {
+			if (option.kind == PluginEntry::PluginOption::SliderOption && option.slider.OnKeyDown(vk, ctrl, shift)) return;
+		}
 	}
 
 	
@@ -985,6 +2101,15 @@ void AetherApp::Tick() {
 
 	Tooltip::Reset();
 
+	if (vmultiInstalled && autoStartEnabled && !driver.isConnected) {
+		autoStartRetryTimer -= deltaTime;
+		if (autoStartRetryTimer <= 0.0f) {
+			autoStartRetryCount++;
+			autoStartRetryTimer = autoStartRetryCount < 8 ? 1.5f : 5.0f;
+			StartDriverService();
+		}
+	}
+
 	
 	{
 		std::lock_guard<std::mutex> lock(driver.trailMutex);
@@ -999,6 +2124,10 @@ void AetherApp::Tick() {
 	DrawHeader();
 
 	int oldTab = sidebar.activeIndex;
+	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen;
+	bool frameClick = mouseClicked;
+	if (modalOpen)
+		mouseClicked = false;
 	sidebar.Update(mouseX, mouseY, mouseClicked, deltaTime);
 	sidebar.Draw(renderer);
 
@@ -1031,6 +2160,8 @@ void AetherApp::Tick() {
 
 	renderer.pRT->SetTransform(oldTransform);
 	EndClipContent();
+	if (modalOpen)
+		mouseClicked = frameClick;
 
 	
 	{
@@ -1071,6 +2202,10 @@ void AetherApp::Tick() {
 	}
 
 	DrawStatusBar();
+	if (pluginManagerOpen)
+		DrawPluginManagerModal();
+	if (pluginSourceEditorOpen)
+		DrawPluginSourceModal();
 	Tooltip::Draw(renderer);
 	renderer.EndFrame();
 
@@ -1164,6 +2299,12 @@ void AetherApp::SendFilterSettings() {
 			aether.snappingEnabled.value ? 1 : 0,
 			aether.snappingInner.value, aether.snappingOuter.value);
 		driver.SendCommand(cmd);
+		sprintf_s(cmd, "AS_RhythmFlow %d %.4f %.4f %.4f",
+			aether.rhythmFlowEnabled.value ? 1 : 0,
+			aether.rhythmFlowStrength.value,
+			aether.rhythmFlowRelease.value,
+			aether.rhythmFlowJitter.value);
+		driver.SendCommand(cmd);
 		sprintf_s(cmd, "AS_Suppress %d %.4f",
 			aether.suppressionEnabled.value ? 1 : 0, aether.suppressionTime.value);
 		driver.SendCommand(cmd);
@@ -1173,16 +2314,18 @@ void AetherApp::SendFilterSettings() {
 }
 
 void AetherApp::ApplyAllSettings() {
-	if (!driver.isConnected)
+	if (!driver.isConnected) {
+		AutoSaveConfig();
 		return;
+	}
 
 	char cmd[256];
 	ClampScreenArea();
 
 	sprintf_s(cmd, "DesktopSize %.0f %.0f", detectedScreenW, detectedScreenH);
 	driver.SendCommand(cmd);
+	SendStaticMonitorInfoToDriver();
 
-	
 	{
 		float actualScreenX = area.screenX.value + virtualScreenX;
 		float actualScreenY = area.screenY.value + virtualScreenY;
@@ -1220,32 +2363,1023 @@ void AetherApp::ApplyAllSettings() {
 
 	sprintf_s(cmd, "Overclock %s %.0f", overclockEnabled.value ? "on" : "off", overclockHz.value);
 	driver.SendCommand(cmd);
+	sprintf_s(cmd, "PenRateLimit %s %.0f", penRateLimitEnabled.value ? "on" : "off", penRateLimitHz.value);
+	driver.SendCommand(cmd);
 
 	SendFilterSettings();
+	SendPluginSettings();
 
 	AutoSaveConfig();
 }
 
 std::wstring AetherApp::GetConfigPath() {
+	std::wstring dir = GetConfigDirectory();
+	return dir + L"_autosave.cfg";
+}
+
+std::wstring AetherApp::GetConfigDirectory() {
 	wchar_t exePath[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, exePath, MAX_PATH);
 	std::wstring dir(exePath);
 	size_t slash = dir.find_last_of(L"\\/");
 	if (slash != std::wstring::npos)
 		dir = dir.substr(0, slash + 1);
-	return dir + L"aether_config.cfg";
+	return dir + L"config\\";
+}
+
+void AetherApp::EnsureConfigDirectory() {
+	std::wstring dir = GetConfigDirectory();
+	CreateDirectoryW(dir.c_str(), nullptr);
+}
+
+void AetherApp::RefreshConfigFiles() {
+	EnsureConfigDirectory();
+	std::wstring active = activeConfigPath.empty() ? GetConfigPath() : activeConfigPath;
+	std::wstring selectedPath;
+	if (selectedConfigIndex >= 0 && selectedConfigIndex < (int)configEntries.size()) {
+		selectedPath = configEntries[selectedConfigIndex].path;
+	}
+	configEntries.clear();
+
+	std::wstring pattern = GetConfigDirectory() + L"*.cfg";
+	WIN32_FIND_DATAW data = {};
+	HANDLE find = FindFirstFileW(pattern.c_str(), &data);
+	if (find != INVALID_HANDLE_VALUE) {
+		do {
+			if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+				if (_wcsicmp(data.cFileName, L"_autosave.cfg") == 0)
+					continue;
+				ConfigEntry entry;
+				entry.name = data.cFileName;
+				entry.path = GetConfigDirectory() + data.cFileName;
+				configEntries.push_back(entry);
+			}
+		} while (FindNextFileW(find, &data));
+		FindClose(find);
+	}
+
+	std::sort(configEntries.begin(), configEntries.end(), [](const ConfigEntry& a, const ConfigEntry& b) {
+		return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
+	});
+
+	selectedConfigIndex = -1;
+	if (!selectedPath.empty()) {
+		for (int i = 0; i < (int)configEntries.size(); i++) {
+			if (_wcsicmp(configEntries[i].path.c_str(), selectedPath.c_str()) == 0) {
+				selectedConfigIndex = i;
+				break;
+			}
+		}
+	}
+	for (int i = 0; i < (int)configEntries.size(); i++) {
+		if (selectedConfigIndex < 0 && _wcsicmp(configEntries[i].path.c_str(), active.c_str()) == 0) {
+			selectedConfigIndex = i;
+			break;
+		}
+	}
+	if (selectedConfigIndex < 0 && !configEntries.empty()) {
+		selectedConfigIndex = 0;
+	}
 }
 
 void AetherApp::AutoSaveConfig() {
+	TrackSettingsUndo();
+	EnsureConfigDirectory();
 	SaveConfig(GetConfigPath());
+	RefreshConfigFiles();
 }
 
 void AetherApp::AutoLoadConfig() {
+	EnsureConfigDirectory();
 	std::wstring path = GetConfigPath();
 	DWORD attrs = GetFileAttributesW(path.c_str());
 	if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+		activeConfigPath.clear();
 		LoadConfig(path);
 	}
+	RefreshConfigFiles();
+}
+
+void AetherApp::PrepareModalDialog() {
+	if (hWnd && GetCapture() == hWnd)
+		ReleaseCapture();
+	mouseDown = false;
+	mouseClicked = false;
+	isDragScrolling = false;
+	isPluginCatalogDragScrolling = false;
+	isDraggingArea = false;
+	middleMouseDown = false;
+	rightMouseDown = false;
+}
+
+void AetherApp::SyncLoadedControlVisuals() {
+	auto syncSlider = [](Slider& slider) {
+		slider.value = Clamp(slider.value, slider.minVal, slider.maxVal);
+		slider.animValue = slider.value;
+		slider.editMode = false;
+		slider.isDragging = false;
+		slider.isMouseDraggingText = false;
+		slider.ClearSelection();
+	};
+	auto syncToggle = [](Toggle& toggle) {
+		toggle.animT = toggle.value ? 1.0f : 0.0f;
+	};
+
+	Slider* sliders[] = {
+		&area.tabletWidth, &area.tabletHeight, &area.tabletX, &area.tabletY,
+		&area.screenWidth, &area.screenHeight, &area.screenX, &area.screenY,
+		&area.rotation, &area.aspectRatio,
+		&dpiScale, &tipThreshold, &overclockHz, &penRateLimitHz,
+		&filters.smoothingLatency, &filters.smoothingInterval,
+		&filters.antichatterStrength, &filters.antichatterMultiplier,
+		&filters.antichatterOffsetX, &filters.antichatterOffsetY,
+		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
+		&filters.velCurveMinSpeed, &filters.velCurveMaxSpeed,
+		&filters.velCurveSmoothing, &filters.velCurveSharpness,
+		&filters.snapRadius, &filters.snapSmooth,
+		&filters.reconStrength, &filters.reconVelSmooth,
+		&filters.reconAccelCap, &filters.reconPredTime,
+		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
+		&aether.lagRemovalStrength, &aether.stabilizerStability, &aether.stabilizerSensitivity,
+		&aether.snappingInner, &aether.snappingOuter,
+		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter,
+		&aether.suppressionTime
+	};
+	for (Slider* slider : sliders)
+		syncSlider(*slider);
+
+	Toggle* toggles[] = {
+		&area.customValues, &area.autoCenter, &area.lockAspect,
+		&forceFullArea, &areaClipping, &areaLimiting,
+		&overclockEnabled, &penRateLimitEnabled,
+		&filters.smoothingEnabled, &filters.antichatterEnabled, &filters.noiseEnabled,
+		&filters.velCurveEnabled, &filters.snapEnabled, &filters.reconstructorEnabled,
+		&filters.adaptiveEnabled,
+		&aether.enabled, &aether.lagRemovalEnabled, &aether.stabilizerEnabled,
+		&aether.snappingEnabled, &aether.rhythmFlowEnabled, &aether.suppressionEnabled,
+		&visualizerToggle
+	};
+	for (Toggle* toggle : toggles)
+		syncToggle(*toggle);
+
+	for (PluginEntry& plugin : pluginEntries) {
+		syncToggle(plugin.enabled);
+		for (auto& option : plugin.options) {
+			if (option.kind == PluginEntry::PluginOption::ToggleOption)
+				syncToggle(option.toggle);
+			else
+				syncSlider(option.slider);
+		}
+	}
+}
+
+bool AetherApp::SaveConfigWithDialog() {
+	PrepareModalDialog();
+	EnsureConfigDirectory();
+	wchar_t filePath[MAX_PATH] = {};
+	wcscpy_s(filePath, L"default.cfg");
+	if (!activeConfigPath.empty()) {
+		size_t slash = activeConfigPath.find_last_of(L"\\/");
+		std::wstring name = (slash == std::wstring::npos) ? activeConfigPath : activeConfigPath.substr(slash + 1);
+		wcsncpy_s(filePath, name.c_str(), _TRUNCATE);
+	}
+
+	std::wstring dir = GetConfigDirectory();
+	OPENFILENAMEW ofn = {};
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFilter = L"Aether Config (*.cfg)\0*.cfg\0All Files (*.*)\0*.*\0";
+	ofn.lpstrFile = filePath;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrInitialDir = dir.c_str();
+	ofn.lpstrDefExt = L"cfg";
+	ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetSaveFileNameW(&ofn))
+		return false;
+
+	activeConfigPath = filePath;
+	SaveConfig(activeConfigPath);
+	RefreshConfigFiles();
+	return true;
+}
+
+bool AetherApp::LoadConfigWithDialog() {
+	PrepareModalDialog();
+	EnsureConfigDirectory();
+	wchar_t filePath[MAX_PATH] = {};
+	std::wstring dir = GetConfigDirectory();
+	OPENFILENAMEW ofn = {};
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFilter = L"Aether Config (*.cfg)\0*.cfg\0All Files (*.*)\0*.*\0";
+	ofn.lpstrFile = filePath;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrInitialDir = dir.c_str();
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetOpenFileNameW(&ofn))
+		return false;
+
+	activeConfigPath = filePath;
+	LoadConfig(activeConfigPath);
+	ApplyAllSettings();
+	RefreshConfigFiles();
+	return true;
+}
+
+std::wstring AetherApp::GetPluginDirectory() const {
+	wchar_t exePath[MAX_PATH] = {};
+	GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+
+	std::wstring dir(exePath);
+	size_t slash = dir.find_last_of(L"\\/");
+	if (slash != std::wstring::npos)
+		dir = dir.substr(0, slash + 1);
+
+	return dir + L"plugins\\";
+}
+
+static bool DeleteDirectoryTree(const std::wstring& dir) {
+	WIN32_FIND_DATAW data = {};
+	HANDLE find = FindFirstFileW((dir + L"\\*").c_str(), &data);
+	if (find != INVALID_HANDLE_VALUE) {
+		do {
+			if (lstrcmpW(data.cFileName, L".") == 0 || lstrcmpW(data.cFileName, L"..") == 0)
+				continue;
+
+			std::wstring path = dir + L"\\" + data.cFileName;
+			if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				DeleteDirectoryTree(path);
+			} else {
+				SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+				DeleteFileW(path.c_str());
+			}
+		} while (FindNextFileW(find, &data));
+		FindClose(find);
+	}
+
+	SetFileAttributesW(dir.c_str(), FILE_ATTRIBUTE_NORMAL);
+	return RemoveDirectoryW(dir.c_str()) != 0 || GetLastError() == ERROR_FILE_NOT_FOUND;
+}
+
+void AetherApp::ConfigurePluginDefaults(PluginEntry& entry) {
+	std::vector<PluginEntry::PluginOption> previousOptions = entry.options;
+	entry.options.clear();
+
+	auto restoreSlider = [&](PluginEntry::PluginOption& option) {
+		for (const auto& previous : previousOptions) {
+			if (previous.key == option.key) {
+				option.slider.value = Clamp(previous.slider.value, option.slider.minVal, option.slider.maxVal);
+				option.slider.animValue = option.slider.value;
+				return;
+			}
+		}
+	};
+	auto restoreToggle = [&](PluginEntry::PluginOption& option) {
+		for (const auto& previous : previousOptions) {
+			if (previous.key == option.key) {
+				option.toggle.value = previous.toggle.value;
+				option.toggle.animT = previous.toggle.value ? 1.0f : 0.0f;
+				return;
+			}
+		}
+	};
+	auto addSlider = [&](const char* key, const wchar_t* label, float minValue, float maxValue, float value, const wchar_t* format = L"%.2f") {
+		PluginEntry::PluginOption option;
+		option.kind = PluginEntry::PluginOption::SliderOption;
+		option.key = key;
+		option.label = label;
+		option.slider.minVal = minValue;
+		option.slider.maxVal = maxValue;
+		option.slider.value = value;
+		option.slider.animValue = value;
+		option.slider.format = format;
+		restoreSlider(option);
+		entry.options.push_back(option);
+	};
+	auto addToggle = [&](const char* key, const wchar_t* label, bool value) {
+		PluginEntry::PluginOption option;
+		option.kind = PluginEntry::PluginOption::ToggleOption;
+		option.key = key;
+		option.label = label;
+		option.toggle.value = value;
+		option.toggle.animT = value ? 1.0f : 0.0f;
+		restoreToggle(option);
+		entry.options.push_back(option);
+	};
+
+	{
+		std::wstring metadataName;
+		std::wstring metadataDescription;
+		std::vector<PluginOptionMetadata> metadataOptions;
+		if (ReadAetherPluginMetadata(GetPluginDirectory() + entry.key, metadataName, metadataDescription, metadataOptions)) {
+			if (!metadataName.empty())
+				entry.name = metadataName;
+			if (!metadataDescription.empty())
+				entry.description = metadataDescription;
+			for (const PluginOptionMetadata& metadata : metadataOptions) {
+				if (metadata.type == 1) {
+					addToggle(metadata.key.c_str(), metadata.label.c_str(), metadata.defaultValue > 0.5f);
+				}
+				else {
+					const wchar_t* format = metadata.format.empty() ? L"%.2f" : metadata.format.c_str();
+					addSlider(
+						metadata.key.c_str(),
+						metadata.label.c_str(),
+						metadata.minValue,
+						metadata.maxValue,
+						Clamp(metadata.defaultValue, metadata.minValue, metadata.maxValue),
+						format);
+				}
+			}
+			if (!entry.options.empty())
+				return;
+		}
+	}
+
+	std::wstring identity = entry.key + L" " + entry.name + L" " + entry.dllName;
+	if (WideContainsNoCase(identity, L"pleasant")) {
+		entry.description = L"PleasantAim smoothing stack with lag removal, stabilizer, radial follow, debounce, and optional resampling.";
+		addToggle("enableAntismoothing", L"Lag Removal", true);
+		addSlider("antismoothing", L"Lag Strength", 0.1f, 2.0f, 0.6f);
+		addToggle("enableSmoothing", L"Stabilizer", true);
+		addSlider("stability", L"Stability", 0.01f, 20.0f, 1.0f);
+		addSlider("speedSensitivity", L"Sensitivity", 0.0f, 1.0f, 0.015f, L"%.4f");
+		addToggle("enableRadialFollow", L"Radial Follow", true);
+		addSlider("radialInner", L"Inner Radius", 0.0f, 5.0f, 0.5f);
+		addSlider("radialOuter", L"Outer Radius", 0.001f, 20.0f, 3.0f);
+		addToggle("enableDebounce", L"Debounce", true);
+		addSlider("debounceMs", L"Debounce (ms)", 0.0f, 100.0f, 5.0f);
+		addToggle("enableResampling", L"Resampling", false);
+		addSlider("outputFrequency", L"Output Hz", 60.0f, 2000.0f, 1000.0f, L"%.0f");
+	}
+	else if (WideContainsNoCase(identity, L"hawkusmoothing")) {
+		entry.description = L"Hawku-style latency smoothing for steadier cursor movement.";
+		addSlider("latency", L"Latency (ms)", 0.0f, 30.0f, 2.0f);
+	}
+	else if (WideContainsNoCase(identity, L"hawkunoise")) {
+		entry.description = L"Hawku geometric-median noise reduction for tablet jitter.";
+		addSlider("samples", L"Samples", 0.0f, 64.0f, 10.0f, L"%.0f");
+		addSlider("threshold", L"Distance Threshold", 0.0f, 10.0f, 0.5f);
+	}
+	else if (WideContainsNoCase(identity, L"devocub")) {
+		entry.description = L"Devocub antichatter with optional prediction controls.";
+		addSlider("latency", L"Latency (ms)", 0.0f, 30.0f, 2.0f);
+		addSlider("strength", L"Strength", 0.0f, 10.0f, 3.0f);
+		addSlider("multiplier", L"Multiplier", 0.0f, 5.0f, 1.0f);
+		addSlider("offsetX", L"Offset X", -5.0f, 5.0f, 0.0f);
+		addSlider("offsetY", L"Offset Y", -5.0f, 5.0f, 1.0f);
+		addToggle("prediction", L"Prediction", false);
+		addSlider("predictionStrength", L"Prediction Strength", 0.0f, 5.0f, 1.1f);
+		addSlider("predictionSharpness", L"Prediction Sharpness", 0.0f, 5.0f, 1.0f);
+		addSlider("predictionOffsetX", L"Prediction Offset X", 0.0f, 10.0f, 3.0f);
+		addSlider("predictionOffsetY", L"Prediction Offset Y", -2.0f, 2.0f, 0.3f);
+	}
+	else {
+		entry.description = L"Native Aether DLL plugin. This plugin did not expose option metadata, so only enable state is available.";
+	}
+}
+
+void AetherApp::RefreshPluginList() {
+	std::vector<PluginEntry> previousEntries = pluginEntries;
+	pluginEntries.clear();
+
+	std::wstring root = GetPluginDirectory();
+	CreateDirectoryW(root.c_str(), nullptr);
+
+	WIN32_FIND_DATAW folderData = {};
+	HANDLE folderFind = FindFirstFileW((root + L"*").c_str(), &folderData);
+	if (folderFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (!(folderData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+				continue;
+			if (lstrcmpW(folderData.cFileName, L".") == 0 || lstrcmpW(folderData.cFileName, L"..") == 0)
+				continue;
+
+			std::wstring folder = root + folderData.cFileName + L"\\";
+			WIN32_FIND_DATAW dllData = {};
+			HANDLE dllFind = FindFirstFileW((folder + L"*.dll").c_str(), &dllData);
+			if (dllFind == INVALID_HANDLE_VALUE)
+				continue;
+
+			do {
+				if (dllData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+					continue;
+
+				PluginEntry entry;
+				entry.key = std::wstring(folderData.cFileName) + L"\\" + dllData.cFileName;
+				entry.name = folderData.cFileName;
+				entry.dllName = dllData.cFileName;
+				entry.enabled.value = true;
+				entry.enabled.animT = 1.0f;
+				for (const PluginEntry& previous : previousEntries) {
+					if (_wcsicmp(previous.key.c_str(), entry.key.c_str()) == 0) {
+						entry.enabled.value = previous.enabled.value;
+						entry.enabled.animT = previous.enabled.value ? 1.0f : 0.0f;
+						entry.options = previous.options;
+						break;
+					}
+				}
+				ConfigurePluginDefaults(entry);
+				pluginEntries.push_back(entry);
+			} while (FindNextFileW(dllFind, &dllData));
+
+			FindClose(dllFind);
+		} while (FindNextFileW(folderFind, &folderData));
+
+		FindClose(folderFind);
+	}
+
+	if (pluginEntries.empty()) {
+		pluginListStatus = L"No native DLL plugins found";
+	} else {
+		pluginListStatus = std::to_wstring(pluginEntries.size()) + L" native DLL plugin(s)";
+	}
+
+	pluginListDirty = false;
+}
+
+void AetherApp::SendPluginSettings() {
+	if (pluginListDirty)
+		RefreshPluginList();
+
+	if (!driver.isConnected)
+		return;
+
+	for (size_t i = 0; i < pluginEntries.size(); ++i) {
+		SendPluginEnable(i);
+	}
+	for (size_t i = 0; i < pluginEntries.size(); ++i) {
+		SendPluginOptions(i);
+	}
+}
+
+void AetherApp::SendPluginEnable(size_t pluginIndex) {
+	if (!driver.isConnected || pluginIndex >= pluginEntries.size())
+		return;
+
+	std::string key = WideToUtf8(pluginEntries[pluginIndex].key);
+	driver.SendCommand("PluginEnable " + QuoteCommandArg(key) + " " + (pluginEntries[pluginIndex].enabled.value ? "on" : "off"));
+}
+
+void AetherApp::SendPluginOption(size_t pluginIndex, const PluginEntry::PluginOption& option) {
+	if (!driver.isConnected || pluginIndex >= pluginEntries.size())
+		return;
+
+	std::string pluginKey = QuoteCommandArg(WideToUtf8(pluginEntries[pluginIndex].key));
+	char cmd[256];
+	if (option.kind == PluginEntry::PluginOption::ToggleOption) {
+		sprintf_s(cmd, "PluginSet %s %s %d", pluginKey.c_str(), option.key.c_str(), option.toggle.value ? 1 : 0);
+	}
+	else {
+		sprintf_s(cmd, "PluginSet %s %s %.6f", pluginKey.c_str(), option.key.c_str(), option.slider.value);
+	}
+	driver.SendCommand(cmd);
+}
+
+void AetherApp::SendPluginOptions(size_t pluginIndex) {
+	if (!driver.isConnected || pluginIndex >= pluginEntries.size())
+		return;
+
+	for (const auto& option : pluginEntries[pluginIndex].options) {
+		SendPluginOption(pluginIndex, option);
+	}
+}
+
+void AetherApp::UpdatePluginCatalogInstallState() {
+	for (auto& catalog : pluginCatalogEntries) {
+		catalog.installed = false;
+		std::wstring catalogIdentity = catalog.name + L" " + Utf8ToWide(catalog.sourcePath);
+		for (const auto& plugin : pluginEntries) {
+			std::wstring pluginIdentity = plugin.key + L" " + plugin.name + L" " + plugin.dllName;
+			if (CatalogNamesMatch(pluginIdentity, catalogIdentity)) {
+				catalog.installed = true;
+				break;
+			}
+		}
+		catalog.nativeAvailable = catalog.nativeAvailable || catalog.sourcePort || catalog.installed;
+	}
+}
+
+void AetherApp::ClampPluginCatalogScroll() {
+	if (pluginCatalogScrollY < 0.0f)
+		pluginCatalogScrollY = 0.0f;
+
+	float overlayH = Theme::Runtime::WindowHeight;
+	float h = std::min(650.0f, overlayH - 54.0f);
+	float listH = h - 148.0f;
+	float visibleH = std::max(0.0f, listH - 52.0f);
+	float contentH = (float)pluginCatalogEntries.size() * 30.0f + 8.0f;
+	float maxScroll = contentH - visibleH;
+	if (maxScroll < 0.0f)
+		maxScroll = 0.0f;
+	if (pluginCatalogScrollY > maxScroll)
+		pluginCatalogScrollY = maxScroll;
+}
+
+bool AetherApp::RefreshPluginCatalog() {
+	pluginCatalogEntries.clear();
+	pluginCatalogStatus = L"Loading repository...";
+
+	if (pluginListDirty)
+		RefreshPluginList();
+
+	std::wstring sourceOwner = pluginRepoOwner.empty() ? L"OpenTabletDriver" : pluginRepoOwner;
+	std::wstring sourceName = pluginRepoName.empty() ? L"Plugin-Repository" : pluginRepoName;
+	std::wstring sourceRef = pluginRepoRef.empty() ? L"master" : pluginRepoRef;
+	std::wstring sourceTreePath =
+		L"/repos/" + sourceOwner + L"/" + sourceName +
+		L"/git/trees/" + sourceRef + L"?recursive=1";
+
+	std::string sourceTreeJson;
+	bool sourceTreeLoaded = HttpGetUtf8(L"api.github.com", sourceTreePath, sourceTreeJson);
+	if (!sourceTreeLoaded && pluginManagerTab == 0 && pluginEntries.empty()) {
+		pluginCatalogStatus = L"Failed to load GitHub repository tree";
+		return false;
+	}
+
+	std::string sourcePrefix = pluginManagerTab == 0 ? "Plugins/" : "OTDPlugins/";
+	std::vector<std::string> allPaths = sourceTreeLoaded ? JsonTreePaths(sourceTreeJson, false) : std::vector<std::string>();
+	std::set<std::string> sourceFolders;
+	for (const std::string& path : allPaths) {
+		if (path.find(sourcePrefix) != 0)
+			continue;
+		size_t nextSlash = path.find('/', sourcePrefix.size());
+		if (nextSlash == std::string::npos || nextSlash == sourcePrefix.size())
+			continue;
+		sourceFolders.insert(path.substr(sourcePrefix.size(), nextSlash - sourcePrefix.size()));
+	}
+
+	auto applySourceMetadata = [&](PluginCatalogEntry& entry) {
+		const char* metadataNames[] = { "aether-plugin.json", "plugin.json", "metadata.json" };
+		for (const char* metaName : metadataNames) {
+			std::string metadataPath = entry.sourcePath + "/" + metaName;
+			std::wstring rawPath = L"/" + sourceOwner + L"/" + sourceName + L"/" + sourceRef + L"/" + Utf8ToWide(metadataPath);
+			std::string json;
+			if (!HttpGetUtf8(L"raw.githubusercontent.com", rawPath, json))
+				continue;
+
+			std::wstring metaNameValue = Utf8ToWide(JsonStringValue(json, "Name"));
+			std::wstring metaOwner = Utf8ToWide(JsonStringValue(json, "Owner"));
+			std::wstring metaDescription = Utf8ToWide(JsonStringValue(json, "Description"));
+			std::wstring metaVersion = Utf8ToWide(JsonStringValue(json, "PluginVersion"));
+			std::wstring metaRepository = Utf8ToWide(JsonStringValue(json, "RepositoryUrl"));
+			std::wstring metaWiki = Utf8ToWide(JsonStringValue(json, "WikiUrl"));
+			std::wstring metaLicense = Utf8ToWide(JsonStringValue(json, "LicenseIdentifier"));
+			if (!metaNameValue.empty()) entry.name = metaNameValue;
+			if (!metaOwner.empty()) entry.owner = metaOwner;
+			if (!metaDescription.empty()) entry.description = metaDescription;
+			if (!metaVersion.empty()) entry.version = metaVersion;
+			if (!metaRepository.empty()) entry.repositoryUrl = metaRepository;
+			if (!metaWiki.empty()) entry.wikiUrl = metaWiki;
+			if (!metaLicense.empty()) entry.license = metaLicense;
+			break;
+		}
+	};
+
+	auto findPortFolder = [&](const PluginCatalogEntry& entry) -> std::string {
+		std::wstring identity = entry.name + L" " + entry.owner + L" " + entry.description;
+		for (const std::string& folder : sourceFolders) {
+			if (CatalogNamesMatch(identity, Utf8ToWide(folder)))
+				return folder;
+		}
+		return std::string();
+	};
+
+	int loaded = 0;
+	if (pluginManagerTab == 0) {
+		for (const std::string& folder : sourceFolders) {
+			PluginCatalogEntry entry;
+			entry.name = Utf8ToWide(folder);
+			entry.owner = sourceOwner;
+			entry.description = L"Aether C++ filter source from Plugins.";
+			entry.driverVersion = L"Aether";
+			entry.sourcePath = sourcePrefix + folder;
+			entry.sourcePort = true;
+			entry.nativeAvailable = true;
+			entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
+			applySourceMetadata(entry);
+			pluginCatalogEntries.push_back(entry);
+			loaded++;
+		}
+
+		for (const PluginEntry& plugin : pluginEntries) {
+			bool alreadyListed = false;
+			std::wstring pluginIdentity = plugin.key + L" " + plugin.name + L" " + plugin.dllName;
+			for (const PluginCatalogEntry& entry : pluginCatalogEntries) {
+				if (CatalogNamesMatch(pluginIdentity, entry.name + L" " + Utf8ToWide(entry.sourcePath))) {
+					alreadyListed = true;
+					break;
+				}
+			}
+			if (alreadyListed)
+				continue;
+
+			PluginCatalogEntry local;
+			local.name = plugin.name.empty() ? plugin.dllName : plugin.name;
+			local.owner = L"Local";
+			local.description = plugin.description.empty() ? L"Installed native Aether DLL filter." : plugin.description;
+			local.version = L"Installed";
+			local.driverVersion = L"Aether";
+			local.downloadUrl = plugin.dllName;
+			local.nativeAvailable = true;
+			local.installed = true;
+			pluginCatalogEntries.push_back(local);
+		}
+	}
+	else {
+		std::wstring otdOwner = L"OpenTabletDriver";
+		std::wstring otdName = L"Plugin-Repository";
+		std::wstring otdRef = L"master";
+		std::wstring otdTreePath = L"/repos/" + otdOwner + L"/" + otdName + L"/git/trees/" + otdRef + L"?recursive=1";
+		std::string otdTreeJson;
+		if (!HttpGetUtf8(L"api.github.com", otdTreePath, otdTreeJson)) {
+			pluginCatalogStatus = L"Failed to load OTD plugin repository";
+			return false;
+		}
+
+		std::vector<std::string> paths = JsonTreePaths(otdTreeJson);
+		std::set<std::wstring> names;
+		int metadataRequestBudget = 96;
+		for (const std::string& path : paths) {
+			if (path.find("Repository/0.6.0.0/") == std::string::npos &&
+				path.find("Repository/0.6.6.0/") == std::string::npos &&
+				path.find("Repository/0.6.") == std::string::npos)
+				continue;
+
+			if (metadataRequestBudget-- <= 0)
+				break;
+
+			std::wstring rawPath = L"/" + otdOwner + L"/" + otdName + L"/" + otdRef + L"/" + Utf8ToWide(path);
+			std::string json;
+			if (!HttpGetUtf8(L"raw.githubusercontent.com", rawPath, json))
+				continue;
+
+			PluginCatalogEntry entry;
+			entry.name = Utf8ToWide(JsonStringValue(json, "Name"));
+			entry.owner = Utf8ToWide(JsonStringValue(json, "Owner"));
+			entry.description = Utf8ToWide(JsonStringValue(json, "Description"));
+			entry.version = Utf8ToWide(JsonStringValue(json, "PluginVersion"));
+			entry.driverVersion = Utf8ToWide(JsonStringValue(json, "SupportedDriverVersion"));
+			entry.downloadUrl = Utf8ToWide(JsonStringValue(json, "DownloadUrl"));
+			entry.repositoryUrl = Utf8ToWide(JsonStringValue(json, "RepositoryUrl"));
+			entry.wikiUrl = Utf8ToWide(JsonStringValue(json, "WikiUrl"));
+			entry.license = Utf8ToWide(JsonStringValue(json, "LicenseIdentifier"));
+			if (entry.name.empty())
+				continue;
+			std::wstring token = CatalogToken(entry.name);
+			if (!names.insert(token).second)
+				continue;
+
+			std::string portFolder = findPortFolder(entry);
+			if (!portFolder.empty()) {
+				entry.sourcePath = sourcePrefix + portFolder;
+				entry.sourcePort = true;
+				entry.nativeAvailable = true;
+				entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
+				applySourceMetadata(entry);
+			}
+
+			pluginCatalogEntries.push_back(entry);
+			loaded++;
+		}
+	}
+
+	UpdatePluginCatalogInstallState();
+	if (pluginCatalogEntries.empty())
+		pluginCatalogStatus = pluginManagerTab == 0
+			? L"No Aether filters found in Plugins/ or local DLL plugins"
+			: L"No OTD plugin metadata found";
+	else
+		pluginCatalogStatus = std::to_wstring(pluginCatalogEntries.size()) +
+			(pluginManagerTab == 0 ? L" Aether filter(s)" : L" OTD plugin(s)");
+
+	if (selectedCatalogIndex >= (int)pluginCatalogEntries.size())
+		selectedCatalogIndex = (int)pluginCatalogEntries.size() - 1;
+	if (selectedCatalogIndex < 0)
+		selectedCatalogIndex = 0;
+	pluginCatalogAnimT = 0.0f;
+
+	return !pluginCatalogEntries.empty();
+}
+
+bool AetherApp::DeleteInstalledPlugin(size_t index) {
+	if (index >= pluginEntries.size())
+		return false;
+
+	bool restartService = driver.isConnected;
+	if (restartService) {
+		driver.SendCommand("PluginEnable " + QuoteCommandArg(WideToUtf8(pluginEntries[index].key)) + " off");
+		driver.SendCommand("PluginReload");
+		Sleep(100);
+		driver.Stop();
+		Sleep(250);
+	}
+
+	size_t slash = pluginEntries[index].key.find(L'\\');
+	std::wstring folderName = slash == std::wstring::npos ? pluginEntries[index].name : pluginEntries[index].key.substr(0, slash);
+	std::wstring folderPath = GetPluginDirectory() + folderName;
+	bool ok = DeleteDirectoryTree(folderPath);
+	RefreshPluginList();
+	if (restartService) {
+		StartDriverService();
+	}
+	if (driver.isConnected) {
+		driver.SendCommand("PluginReload");
+		SendPluginSettings();
+		driver.SendCommand("PluginList");
+	}
+	UpdatePluginCatalogInstallState();
+	return ok;
+}
+
+bool AetherApp::InstallPluginWithDialog() {
+	PrepareModalDialog();
+	wchar_t filePath[MAX_PATH] = {};
+	OPENFILENAMEW ofn = {};
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFilter = L"Aether Native Plugin (*.dll)\0*.dll\0All Files (*.*)\0*.*\0";
+	ofn.lpstrFile = filePath;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrDefExt = L"dll";
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetOpenFileNameW(&ofn))
+		return false;
+
+	if (!driver.isConnected)
+		StartDriverService();
+
+	if (driver.isConnected) {
+		std::string path = WideToUtf8(filePath);
+		driver.SendCommand("PluginInstall \"" + path + "\"");
+		driver.SendCommand("PluginList");
+		Sleep(80);
+		RefreshPluginList();
+		SendPluginSettings();
+		if (pluginManagerOpen && pluginManagerTab == 0)
+			RefreshPluginCatalog();
+		else
+			UpdatePluginCatalogInstallState();
+		return true;
+	}
+
+	RefreshPluginList();
+	if (pluginManagerOpen && pluginManagerTab == 0)
+		RefreshPluginCatalog();
+	return false;
+}
+
+bool AetherApp::InstallPluginSourceWithDialog() {
+	PrepareModalDialog();
+	HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	bool shouldUninit = SUCCEEDED(initHr);
+
+	IFileOpenDialog* dialog = nullptr;
+	HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+	if (FAILED(hr)) {
+		if (shouldUninit)
+			CoUninitialize();
+		pluginListStatus = L"Folder picker is not available";
+		return false;
+	}
+
+	DWORD options = 0;
+	dialog->GetOptions(&options);
+	dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+	dialog->SetTitle(L"Select Aether plugin source folder");
+
+	bool installed = false;
+	if (SUCCEEDED(dialog->Show(hWnd))) {
+		IShellItem* item = nullptr;
+		if (SUCCEEDED(dialog->GetResult(&item))) {
+			PWSTR folderPath = nullptr;
+			if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &folderPath))) {
+				std::wstring dllPath;
+				std::wstring status;
+				if (BuildAetherPluginSourceFolder(folderPath, dllPath, status)) {
+					if (!driver.isConnected)
+						StartDriverService();
+					if (driver.isConnected) {
+						driver.SendCommand("PluginInstall \"" + WideToUtf8(dllPath) + "\"");
+						driver.SendCommand("PluginList");
+						Sleep(100);
+						RefreshPluginList();
+						SendPluginSettings();
+						if (pluginManagerOpen && pluginManagerTab == 0)
+							RefreshPluginCatalog();
+						else
+							UpdatePluginCatalogInstallState();
+						installed = true;
+					}
+					else {
+						status = L"Build completed, but service is offline";
+					}
+				}
+				pluginListStatus = status;
+				pluginCatalogStatus = status;
+				CoTaskMemFree(folderPath);
+			}
+			item->Release();
+		}
+	}
+
+	dialog->Release();
+	if (shouldUninit)
+		CoUninitialize();
+	return installed;
+}
+
+void AetherApp::OpenExternalUrl(const std::wstring& url) {
+	if (url.empty()) {
+		pluginCatalogStatus = L"No URL available for selected plugin";
+		return;
+	}
+
+	HINSTANCE result = ShellExecuteW(hWnd, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	if ((INT_PTR)result <= 32)
+		pluginCatalogStatus = L"Failed to open URL";
+}
+
+bool AetherApp::DownloadGitHubSourcePort(const PluginCatalogEntry& entry, std::wstring& folderPath, std::wstring& status) {
+	if (entry.sourcePath.empty()) {
+		status = L"Selected plugin has no source folder mapping";
+		return false;
+	}
+
+	std::wstring repoOwner = pluginRepoOwner.empty() ? L"OpenTabletDriver" : pluginRepoOwner;
+	std::wstring repoName = pluginRepoName.empty() ? L"Plugin-Repository" : pluginRepoName;
+	std::wstring repoRef = pluginRepoRef.empty() ? L"master" : pluginRepoRef;
+	std::wstring treePath = L"/repos/" + repoOwner + L"/" + repoName + L"/git/trees/" + repoRef + L"?recursive=1";
+
+	std::string treeJson;
+	if (!HttpGetUtf8(L"api.github.com", treePath, treeJson)) {
+		status = L"Failed to read GitHub source tree";
+		return false;
+	}
+
+	std::vector<std::string> paths = JsonTreePaths(treeJson, false);
+	std::string prefix = entry.sourcePath + "/";
+	std::wstring downloadRoot = GetPluginDirectory() + L"_sources\\" + SanitizePathSegment(entry.name) + L"\\";
+	DeleteDirectoryTree(downloadRoot);
+	std::error_code ec;
+	std::filesystem::create_directories(downloadRoot, ec);
+	if (ec) {
+		status = L"Failed to create source download folder";
+		return false;
+	}
+
+	int downloaded = 0;
+	for (const std::string& path : paths) {
+		if (path.find(prefix) != 0)
+			continue;
+
+		std::string relative = path.substr(prefix.size());
+		if (relative.empty())
+			continue;
+
+		std::wstring rawPath = L"/" + repoOwner + L"/" + repoName + L"/" + repoRef + L"/" + Utf8ToWide(path);
+		std::string body;
+		if (!HttpGetUtf8(L"raw.githubusercontent.com", rawPath, body))
+			continue;
+
+		std::filesystem::path outputPath = std::filesystem::path(downloadRoot) / Utf8ToWide(relative);
+		std::filesystem::create_directories(outputPath.parent_path(), ec);
+		if (ec)
+			continue;
+
+		std::ofstream out(outputPath, std::ios::binary);
+		if (!out.good())
+			continue;
+		out.write(body.data(), (std::streamsize)body.size());
+		downloaded++;
+	}
+
+	if (downloaded == 0) {
+		status = L"No source files were downloaded from the GitHub source folder";
+		return false;
+	}
+
+	folderPath = downloadRoot;
+	status = L"Downloaded " + std::to_wstring(downloaded) + L" source file(s)";
+	return true;
+}
+
+bool AetherApp::InstallRepositoryPlugin(const PluginCatalogEntry& entry) {
+	if (entry.installed) {
+		pluginCatalogStatus = L"Plugin is already installed";
+		return true;
+	}
+
+	if (entry.sourcePort) {
+		std::wstring sourceFolder;
+		std::wstring status;
+		if (!DownloadGitHubSourcePort(entry, sourceFolder, status)) {
+			pluginCatalogStatus = status;
+			return false;
+		}
+
+		std::wstring dllPath;
+		if (!BuildAetherPluginSourceFolder(sourceFolder, dllPath, status)) {
+			pluginCatalogStatus = status;
+			return false;
+		}
+
+		if (!driver.isConnected)
+			StartDriverService();
+		if (!driver.isConnected) {
+			pluginCatalogStatus = L"Source port built, but service is offline";
+			return false;
+		}
+
+		driver.SendCommand("PluginInstall \"" + WideToUtf8(dllPath) + "\"");
+		driver.SendCommand("PluginReload");
+		driver.SendCommand("PluginList");
+		Sleep(120);
+		RefreshPluginList();
+		SendPluginSettings();
+		UpdatePluginCatalogInstallState();
+		pluginCatalogStatus = L"Built and installed source port";
+		return true;
+	}
+
+	wchar_t userProfile[MAX_PATH] = {};
+	GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH);
+	std::wstring desktop111 = std::wstring(userProfile) + L"\\Desktop\\111\\";
+
+	std::wstring sourceDir;
+	std::wstring expectedDll;
+	std::wstring identity = entry.name + L" " + entry.description + L" " + entry.downloadUrl;
+	if (WideContainsNoCase(identity, L"Pleasant")) {
+		sourceDir = desktop111 + L"PleasantAim";
+		expectedDll = sourceDir + L"\\bin\\Release\\native\\PleasantAim.dll";
+	}
+	else if (WideContainsNoCase(identity, L"Hawku") && WideContainsNoCase(identity, L"Noise")) {
+		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
+		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_HawkuNoiseReduction.dll";
+	}
+	else if (WideContainsNoCase(identity, L"Hawku") || WideContainsNoCase(identity, L"Smoothing")) {
+		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
+		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_HawkuSmoothing.dll";
+	}
+	else if (WideContainsNoCase(identity, L"Devocub") || WideContainsNoCase(identity, L"Antichatter")) {
+		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
+		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_DevocubAntichatter.dll";
+	}
+
+	if (sourceDir.empty()) {
+		pluginCatalogStatus = L"No native Aether port is mapped yet. Use Build Source with an Aether plugin source folder.";
+		return false;
+	}
+	if (!DirectoryExistsWide(sourceDir)) {
+		pluginCatalogStatus = L"Native port source folder was not found";
+		return false;
+	}
+
+	std::wstring status;
+	std::wstring script = FindBuildScript(sourceDir);
+	DWORD exitCode = 1;
+	if (!script.empty()) {
+		std::wstring commandLine = L"powershell.exe -ExecutionPolicy Bypass -File " + QuoteArg(script);
+		if (!RunHiddenProcess(commandLine, sourceDir, exitCode) || exitCode != 0) {
+			wchar_t buffer[128];
+			swprintf_s(buffer, L"Native port build failed (%lu)", exitCode);
+			pluginCatalogStatus = buffer;
+			return false;
+		}
+	}
+	else {
+		std::wstring builtDll;
+		if (!BuildAetherPluginSourceFolder(sourceDir, builtDll, status)) {
+			pluginCatalogStatus = status;
+			return false;
+		}
+		expectedDll = builtDll;
+	}
+
+	if (!FileExistsWide(expectedDll) || !DllHasAetherExports(expectedDll)) {
+		pluginCatalogStatus = L"Native port did not produce a valid Aether DLL";
+		return false;
+	}
+
+	if (!driver.isConnected)
+		StartDriverService();
+	if (!driver.isConnected) {
+		pluginCatalogStatus = L"Native port built, but service is offline";
+		return false;
+	}
+
+	driver.SendCommand("PluginInstall \"" + WideToUtf8(expectedDll) + "\"");
+	driver.SendCommand("PluginReload");
+	driver.SendCommand("PluginList");
+	Sleep(120);
+	RefreshPluginList();
+	SendPluginSettings();
+	UpdatePluginCatalogInstallState();
+	pluginCatalogStatus = L"Installed native Aether port";
+	return true;
 }
 
 void AetherApp::ClampScrollOffsets() {
@@ -1293,6 +3427,39 @@ void AetherApp::DrawBackground() {
 	if (particleStyle == 3) return;
 
 	if (particleStyle == 0) {
+		if (!twinkleStarsInitialized) {
+			float minX = Theme::Size::SidebarWidth + 18.0f;
+			float minY = Theme::Size::HeaderHeight + 14.0f;
+			float spanX = std::max(1.0f, w - minX - 18.0f);
+			float spanY = std::max(1.0f, h - minY - 38.0f);
+			for (int i = 0; i < MAX_TWINKLE_STARS; i++) {
+				TwinkleStar& ts = twinkleStars[i];
+				ts.x = minX + (float)(rand() % (int)spanX);
+				ts.y = minY + (float)(rand() % (int)spanY);
+				ts.phase = (rand() % 628) / 100.0f;
+				ts.speed = 0.7f + (rand() % 140) / 100.0f;
+				ts.size = 0.55f + (rand() % 120) / 100.0f;
+				ts.alpha = 0.04f + (rand() % 12) / 100.0f;
+			}
+			twinkleStarsInitialized = true;
+		}
+
+		for (int i = 0; i < MAX_TWINKLE_STARS; i++) {
+			TwinkleStar& ts = twinkleStars[i];
+			float pulse = sinf(bgAnimT * ts.speed + ts.phase) * 0.5f + 0.5f;
+			float alpha = ts.alpha * (0.35f + pulse * 0.85f);
+			D2D1_COLOR_F starCol = LerpColor(Theme::TextMuted(), Theme::AccentPrimary(), pulse * 0.35f);
+			starCol.a = alpha;
+			renderer.FillCircle(ts.x, ts.y, ts.size, starCol);
+			if (ts.size > 1.2f && pulse > 0.68f) {
+				D2D1_COLOR_F rayCol = starCol;
+				rayCol.a = alpha * 0.55f;
+				float ray = ts.size * (2.2f + pulse);
+				renderer.DrawLine(ts.x - ray, ts.y, ts.x + ray, ts.y, rayCol, 0.7f);
+				renderer.DrawLine(ts.x, ts.y - ray, ts.x, ts.y + ray, rayCol, 0.7f);
+			}
+		}
+
 		starSpawnTimer -= deltaTime;
 		if (starSpawnTimer <= 0.0f) {
 			for (int i = 0; i < MAX_STARS; i++) {
@@ -1549,8 +3716,11 @@ void AetherApp::DrawHeader() {
 
 	if (startStopBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 		if (driver.isConnected) {
+			autoStartEnabled = false;
 			driver.Stop();
 		} else {
+			autoStartEnabled = true;
+			autoStartRetryTimer = 0.0f;
 			StartDriverService();
 		}
 	}
@@ -1594,6 +3764,7 @@ void AetherApp::DrawAreaPanel() {
 	float hw = areaSingleColumn ? cw : (cw - Theme::Size::Padding) * 0.5f;
 	float yStart = Theme::Size::HeaderHeight + Theme::Size::Padding;
 	float y = yStart - areaScrollY;
+	float visibleContentH = std::max(360.0f, GetContentAreaBottom() - yStart - Theme::Size::Padding);
 
 	SectionHeader sec;
 	auto drawValueControl = [&](Slider& control, float px, float py, float pw) -> bool {
@@ -1605,6 +3776,14 @@ void AetherApp::DrawAreaPanel() {
 			control.Draw(renderer);
 			return changed;
 		}
+		bool changed = control.UpdateInput(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
+		control.DrawInput(renderer);
+		return changed;
+	};
+	auto drawInputControl = [&](Slider& control, float px, float py, float pw) -> bool {
+		control.x = px;
+		control.y = py;
+		control.width = pw;
 		bool changed = control.UpdateInput(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
 		control.DrawInput(renderer);
 		return changed;
@@ -1646,8 +3825,9 @@ void AetherApp::DrawAreaPanel() {
 		y += selectorH + 8.0f;
 	}
 
+	float toggleRowY = y;
 	area.customValues.x = cx;
-	area.customValues.y = y;
+	area.customValues.y = toggleRowY;
 	bool customValuesChanged = area.customValues.Update(mouseX, mouseY, mouseClicked, deltaTime);
 	if (customValuesChanged) {
 		if (!area.customValues.value) {
@@ -1657,13 +3837,41 @@ void AetherApp::DrawAreaPanel() {
 		AutoSaveConfig();
 	}
 	area.customValues.Draw(renderer);
+
+	if (areaSingleColumn) {
+		y += 32.0f;
+		area.autoCenter.x = cx;
+		area.autoCenter.y = y;
+	}
+	else {
+		area.autoCenter.x = cx + 190.0f;
+		area.autoCenter.y = toggleRowY;
+	}
+	if (area.autoCenter.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		if (area.autoCenter.value) {
+			CenterScreenArea();
+			ApplyAllSettings();
+		}
+		AutoSaveConfig();
+	}
+	area.autoCenter.Draw(renderer);
+
 	valueControlStep = area.customValues.value ? 42.0f : 48.0f;
 	y += 36.0f;
 
 	{
-		float previewW = areaSingleColumn ? (cw - 8) : (hw - 20);
-		float previewH = previewW * (detectedScreenH / detectedScreenW);
-		float previewX = cx;
+		float previewMaxW = areaSingleColumn ? (cw - 8) : (hw - 20);
+		float screenAspect = std::max(0.1f, detectedScreenW / std::max(1.0f, detectedScreenH));
+		float previewW = previewMaxW;
+		float previewH = previewW / screenAspect;
+		if (!areaSingleColumn) {
+			float previewMaxH = Clamp(visibleContentH * 0.34f, 240.0f, 340.0f);
+			if (previewH > previewMaxH) {
+				previewH = previewMaxH;
+				previewW = previewH * screenAspect;
+			}
+		}
+		float previewX = areaSingleColumn ? cx : cx + (previewMaxW - previewW) * 0.5f;
 		float previewY = y;
 
 		renderer.FillRoundedRect(previewX, previewY, previewW, previewH, 6, Theme::BgElevated());
@@ -1684,6 +3892,7 @@ void AetherApp::DrawAreaPanel() {
 
 		bool hoveringScreenMap = PointInRect(mouseX, mouseY, mappedX, mappedY, mappedW, mappedH);
 		if (hoveringScreenMap && mouseClicked && !isDraggingArea) {
+			PushUndoCheckpoint();
 			isDraggingArea = true;
 			dragTarget = 1;
 			dragStartMouseX = mouseX;
@@ -1764,7 +3973,10 @@ void AetherApp::DrawAreaPanel() {
 
 		ClampScreenArea();
 		if ((screenWidthChanged || screenHeightChanged) && !screenXChanged && !screenYChanged && !isDraggingArea) {
-			if (area.customValues.value) {
+			if (area.autoCenter.value) {
+				CenterScreenArea();
+			}
+			else if (area.customValues.value) {
 				float centerX = oldScreenX + oldScreenW * 0.5f;
 				float centerY = oldScreenY + oldScreenH * 0.5f;
 				area.screenX.value = centerX - area.screenWidth.value * 0.5f;
@@ -1776,6 +3988,10 @@ void AetherApp::DrawAreaPanel() {
 			}
 		}
 		if (screenChanged) {
+			if ((screenWidthChanged || screenHeightChanged) && !area.lockAspect.value && area.screenHeight.value > 1.0f) {
+				area.aspectRatio.value = Clamp(area.screenWidth.value / area.screenHeight.value, area.aspectRatio.minVal, area.aspectRatio.maxVal);
+				area.aspectRatio.animValue = area.aspectRatio.value;
+			}
 			ApplyAspectLock(false);
 			ApplyAllSettings();
 		}
@@ -1789,9 +4005,18 @@ void AetherApp::DrawAreaPanel() {
 		float fullTabletW = (driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f;
 		float fullTabletH = (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f;
 
-		float previewW = hw - 20;
-		float previewH = previewW * (fullTabletH / fullTabletW);
-		float previewX = cx;
+		float previewMaxW = areaSingleColumn ? (cw - 8) : (hw - 20);
+		float tabletAspect = std::max(0.1f, fullTabletW / std::max(1.0f, fullTabletH));
+		float previewW = previewMaxW;
+		float previewH = previewW / tabletAspect;
+		if (!areaSingleColumn) {
+			float previewMaxH = Clamp(visibleContentH * 0.29f, 190.0f, 285.0f);
+			if (previewH > previewMaxH) {
+				previewH = previewMaxH;
+				previewW = previewH * tabletAspect;
+			}
+		}
+		float previewX = areaSingleColumn ? cx : cx + (previewMaxW - previewW) * 0.5f;
 		float previewY = y;
 
 		renderer.FillRoundedRect(previewX, previewY, previewW, previewH, 6, Theme::BgElevated());
@@ -1811,6 +4036,7 @@ void AetherApp::DrawAreaPanel() {
 
 		bool hoveringTabletArea = PointInRect(mouseX, mouseY, areaX, areaY, areaW, areaH);
 		if (hoveringTabletArea && mouseClicked && !isDraggingArea) {
+			PushUndoCheckpoint();
 			isDraggingArea = true;
 			dragTarget = 2;
 			dragStartMouseX = mouseX;
@@ -1877,6 +4103,8 @@ void AetherApp::DrawAreaPanel() {
 		bool tabletChanged = false;
 		bool tabletWidthChanged = false;
 		bool tabletHeightChanged = false;
+		bool tabletXChanged = false;
+		bool tabletYChanged = false;
 
 		if (areaSingleColumn) {
 			y = previewY + previewH + 12;
@@ -1885,12 +4113,16 @@ void AetherApp::DrawAreaPanel() {
 			tabletHeightChanged = drawValueControl(area.tabletHeight, cx, y, cw);
 			y += valueControlStep;
 			tabletChanged = tabletWidthChanged || tabletHeightChanged;
-			if (area.customValues.value) {
-				tabletChanged |= drawValueControl(area.tabletX, cx, y, cw);
-				y += valueControlStep;
-				tabletChanged |= drawValueControl(area.tabletY, cx, y, cw);
-				y += valueControlStep;
-			}
+			tabletXChanged = area.customValues.value
+				? drawValueControl(area.tabletX, cx, y, cw)
+				: drawInputControl(area.tabletX, cx, y, cw);
+			tabletChanged |= tabletXChanged;
+			y += area.customValues.value ? valueControlStep : 48.0f;
+			tabletYChanged = area.customValues.value
+				? drawValueControl(area.tabletY, cx, y, cw)
+				: drawInputControl(area.tabletY, cx, y, cw);
+			tabletChanged |= tabletYChanged;
+			y += area.customValues.value ? valueControlStep : 48.0f;
 		} else {
 			float controlX = cx + hw + 8;
 			float controlW = hw - 8;
@@ -1898,12 +4130,15 @@ void AetherApp::DrawAreaPanel() {
 			tabletHeightChanged = drawValueControl(area.tabletHeight, controlX, previewY + valueControlStep, controlW);
 			tabletChanged = tabletWidthChanged || tabletHeightChanged;
 
-			int tabletRows = 2;
-			if (area.customValues.value) {
-				tabletChanged |= drawValueControl(area.tabletX, controlX, previewY + valueControlStep * 2.0f, controlW);
-				tabletChanged |= drawValueControl(area.tabletY, controlX, previewY + valueControlStep * 3.0f, controlW);
-				tabletRows = 4;
-			}
+			tabletXChanged = area.customValues.value
+				? drawValueControl(area.tabletX, controlX, previewY + valueControlStep * 2.0f, controlW)
+				: drawInputControl(area.tabletX, controlX, previewY + valueControlStep * 2.0f, controlW);
+			tabletYChanged = area.customValues.value
+				? drawValueControl(area.tabletY, controlX, previewY + valueControlStep * 3.0f, controlW)
+				: drawInputControl(area.tabletY, controlX, previewY + valueControlStep * 3.0f, controlW);
+			tabletChanged |= tabletXChanged;
+			tabletChanged |= tabletYChanged;
+			int tabletRows = 4;
 
 			float controlsH = valueControlStep * (float)tabletRows - 6.0f;
 			y = std::max(previewY + previewH, previewY + controlsH) + 16;
@@ -1917,22 +4152,43 @@ void AetherApp::DrawAreaPanel() {
 		}
 	}
 
+	DrawConfigManager(cx, y, cw);
+	y += 8.0f;
+
 	sec.Layout(cx, y, cw, L"OPTIONS");
 	y += sec.Draw(renderer);
 
-	area.rotation.y = y; area.rotation.x = cx; area.rotation.width = hw - 8;
+	float optionW = areaSingleColumn ? cw : hw - 8;
+	float optionRightX = areaSingleColumn ? cx : cx + hw + 8;
+
+	area.rotation.y = y; area.rotation.x = cx; area.rotation.width = optionW;
 	if (area.rotation.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime)) {
 		ApplyAllSettings();
 	}
 	area.rotation.Draw(renderer);
 
-	area.lockAspect.y = y; area.lockAspect.x = cx + hw + 8;
+	if (areaSingleColumn)
+		y += 48.0f;
+
+	area.lockAspect.y = y; area.lockAspect.x = optionRightX;
 	if (area.lockAspect.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 		ApplyAspectLock(false);
 		ApplyAllSettings();
 	}
 	area.lockAspect.Draw(renderer);
-	y += 36;
+	y += 36.0f;
+
+	if (area.lockAspect.value) {
+		area.aspectRatio.y = y;
+		area.aspectRatio.x = cx;
+		area.aspectRatio.width = cw;
+		if (area.aspectRatio.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime)) {
+			ApplyAspectLock(false);
+			ApplyAllSettings();
+		}
+		area.aspectRatio.Draw(renderer);
+		y += 48.0f;
+	}
 
 	forceFullArea.y = y; forceFullArea.x = cx;
 	if (forceFullArea.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
@@ -1989,22 +4245,6 @@ void AetherApp::DrawAreaPanel() {
 	}
 	y += 36;
 
-	float btnW = 100.0f;
-	float btnGap = 8.0f;
-	float btnsX = cx + cw - (btnW * 2 + btnGap);
-	saveConfigBtn.Layout(btnsX, y, btnW, 28, L"Save Config", false);
-	if (saveConfigBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
-		AutoSaveConfig();
-	}
-	saveConfigBtn.Draw(renderer);
-
-	loadConfigBtn.Layout(btnsX + btnW + btnGap, y, btnW, 28, L"Load Config", false);
-	if (loadConfigBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
-		AutoLoadConfig();
-	}
-	loadConfigBtn.Draw(renderer);
-	y += 40;
-
 	areaContentH = (y + areaScrollY) - yStart + 40;
 }
 
@@ -2040,6 +4280,17 @@ void AetherApp::DrawSettingsPanel() {
 	tipThreshold.Draw(renderer);
 	y += 48;
 
+	sec.Layout(cx, y, cw, L"UI SCALE"); y += sec.Draw(renderer);
+	dpiScale.x = cx;
+	dpiScale.y = y;
+	dpiScale.width = cw;
+	if (dpiScale.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime)) {
+		ApplyDpiScale();
+		AutoSaveConfig();
+	}
+	dpiScale.Draw(renderer);
+	y += 52;
+
 	sec.Layout(cx, y, cw, L"THEME"); y += sec.Draw(renderer);
 	DrawThemeSelector(cx, y, cw);
 
@@ -2070,10 +4321,6 @@ void AetherApp::DrawSettingsPanel() {
 		y += 38;
 	}
 
-	sec.Layout(cx, y, cw, L"PROFILES"); y += sec.Draw(renderer);
-	DrawProfileSelector(cx, y, cw);
-	y += 44;
-
 	settingsContentH = (y + settingsScrollY) - yStart + 40;
 }
 
@@ -2091,6 +4338,7 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "ScreenX=" << area.screenX.value << "\n";
 	f << "ScreenY=" << area.screenY.value << "\n";
 	f << "CustomValues=" << (int)area.customValues.value << "\n";
+	f << "AutoCenter=" << (int)area.autoCenter.value << "\n";
 	f << "Rotation=" << area.rotation.value << "\n";
 	f << "OutputMode=" << outputMode.selected << "\n";
 	f << "ButtonTip=" << buttonTip.selected << "\n";
@@ -2102,11 +4350,15 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "TipThreshold=" << tipThreshold.value << "\n";
 	f << "Overclock=" << (int)overclockEnabled.value << "\n";
 	f << "OverclockHz=" << overclockHz.value << "\n";
+	f << "PenRateLimit=" << (int)penRateLimitEnabled.value << "\n";
+	f << "PenRateLimitHz=" << penRateLimitHz.value << "\n";
 	f << "LockAspect=" << (int)area.lockAspect.value << "\n";
+	f << "AspectRatio=" << area.aspectRatio.value << "\n";
 	f << "AccentR=" << Theme::Custom::AccentR << "\n";
 	f << "AccentG=" << Theme::Custom::AccentG << "\n";
 	f << "AccentB=" << Theme::Custom::AccentB << "\n";
 	f << "UITheme=" << currentTheme << "\n";
+	f << "DpiScale=" << dpiScale.value << "\n";
 
 	f << "\n";
 	f << "SmoothingEnabled=" << (int)filters.smoothingEnabled.value << "\n";
@@ -2155,10 +4407,27 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "AetherSnapping=" << (int)aether.snappingEnabled.value << "\n";
 	f << "AetherSnapInner=" << aether.snappingInner.value << "\n";
 	f << "AetherSnapOuter=" << aether.snappingOuter.value << "\n";
+	f << "AetherRhythmFlow=" << (int)aether.rhythmFlowEnabled.value << "\n";
+	f << "AetherRhythmStrength=" << aether.rhythmFlowStrength.value << "\n";
+	f << "AetherRhythmRelease=" << aether.rhythmFlowRelease.value << "\n";
+	f << "AetherRhythmJitter=" << aether.rhythmFlowJitter.value << "\n";
 	f << "AetherSuppression=" << (int)aether.suppressionEnabled.value << "\n";
 	f << "AetherSuppressTime=" << aether.suppressionTime.value << "\n";
 	f << "Visualizer=" << (int)visualizerToggle.value << "\n";
 	f << "ParticleStyle=" << particleStyle << "\n";
+
+	f << "\n";
+	f << "PluginRepoOwner=" << WideToUtf8(pluginRepoOwner) << "\n";
+	f << "PluginRepoName=" << WideToUtf8(pluginRepoName) << "\n";
+	f << "PluginRepoRef=" << WideToUtf8(pluginRepoRef) << "\n";
+	for (const PluginEntry& plugin : pluginEntries) {
+		f << "PluginEnabled." << WideToUtf8(plugin.key) << "=" << (int)plugin.enabled.value << "\n";
+		for (const auto& option : plugin.options) {
+			f << "PluginOption." << WideToUtf8(plugin.key) << "." << option.key << "="
+				<< (option.kind == PluginEntry::PluginOption::ToggleOption ? (option.toggle.value ? 1.0f : 0.0f) : option.slider.value)
+				<< "\n";
+		}
+	}
 
 	f.close();
 }
@@ -2167,13 +4436,37 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 	std::ifstream f(path);
 	if (!f.is_open()) return;
 
+	float loadedAccentR = Theme::Custom::AccentR;
+	float loadedAccentG = Theme::Custom::AccentG;
+	float loadedAccentB = Theme::Custom::AccentB;
+	bool hasLoadedAccent = false;
 	std::string line;
 	while (std::getline(f, line)) {
 		if (line.empty() || line[0] == '#') continue;
 		size_t eq = line.find('=');
 		if (eq == std::string::npos) continue;
 		std::string key = line.substr(0, eq);
-		float val = std::stof(line.substr(eq + 1));
+		std::string rawValue = line.substr(eq + 1);
+		if (key == "PluginRepoOwner") {
+			pluginRepoOwner = Utf8ToWide(rawValue);
+			continue;
+		}
+		if (key == "PluginRepoName") {
+			pluginRepoName = Utf8ToWide(rawValue);
+			continue;
+		}
+		if (key == "PluginRepoRef") {
+			pluginRepoRef = Utf8ToWide(rawValue);
+			continue;
+		}
+
+		float val = 0.0f;
+		try {
+			val = std::stof(rawValue);
+		}
+		catch (...) {
+			continue;
+		}
 
 		if (key == "TabletWidth") area.tabletWidth.value = val;
 		else if (key == "TabletHeight") area.tabletHeight.value = val;
@@ -2184,6 +4477,7 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "ScreenX") area.screenX.value = val;
 		else if (key == "ScreenY") area.screenY.value = val;
 		else if (key == "CustomValues") area.customValues.value = (val > 0.5f);
+		else if (key == "AutoCenter") area.autoCenter.value = (val > 0.5f);
 		else if (key == "Rotation") area.rotation.value = val;
 		else if (key == "OutputMode") outputMode.selected = (int)val;
 		else if (key == "ButtonTip") buttonTip.selected = (int)val;
@@ -2195,15 +4489,29 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "TipThreshold") tipThreshold.value = val;
 		else if (key == "Overclock") overclockEnabled.value = (val > 0.5f);
 		else if (key == "OverclockHz") overclockHz.value = val;
+		else if (key == "PenRateLimit") penRateLimitEnabled.value = (val > 0.5f);
+		else if (key == "PenRateLimitHz") penRateLimitHz.value = val;
 		else if (key == "LockAspect") area.lockAspect.value = (val > 0.5f);
-		else if (key == "AccentR") Theme::Custom::AccentR = val;
-		else if (key == "AccentG") Theme::Custom::AccentG = val;
-		else if (key == "AccentB") Theme::Custom::AccentB = val;
+		else if (key == "AspectRatio") area.aspectRatio.value = Clamp(val, area.aspectRatio.minVal, area.aspectRatio.maxVal);
+		else if (key == "AccentR") { loadedAccentR = Clamp(val, 0.0f, 1.0f); hasLoadedAccent = true; }
+		else if (key == "AccentG") { loadedAccentG = Clamp(val, 0.0f, 1.0f); hasLoadedAccent = true; }
+		else if (key == "AccentB") { loadedAccentB = Clamp(val, 0.0f, 1.0f); hasLoadedAccent = true; }
 		else if (key == "UITheme") {
 			int idx = (int)val;
 			if (idx < 0 || idx >= uiThemeCount) idx = 0; 
 			currentTheme = idx;
 			Theme::ApplyTheme(uiThemes[idx]);
+		}
+		else if (key == "DpiScale") {
+			dpiScale.value = Clamp(val, dpiScale.minVal, dpiScale.maxVal);
+			dpiScale.animValue = dpiScale.value;
+		}
+		else if (key == "DpiScaleMode") {
+			int idx = (int)val;
+			float legacyValues[] = { GetSystemDpiScale() * 100.0f, 100.0f, 125.0f, 150.0f, 175.0f, 200.0f };
+			if (idx < 0 || idx > 5) idx = 0;
+			dpiScale.value = Clamp(legacyValues[idx], dpiScale.minVal, dpiScale.maxVal);
+			dpiScale.animValue = dpiScale.value;
 		}
 		else if (key == "SmoothingEnabled") filters.smoothingEnabled.value = (val > 0.5f);
 		else if (key == "SmoothingLatency") filters.smoothingLatency.value = val;
@@ -2244,17 +4552,70 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "AetherSnapping") aether.snappingEnabled.value = (val > 0.5f);
 		else if (key == "AetherSnapInner") aether.snappingInner.value = val;
 		else if (key == "AetherSnapOuter") aether.snappingOuter.value = val;
+		else if (key == "AetherRhythmFlow") aether.rhythmFlowEnabled.value = (val > 0.5f);
+		else if (key == "AetherRhythmStrength") aether.rhythmFlowStrength.value = val;
+		else if (key == "AetherRhythmRelease") aether.rhythmFlowRelease.value = val;
+		else if (key == "AetherRhythmJitter") aether.rhythmFlowJitter.value = val;
 		else if (key == "AetherSuppression") aether.suppressionEnabled.value = (val > 0.5f);
 		else if (key == "AetherSuppressTime") aether.suppressionTime.value = val;
 		else if (key == "Visualizer") visualizerToggle.value = (val > 0.5f);
 		else if (key == "ParticleStyle") { particleStyle = (int)val; if (particleStyle < 0 || particleStyle > 3) particleStyle = 0; }
+		else if (key.rfind("PluginEnabled.", 0) == 0) {
+			if (pluginListDirty)
+				RefreshPluginList();
+
+			std::wstring pluginKey = Utf8ToWide(key.substr(14));
+			for (PluginEntry& plugin : pluginEntries) {
+				if (_wcsicmp(plugin.key.c_str(), pluginKey.c_str()) == 0) {
+					plugin.enabled.value = (val > 0.5f);
+					plugin.enabled.animT = plugin.enabled.value ? 1.0f : 0.0f;
+					break;
+				}
+			}
+		}
+		else if (key.rfind("PluginOption.", 0) == 0) {
+			if (pluginListDirty)
+				RefreshPluginList();
+
+			std::string optionPath = key.substr(13);
+			size_t sep = optionPath.rfind('.');
+			if (sep != std::string::npos) {
+				std::wstring pluginKey = Utf8ToWide(optionPath.substr(0, sep));
+				std::string optionKey = optionPath.substr(sep + 1);
+				for (PluginEntry& plugin : pluginEntries) {
+					if (_wcsicmp(plugin.key.c_str(), pluginKey.c_str()) == 0) {
+						for (auto& option : plugin.options) {
+							if (option.key == optionKey) {
+								if (option.kind == PluginEntry::PluginOption::ToggleOption) {
+									option.toggle.value = (val > 0.5f);
+									option.toggle.animT = option.toggle.value ? 1.0f : 0.0f;
+								}
+								else {
+									option.slider.value = Clamp(val, option.slider.minVal, option.slider.maxVal);
+									option.slider.animValue = option.slider.value;
+								}
+								break;
+							}
+						}
+						break;
+					}
+				}
+			}
+		}
 	}
 	f.close();
 	ClampScreenArea();
+	area.aspectRatio.value = Clamp(area.aspectRatio.value, area.aspectRatio.minVal, area.aspectRatio.maxVal);
+	area.aspectRatio.animValue = area.aspectRatio.value;
 	if (!area.customValues.value)
 		CenterScreenArea();
 	ApplyAspectLock(false);
+	ApplyDpiScale();
+	if (hasLoadedAccent)
+		Theme::Custom::SetAccent(loadedAccentR, loadedAccentG, loadedAccentB);
 	accentPicker.SetRGB(Theme::Custom::AccentR, Theme::Custom::AccentG, Theme::Custom::AccentB);
+	if (IsDefaultPluginRepoOwner(pluginRepoOwner))
+		pluginRepoOwner.clear();
 	
 	{
 		wchar_t hexBuf[16];
@@ -2264,6 +4625,490 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 			(int)(Theme::Custom::AccentB * 255));
 		wcscpy_s(hexColorInput.buffer, hexBuf);
 		hexColorInput.cursor = (int)wcslen(hexBuf);
+	}
+	wcscpy_s(pluginRepoOwnerInput.buffer, pluginRepoOwner.c_str());
+	pluginRepoOwnerInput.cursor = (int)pluginRepoOwner.length();
+	wcscpy_s(pluginRepoNameInput.buffer, pluginRepoName.c_str());
+	pluginRepoNameInput.cursor = (int)pluginRepoName.length();
+	wcscpy_s(pluginRepoRefInput.buffer, pluginRepoRef.c_str());
+	pluginRepoRefInput.cursor = (int)pluginRepoRef.length();
+	SyncLoadedControlVisuals();
+}
+
+void AetherApp::DrawPluginFilterControls(float cx, float& y, float cw, float hw, float filterRightX, bool filterSingleColumn, bool& filterChanged) {
+	if (pluginListDirty)
+		RefreshPluginList();
+
+	SectionHeader sec;
+	float gap = 8.0f;
+	float btnW = (cw - gap * 3.0f) / 4.0f;
+	installPluginBtn.Layout(cx, y, btnW, 28, L"Install DLL", false);
+	if (installPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		InstallPluginWithDialog();
+		UpdatePluginCatalogInstallState();
+	}
+	installPluginBtn.Draw(renderer);
+
+	installSourcePluginBtn.Layout(cx + btnW + gap, y, btnW, 28, L"Build Source", false);
+	if (installSourcePluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		InstallPluginSourceWithDialog();
+		UpdatePluginCatalogInstallState();
+	}
+	installSourcePluginBtn.Draw(renderer);
+
+	reloadPluginBtn.Layout(cx + (btnW + gap) * 2.0f, y, btnW, 28, L"Reload", false);
+	if (reloadPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		if (!driver.isConnected)
+			StartDriverService();
+		if (driver.isConnected)
+			driver.SendCommand("PluginReload");
+		RefreshPluginList();
+		SendPluginSettings();
+		UpdatePluginCatalogInstallState();
+		if (driver.isConnected)
+			driver.SendCommand("PluginList");
+	}
+	reloadPluginBtn.Draw(renderer);
+
+	listPluginBtn.Layout(cx + (btnW + gap) * 3.0f, y, btnW, 28, L"List", false);
+	if (listPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		RefreshPluginList();
+		selectedCatalogIndex = 0;
+		RefreshPluginCatalog();
+		pluginManagerOpen = true;
+	}
+	listPluginBtn.Draw(renderer);
+	y += 42;
+
+	renderer.DrawText(pluginListStatus.c_str(), cx, y, cw, 20, Theme::TextMuted(), renderer.pFontSmall);
+	y += 24;
+
+	if (pluginEntries.empty()) {
+		renderer.FillRoundedRect(cx, y, cw, 30, 6, Theme::BgElevated());
+		renderer.DrawRoundedRect(cx, y, cw, 30, 6, Theme::BorderSubtle());
+		renderer.DrawText(L"No native Aether DLL filters installed", cx + 10, y, cw - 20, 30, Theme::TextMuted(), renderer.pFontSmall);
+		y += 40;
+		return;
+	}
+
+	for (size_t i = 0; i < pluginEntries.size(); ++i) {
+		PluginEntry& plugin = pluginEntries[i];
+		float itemT = Clamp((aboutAnimT + (float)i * 0.08f), 0.0f, 1.0f);
+		float itemEase = 1.0f - (1.0f - itemT) * (1.0f - itemT);
+		float itemX = cx + (1.0f - itemEase) * 18.0f;
+		sec.Layout(itemX, y, cw, plugin.name.c_str());
+		y += sec.Draw(renderer);
+
+		plugin.enabled.y = y;
+		plugin.enabled.x = itemX;
+		if (plugin.enabled.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+			if (!driver.isConnected)
+				StartDriverService();
+			if (driver.isConnected) {
+				SendPluginEnable(i);
+				if (plugin.enabled.value)
+					SendPluginOptions(i);
+			}
+			filterChanged = true;
+			AutoSaveConfig();
+		}
+		plugin.enabled.Draw(renderer);
+		renderer.DrawText(plugin.dllName.c_str(), itemX + cw * 0.55f, y, cw * 0.43f, Theme::Size::ToggleHeight, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
+		y += 30;
+
+		if (!plugin.description.empty()) {
+			renderer.DrawText(plugin.description.c_str(), itemX, y, cw, 34, Theme::TextMuted(), renderer.pFontSmall);
+			y += 36;
+		}
+
+		if (plugin.enabled.value && !plugin.options.empty()) {
+			for (size_t optionIndex = 0; optionIndex < plugin.options.size(); ++optionIndex) {
+				PluginEntry::PluginOption& option = plugin.options[optionIndex];
+				if (option.kind == PluginEntry::PluginOption::ToggleOption) {
+					option.toggle.x = itemX;
+					option.toggle.y = y;
+					option.toggle.label = option.label.c_str();
+					if (option.toggle.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+						if (!driver.isConnected)
+							StartDriverService();
+						SendPluginOption(i, option);
+						filterChanged = true;
+						AutoSaveConfig();
+					}
+					option.toggle.Draw(renderer);
+					y += 30;
+				}
+				else {
+					option.slider.x = itemX;
+					option.slider.y = y;
+					option.slider.width = cw;
+					option.slider.label = option.label.c_str();
+					if (option.slider.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime)) {
+						if (!driver.isConnected)
+							StartDriverService();
+						SendPluginOption(i, option);
+						filterChanged = true;
+						AutoSaveConfig();
+					}
+					option.slider.Draw(renderer);
+					y += 50;
+				}
+			}
+		}
+		else if (plugin.enabled.value) {
+			renderer.DrawText(L"This plugin exposes no editable Aether metadata yet.", itemX, y, cw, 20, Theme::TextMuted(), renderer.pFontSmall);
+			y += 28;
+		}
+
+		y += 8;
+	}
+}
+
+void AetherApp::DrawPluginSourceModal() {
+	float overlayW = Theme::Runtime::WindowWidth;
+	float overlayH = Theme::Runtime::WindowHeight;
+	renderer.FillRect(0, 0, overlayW, overlayH, D2D1::ColorF(0, 0, 0, 0.55f));
+
+	float w = std::min(460.0f, overlayW - 40.0f);
+	float h = 250.0f;
+	float x = (overlayW - w) * 0.5f;
+	float y = (overlayH - h) * 0.5f;
+	renderer.FillRoundedRect(x, y, w, h, 8, Theme::BgSurface());
+	renderer.DrawRoundedRect(x, y, w, h, 8, Theme::BorderAccent());
+	renderer.DrawText(L"Switch Repository Source", x + 18, y + 12, w - 36, 28, Theme::TextPrimary(), renderer.pFontBody);
+
+	float inputX = x + 18;
+	float inputW = w - 36;
+	pluginRepoOwnerInput.x = inputX; pluginRepoOwnerInput.y = y + 54; pluginRepoOwnerInput.width = inputW;
+	pluginRepoOwnerInput.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
+	pluginRepoOwnerInput.Draw(renderer);
+	pluginRepoNameInput.x = inputX; pluginRepoNameInput.y = y + 104; pluginRepoNameInput.width = inputW;
+	pluginRepoNameInput.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
+	pluginRepoNameInput.Draw(renderer);
+	pluginRepoRefInput.x = inputX; pluginRepoRefInput.y = y + 154; pluginRepoRefInput.width = inputW;
+	pluginRepoRefInput.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
+	pluginRepoRefInput.Draw(renderer);
+
+	float btnW = 120.0f;
+	pluginManagerCancelSourceBtn.Layout(x + w - btnW * 2.0f - 28.0f, y + h - 42.0f, btnW, 28, L"Cancel", false);
+	if (pluginManagerCancelSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		pluginSourceEditorOpen = false;
+	}
+	pluginManagerCancelSourceBtn.Draw(renderer);
+	pluginManagerApplySourceBtn.Layout(x + w - btnW - 18.0f, y + h - 42.0f, btnW, 28, L"Apply", true);
+	if (pluginManagerApplySourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		pluginRepoOwner = pluginRepoOwnerInput.buffer;
+		pluginRepoName = pluginRepoNameInput.buffer[0] ? pluginRepoNameInput.buffer : L"Plugin-Repository";
+		pluginRepoRef = pluginRepoRefInput.buffer[0] ? pluginRepoRefInput.buffer : L"master";
+		pluginSourceEditorOpen = false;
+		RefreshPluginCatalog();
+	}
+	pluginManagerApplySourceBtn.Draw(renderer);
+}
+
+void AetherApp::DrawPluginManagerModal() {
+	float overlayW = Theme::Runtime::WindowWidth;
+	float overlayH = Theme::Runtime::WindowHeight;
+	renderer.FillRect(0, 0, overlayW, overlayH, D2D1::ColorF(0, 0, 0, 0.50f));
+
+	float w = std::min(960.0f, overlayW - 36.0f);
+	float h = std::min(650.0f, overlayH - 54.0f);
+	float x = (overlayW - w) * 0.5f;
+	float y = (overlayH - h) * 0.5f;
+	renderer.FillRoundedRect(x, y, w, h, 8, Theme::BgSurface());
+	renderer.DrawRoundedRect(x, y, w, h, 8, Theme::BorderAccent());
+
+	renderer.DrawText(L"Plugin Manager", x + 18, y + 12, 200, 28, Theme::TextPrimary(), renderer.pFontBody);
+	pluginManagerAetherTabBtn.Layout(x + 18, y + 46, 142, 30, L"Aether Filters", pluginManagerTab == 0);
+	if (pluginManagerAetherTabBtn.Update(mouseX, mouseY, mouseClicked, deltaTime) && pluginManagerTab != 0) {
+		aboutAnimT = 0.0f;
+		pluginManagerTab = 0;
+		selectedCatalogIndex = 0;
+		pluginCatalogScrollY = 0.0f;
+		pluginCatalogAnimDirection = -1;
+		RefreshPluginCatalog();
+	}
+	pluginManagerAetherTabBtn.Draw(renderer);
+	pluginManagerOtdTabBtn.Layout(x + 168, y + 46, 132, 30, L"OTD Ports", pluginManagerTab == 1);
+	if (pluginManagerOtdTabBtn.Update(mouseX, mouseY, mouseClicked, deltaTime) && pluginManagerTab != 1) {
+		aboutAnimT = 0.0f;
+		pluginManagerTab = 1;
+		selectedCatalogIndex = 0;
+		pluginCatalogScrollY = 0.0f;
+		pluginCatalogAnimDirection = 1;
+		RefreshPluginCatalog();
+	}
+	pluginManagerOtdTabBtn.Draw(renderer);
+
+	std::wstring sourceFolder = pluginManagerTab == 0 ? L"Plugins" : L"OTDPlugins";
+	std::wstring source = IsDefaultPluginRepoOwner(pluginRepoOwner)
+		? (L"Default GitHub catalog / " + sourceFolder + L" @ " + pluginRepoRef)
+		: (pluginRepoOwner + L"/" + pluginRepoName + L" / " + sourceFolder + L" @ " + pluginRepoRef);
+	renderer.DrawText(source.c_str(), x + 314, y + 49, w - 500, 24, Theme::TextMuted(), renderer.pFontSmall);
+
+	pluginManagerSourceBtn.Layout(x + w - 366, y + 12, 108, 28, L"Source", false);
+	if (pluginManagerSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		std::wstring visibleOwner = IsDefaultPluginRepoOwner(pluginRepoOwner) ? L"" : pluginRepoOwner;
+		wcscpy_s(pluginRepoOwnerInput.buffer, visibleOwner.c_str());
+		pluginRepoOwnerInput.cursor = (int)visibleOwner.length();
+		wcscpy_s(pluginRepoNameInput.buffer, pluginRepoName.c_str());
+		pluginRepoNameInput.cursor = (int)pluginRepoName.length();
+		wcscpy_s(pluginRepoRefInput.buffer, pluginRepoRef.c_str());
+		pluginRepoRefInput.cursor = (int)pluginRepoRef.length();
+		pluginSourceEditorOpen = true;
+	}
+	pluginManagerSourceBtn.Draw(renderer);
+	pluginManagerRefreshBtn.Layout(x + w - 250, y + 12, 108, 28, L"Refresh", false);
+	if (pluginManagerRefreshBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		RefreshPluginCatalog();
+	}
+	pluginManagerRefreshBtn.Draw(renderer);
+	pluginManagerCloseBtn.Layout(x + w - 134, y + 12, 116, 28, L"Close", false);
+	if (pluginManagerCloseBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		pluginManagerOpen = false;
+	}
+	pluginManagerCloseBtn.Draw(renderer);
+
+	float listX = x + 14;
+	float listY = y + 88;
+	float listW = 280;
+	float listH = h - 148;
+	float detailX = listX + listW + 12;
+	float detailW = w - listW - 40;
+	float listBodyY = listY + 34.0f;
+	float listBodyH = std::max(0.0f, listH - 52.0f);
+	ClampPluginCatalogScroll();
+	if (mouseClicked && PointInRect(mouseX, mouseY, x + 14.0f, listY, w - 28.0f, listH)) {
+		isPluginCatalogDragScrolling = true;
+		pluginCatalogDragStartY = mouseY;
+		pluginCatalogDragStartOffset = pluginCatalogScrollY;
+	}
+
+	if (false && pluginManagerTab == 0) {
+		if (pluginListDirty)
+			RefreshPluginList();
+		if (selectedPluginIndex >= (int)pluginEntries.size())
+			selectedPluginIndex = (int)pluginEntries.size() - 1;
+		if (selectedPluginIndex < 0)
+			selectedPluginIndex = 0;
+
+		renderer.FillRoundedRect(listX, listY, listW, listH, 6, Theme::BgDeep());
+		renderer.DrawRoundedRect(listX, listY, listW, listH, 6, Theme::BorderSubtle());
+		renderer.DrawText(L"Installed Filters", listX + 10, listY + 8, listW - 20, 20, Theme::TextSecondary(), renderer.pFontSmall);
+		renderer.FillRoundedRect(detailX, listY, detailW, listH, 6, Theme::BgDeep());
+		renderer.DrawRoundedRect(detailX, listY, detailW, listH, 6, Theme::BorderSubtle());
+
+		float rowY = listY + 34;
+		if (pluginEntries.empty()) {
+			renderer.DrawText(L"No native Aether filters installed yet.", listX + 10, rowY, listW - 20, 44, Theme::TextMuted(), renderer.pFontSmall);
+			renderer.DrawText(L"Install a DLL or build a C++ source folder to add a filter.", detailX + 14, listY + 18, detailW - 28, 36, Theme::TextMuted(), renderer.pFontSmall);
+		}
+		else {
+			int visibleRows = (int)((listH - 42) / 30.0f);
+			for (int i = 0; i < (int)pluginEntries.size() && i < visibleRows; ++i) {
+				PluginEntry& plugin = pluginEntries[i];
+				float ry = rowY + i * 30.0f;
+				bool selected = i == selectedPluginIndex;
+				bool hovered = PointInRect(mouseX, mouseY, listX + 6, ry, listW - 12, 26);
+				renderer.FillRoundedRect(listX + 6, ry, listW - 12, 26, 5, selected ? Theme::AccentDim() : (hovered ? Theme::BgHover() : Theme::BgElevated()));
+				if (selected)
+					renderer.DrawRoundedRect(listX + 6, ry, listW - 12, 26, 5, Theme::BorderAccent());
+				renderer.DrawText(plugin.name.c_str(), listX + 14, ry, listW - 64, 26, Theme::TextPrimary(), renderer.pFontSmall);
+				renderer.DrawText(plugin.enabled.value ? L"ON" : L"OFF", listX + listW - 54, ry, 42, 26,
+					plugin.enabled.value ? Theme::Success() : Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
+				if (hovered && mouseClicked)
+					selectedPluginIndex = i;
+			}
+
+			PluginEntry& plugin = pluginEntries[selectedPluginIndex];
+			float dy = listY + 14;
+			renderer.DrawText(plugin.name.c_str(), detailX + 14, dy, detailW - 28, 26, Theme::TextPrimary(), renderer.pFontBody);
+			dy += 40;
+			renderer.DrawText(L"DLL", detailX + 14, dy, 120, 22, Theme::TextMuted(), renderer.pFontSmall);
+			renderer.DrawText(plugin.dllName.c_str(), detailX + 150, dy, detailW - 170, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+			dy += 34;
+			renderer.DrawText(L"Key", detailX + 14, dy, 120, 22, Theme::TextMuted(), renderer.pFontSmall);
+			renderer.DrawText(plugin.key.c_str(), detailX + 150, dy, detailW - 170, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+			dy += 34;
+			renderer.DrawText(L"Description", detailX + 14, dy, 120, 22, Theme::TextMuted(), renderer.pFontSmall);
+			renderer.DrawText(plugin.description.c_str(), detailX + 150, dy, detailW - 170, 54, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+			dy += 68;
+			renderer.DrawText(L"Controls", detailX + 14, dy, 120, 22, Theme::TextMuted(), renderer.pFontSmall);
+			renderer.DrawText(std::to_wstring(plugin.options.size()).c_str(), detailX + 150, dy, detailW - 170, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+
+			pluginManagerDeleteBtn.Layout(detailX + detailW - 124, y + h - 46, 112, 30, L"Uninstall", false);
+			if (pluginManagerDeleteBtn.Update(mouseX, mouseY, mouseClicked, deltaTime))
+				DeleteInstalledPlugin((size_t)selectedPluginIndex);
+			pluginManagerDeleteBtn.Draw(renderer);
+		}
+
+		pluginManagerInstallBtn.Layout(x + 14, y + h - 46, 112, 30, L"Install DLL", true);
+		if (pluginManagerInstallBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+			InstallPluginWithDialog();
+			UpdatePluginCatalogInstallState();
+		}
+		pluginManagerInstallBtn.Draw(renderer);
+		pluginManagerInstallSourceBtn.Layout(x + 134, y + h - 46, 128, 30, L"Build Source", false);
+		if (pluginManagerInstallSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+			InstallPluginSourceWithDialog();
+			UpdatePluginCatalogInstallState();
+		}
+		pluginManagerInstallSourceBtn.Draw(renderer);
+		renderer.DrawText(pluginListStatus.c_str(), x + 274, y + h - 46, w - 566, 30, Theme::TextMuted(), renderer.pFontSmall);
+		return;
+	}
+
+	renderer.FillRoundedRect(listX, listY, listW, listH, 6, Theme::BgDeep());
+	renderer.DrawRoundedRect(listX, listY, listW, listH, 6, Theme::BorderSubtle());
+	renderer.DrawText(pluginManagerTab == 0 ? L"Aether Filters" : L"OTD Plugin Ports", listX + 10, listY + 8, listW - 20, 20, Theme::TextSecondary(), renderer.pFontSmall);
+
+	if (pluginCatalogAnimT < 1.0f) {
+		pluginCatalogAnimT += deltaTime * 7.5f;
+		if (pluginCatalogAnimT > 1.0f) pluginCatalogAnimT = 1.0f;
+	}
+	float catalogEase = 1.0f - (1.0f - pluginCatalogAnimT) * (1.0f - pluginCatalogAnimT);
+	float catalogSlideX = (1.0f - catalogEase) * 24.0f * (float)pluginCatalogAnimDirection;
+	float catalogAlpha = catalogEase;
+
+	float rowY = listBodyY;
+	if (pluginCatalogEntries.empty()) {
+		renderer.DrawText(pluginCatalogStatus.c_str(), listX + 10, rowY, listW - 20, 44, Theme::TextMuted(), renderer.pFontSmall);
+	}
+	else {
+		float rowH = 30.0f;
+		int firstIndex = (int)(pluginCatalogScrollY / rowH);
+		float rowOffset = pluginCatalogScrollY - firstIndex * rowH;
+		int visibleRows = (int)(listBodyH / rowH) + 2;
+		for (int row = 0; row < visibleRows; ++row) {
+			int i = firstIndex + row;
+			if (i < 0 || i >= (int)pluginCatalogEntries.size())
+				break;
+			auto& entry = pluginCatalogEntries[i];
+			float ry = rowY + row * rowH - rowOffset;
+			if (ry < listBodyY || ry + 26.0f > listBodyY + listBodyH)
+				continue;
+			float rowDelay = std::min(1.0f, (float)row * 0.045f);
+			float rowT = Clamp((pluginCatalogAnimT - rowDelay) / 0.72f, 0.0f, 1.0f);
+			float rowEase = 1.0f - (1.0f - rowT) * (1.0f - rowT);
+			float rowX = listX + 6 + catalogSlideX * (1.0f - rowEase);
+			bool selected = i == selectedCatalogIndex;
+			bool hovered = PointInRect(mouseX, mouseY, listX + 6, ry, listW - 12, 26);
+			D2D1_COLOR_F rowBg = selected ? Theme::AccentDim() : (hovered ? Theme::BgHover() : Theme::BgElevated());
+			rowBg.a *= catalogAlpha * (0.45f + rowEase * 0.55f);
+			renderer.FillRoundedRect(rowX, ry, listW - 12, 26, 5, rowBg);
+			if (selected) {
+				D2D1_COLOR_F border = Theme::BorderAccent();
+				border.a *= catalogAlpha;
+				renderer.DrawRoundedRect(rowX, ry, listW - 12, 26, 5, border);
+			}
+			D2D1_COLOR_F nameColor = Theme::TextPrimary();
+			nameColor.a *= catalogAlpha * rowEase;
+			renderer.DrawText(entry.name.c_str(), rowX + 8, ry, listW - 64, 26, nameColor, renderer.pFontSmall);
+			D2D1_COLOR_F stateColor = entry.installed ? Theme::Success() : (entry.sourcePort ? Theme::AccentPrimary() : Theme::TextMuted());
+			stateColor.a *= catalogAlpha * rowEase;
+			renderer.DrawText(entry.installed ? L"ON" : (entry.sourcePort ? L"SRC" : L"TODO"), listX + listW - 54, ry, 42, 26,
+				stateColor, renderer.pFontSmall, Renderer::AlignRight);
+			if (hovered && mouseClicked)
+				selectedCatalogIndex = i;
+		}
+
+		float contentH = (float)pluginCatalogEntries.size() * rowH + 8.0f;
+		if (contentH > listBodyH + 1.0f) {
+			float trackX = listX + listW - 7.0f;
+			float trackY = listBodyY;
+			float trackH = listBodyH;
+			float thumbH = std::max(24.0f, trackH * (listBodyH / contentH));
+			float maxScroll = contentH - listBodyH;
+			float thumbY = trackY + (trackH - thumbH) * (maxScroll > 0.0f ? pluginCatalogScrollY / maxScroll : 0.0f);
+			D2D1_COLOR_F trackCol = Theme::BorderSubtle();
+			trackCol.a = 0.18f;
+			renderer.FillRoundedRect(trackX, trackY, 4.0f, trackH, 2.0f, trackCol);
+			D2D1_COLOR_F thumbCol = isPluginCatalogDragScrolling ? Theme::AccentPrimary() : Theme::TextMuted();
+			thumbCol.a = isPluginCatalogDragScrolling ? 0.65f : 0.35f;
+			renderer.FillRoundedRect(trackX, thumbY, 4.0f, thumbH, 2.0f, thumbCol);
+		}
+	}
+
+	renderer.FillRoundedRect(detailX, listY, detailW, listH, 6, Theme::BgDeep());
+	renderer.DrawRoundedRect(detailX, listY, detailW, listH, 6, Theme::BorderSubtle());
+	if (!pluginCatalogEntries.empty() && selectedCatalogIndex >= 0 && selectedCatalogIndex < (int)pluginCatalogEntries.size()) {
+		PluginCatalogEntry& entry = pluginCatalogEntries[selectedCatalogIndex];
+		float dy = listY + 14;
+		renderer.DrawText(entry.name.c_str(), detailX + 14, dy, detailW - 28, 26, Theme::TextPrimary(), renderer.pFontBody);
+		dy += 40;
+		renderer.DrawText(L"Owner", detailX + 14, dy, 120, 22, Theme::TextMuted(), renderer.pFontSmall);
+		renderer.DrawText(entry.owner.c_str(), detailX + 150, dy, detailW - 170, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+		dy += 34;
+		renderer.DrawText(L"Description", detailX + 14, dy, 120, 22, Theme::TextMuted(), renderer.pFontSmall);
+		renderer.DrawText(entry.description.c_str(), detailX + 150, dy, detailW - 170, 54, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+		dy += 68;
+		renderer.DrawText(L"Driver Version", detailX + 14, dy, 160, 22, Theme::TextMuted(), renderer.pFontSmall);
+		renderer.DrawText(entry.driverVersion.c_str(), detailX + 180, dy, detailW - 200, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+		dy += 34;
+		renderer.DrawText(L"Plugin Version", detailX + 14, dy, 160, 22, Theme::TextMuted(), renderer.pFontSmall);
+		renderer.DrawText(entry.version.c_str(), detailX + 180, dy, detailW - 200, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+		dy += 34;
+		renderer.DrawText(L"License", detailX + 14, dy, 160, 22, Theme::TextMuted(), renderer.pFontSmall);
+		renderer.DrawText(entry.license.c_str(), detailX + 180, dy, detailW - 200, 22, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignRight);
+		dy += 36;
+		renderer.DrawText(L"Source Code Repository", detailX + 14, dy, 220, 28, Theme::TextMuted(), renderer.pFontSmall);
+		pluginManagerSourceCodeBtn.Layout(detailX + detailW - 170, dy, 156, 28, L"Source Code", false);
+		if (pluginManagerSourceCodeBtn.Update(mouseX, mouseY, mouseClicked, deltaTime))
+			OpenExternalUrl(entry.repositoryUrl);
+		pluginManagerSourceCodeBtn.Draw(renderer);
+		dy += 42;
+		renderer.DrawText(L"Wiki", detailX + 14, dy, 220, 28, Theme::TextMuted(), renderer.pFontSmall);
+		pluginManagerWikiBtn.Layout(detailX + detailW - 170, dy, 156, 28, L"Wiki", false);
+		if (pluginManagerWikiBtn.Update(mouseX, mouseY, mouseClicked, deltaTime))
+			OpenExternalUrl(entry.wikiUrl);
+		pluginManagerWikiBtn.Draw(renderer);
+		dy += 42;
+		const wchar_t* state = entry.installed ? L"Installed" : (entry.sourcePort ? L"Ready to download, build, and install" : L"Port is not available yet. Needs an Aether C++ port.");
+		renderer.DrawText(state, detailX + 14, dy, detailW - 28, 26,
+			entry.installed ? Theme::Success() : (entry.sourcePort ? Theme::AccentPrimary() : Theme::Warning()), renderer.pFontSmall);
+
+		if (!entry.installed && entry.sourcePort) {
+			pluginManagerInstallRepoBtn.Layout(detailX + detailW - 124, y + h - 46, 112, 30, L"Install", true);
+			if (pluginManagerInstallRepoBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+				InstallRepositoryPlugin(entry);
+			}
+			pluginManagerInstallRepoBtn.Draw(renderer);
+		}
+		else if (entry.installed) {
+			pluginManagerDeleteBtn.Layout(detailX + detailW - 124, y + h - 46, 112, 30, L"Uninstall", false);
+			if (pluginManagerDeleteBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+				std::wstring entryIdentity = entry.name + L" " + Utf8ToWide(entry.sourcePath);
+				for (size_t i = 0; i < pluginEntries.size(); ++i) {
+					std::wstring pluginIdentity = pluginEntries[i].key + L" " + pluginEntries[i].name + L" " + pluginEntries[i].dllName;
+					if (CatalogNamesMatch(pluginIdentity, entryIdentity)) {
+						DeleteInstalledPlugin(i);
+						break;
+					}
+				}
+				RefreshPluginCatalog();
+			}
+			pluginManagerDeleteBtn.Draw(renderer);
+		}
+	}
+	else {
+		renderer.DrawText(L"Press Refresh to load plugins from the selected GitHub repository.", detailX + 14, listY + 18, detailW - 28, 32, Theme::TextMuted(), renderer.pFontSmall);
+	}
+
+	if (pluginManagerTab == 0) {
+		pluginManagerInstallBtn.Layout(x + 14, y + h - 46, 112, 30, L"Install DLL", true);
+		if (pluginManagerInstallBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+			InstallPluginWithDialog();
+		}
+		pluginManagerInstallBtn.Draw(renderer);
+		pluginManagerInstallSourceBtn.Layout(x + 134, y + h - 46, 128, 30, L"Build Source", false);
+		if (pluginManagerInstallSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+			InstallPluginSourceWithDialog();
+		}
+		pluginManagerInstallSourceBtn.Draw(renderer);
+		renderer.DrawText(pluginCatalogStatus.c_str(), x + 274, y + h - 46, w - 560, 30, Theme::TextMuted(), renderer.pFontSmall);
+	}
+	else {
+		renderer.DrawText(pluginCatalogStatus.c_str(), x + 14, y + h - 46, w - 280, 30, Theme::TextMuted(), renderer.pFontSmall);
 	}
 }
 void AetherApp::DrawFilterPanel() {
@@ -2293,6 +5138,7 @@ void AetherApp::DrawFilterPanel() {
 	for (Slider* slider : filterSliders) {
 		slider->width = hw;
 	}
+	bool smoothingPipelineActive = filters.smoothingEnabled.value || aether.enabled.value;
 
 	sec.Layout(cx, y, cw, L"SMOOTHING"); y += sec.Draw(renderer);
 	filters.smoothingEnabled.y = y; filters.smoothingEnabled.x = cx;
@@ -2310,7 +5156,7 @@ void AetherApp::DrawFilterPanel() {
 	sec.Layout(cx, y, cw, L"ANTICHATTER"); y += sec.Draw(renderer);
 	filters.antichatterEnabled.y = y; filters.antichatterEnabled.x = cx;
 	filterChanged |= filters.antichatterEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime); filters.antichatterEnabled.Draw(renderer);
-	if (!filters.smoothingEnabled.value) {
+	if (!smoothingPipelineActive) {
 		float warnX = cx + Theme::Size::ToggleWidth + 120;
 		renderer.DrawText(L"\xE7BA", warnX, y + 3, 16, 16, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
 		renderer.DrawText(L"Requires Smoothing", warnX + 20, y, 200, Theme::Size::ToggleHeight, Theme::Warning(), renderer.pFontSmall);
@@ -2348,9 +5194,30 @@ void AetherApp::DrawFilterPanel() {
 		y += 48;
 	}
 
+	sec.Layout(cx, y, cw, L"PREDICTION"); y += sec.Draw(renderer);
+	filters.velCurveEnabled.y = y; filters.velCurveEnabled.x = cx;
+	filterChanged |= filters.velCurveEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime); filters.velCurveEnabled.Draw(renderer);
+	if (!smoothingPipelineActive) {
+		float warnX = cx + Theme::Size::ToggleWidth + 120;
+		renderer.DrawText(L"\xE7BA", warnX, y + 3, 16, 16, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
+		renderer.DrawText(L"Requires Smoothing", warnX + 20, y, 200, Theme::Size::ToggleHeight, Theme::Warning(), renderer.pFontSmall);
+	}
+	y += 30;
 
-
-
+	if (filters.velCurveEnabled.value) {
+		filters.velCurveMinSpeed.y = y; filters.velCurveMinSpeed.x = cx;
+		filterChanged |= filters.velCurveMinSpeed.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.velCurveMinSpeed.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.velCurveMaxSpeed.y = y; filters.velCurveMaxSpeed.x = filterRightX;
+		filterChanged |= filters.velCurveMaxSpeed.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.velCurveMaxSpeed.Draw(renderer);
+		y += 48;
+		filters.velCurveSmoothing.y = y; filters.velCurveSmoothing.x = cx;
+		filterChanged |= filters.velCurveSmoothing.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.velCurveSmoothing.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.velCurveSharpness.y = y; filters.velCurveSharpness.x = filterRightX;
+		filterChanged |= filters.velCurveSharpness.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.velCurveSharpness.Draw(renderer);
+		y += 48;
+	}
 
 	sec.Layout(cx, y, cw, L"RECONSTRUCTOR"); y += sec.Draw(renderer);
 	filters.reconstructorEnabled.y = y; filters.reconstructorEnabled.x = cx;
@@ -2434,6 +5301,21 @@ void AetherApp::DrawFilterPanel() {
 		}
 
 		
+		aether.rhythmFlowEnabled.y = y; aether.rhythmFlowEnabled.x = cx;
+		filterChanged |= aether.rhythmFlowEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime); aether.rhythmFlowEnabled.Draw(renderer); y += 28;
+		if (aether.rhythmFlowEnabled.value) {
+			aether.rhythmFlowStrength.y = y; aether.rhythmFlowStrength.x = cx; aether.rhythmFlowStrength.width = hw;
+			filterChanged |= aether.rhythmFlowStrength.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.rhythmFlowStrength.Draw(renderer);
+			if (filterSingleColumn) y += 48;
+			aether.rhythmFlowRelease.y = y; aether.rhythmFlowRelease.x = filterRightX; aether.rhythmFlowRelease.width = hw;
+			filterChanged |= aether.rhythmFlowRelease.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.rhythmFlowRelease.Draw(renderer);
+			y += 48;
+			aether.rhythmFlowJitter.y = y; aether.rhythmFlowJitter.x = cx; aether.rhythmFlowJitter.width = hw;
+			filterChanged |= aether.rhythmFlowJitter.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.rhythmFlowJitter.Draw(renderer);
+			y += 48;
+		}
+
+		
 		aether.suppressionEnabled.y = y; aether.suppressionEnabled.x = cx;
 		filterChanged |= aether.suppressionEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime); aether.suppressionEnabled.Draw(renderer); y += 28;
 		if (aether.suppressionEnabled.value) {
@@ -2444,15 +5326,13 @@ void AetherApp::DrawFilterPanel() {
 	}
 
 	
+	sec.Layout(cx, y, cw, L"PLUGINS"); y += sec.Draw(renderer);
+	DrawPluginFilterControls(cx, y, cw, hw, filterRightX, filterSingleColumn, filterChanged);
+
 	sec.Layout(cx, y, cw, L"OVERCLOCK"); y += sec.Draw(renderer);
 	overclockEnabled.y = y; overclockEnabled.x = cx;
 	if (overclockEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime)) filterChanged = true;
 	overclockEnabled.Draw(renderer);
-	if (!filters.smoothingEnabled.value) {
-		float warnX = cx + Theme::Size::ToggleWidth + 120;
-		renderer.DrawText(L"\xE7BA", warnX, y + 3, 16, 16, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
-		renderer.DrawText(L"Requires Smoothing", warnX + 20, y, 200, Theme::Size::ToggleHeight, Theme::Warning(), renderer.pFontSmall);
-	}
 	y += 34;
 
 	if (overclockEnabled.value) {
@@ -2465,11 +5345,23 @@ void AetherApp::DrawFilterPanel() {
 		y += 76;
 	}
 
+	penRateLimitEnabled.y = y; penRateLimitEnabled.x = cx;
+	if (penRateLimitEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime)) filterChanged = true;
+	penRateLimitEnabled.Draw(renderer);
+	y += 34;
+
+	if (penRateLimitEnabled.value) {
+		penRateLimitHz.y = y; penRateLimitHz.x = cx; penRateLimitHz.width = hw;
+		if (penRateLimitHz.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime)) filterChanged = true;
+		penRateLimitHz.Draw(renderer);
+		y += 48;
+	}
+
 	if (filterChanged) {
 		ApplyAllSettings();
 	}
 
-	filterContentH = (y + filterScrollY) - yStart;
+	filterContentH = (y + filterScrollY) - yStart + 64;
 }
 
 void AetherApp::DrawConsolePanel() {
@@ -2569,7 +5461,7 @@ void AetherApp::DrawAboutPanel() {
 	y += 22;
 	renderer.DrawText(L"Reconstructor \x2022 Adaptive Filter \x2022 Aether Smooth", cx, y, cw, 18, Theme::TextAccent(), renderer.pFontSmall, Renderer::AlignCenter);
 	y += 22;
-	renderer.DrawText(L"Live Cursor \x2022 Input Visualizer \x2022 Theme Presets \x2022 Profiles", cx, y, cw, 18, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
+	renderer.DrawText(L"Live Cursor \x2022 Input Visualizer \x2022 Theme Presets \x2022 Config Manager", cx, y, cw, 18, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
 }
 
 void AetherApp::DrawStatusBar() {
@@ -2611,9 +5503,19 @@ void AetherApp::DrawStatusBar() {
 	if (w > 560.0f && measuredHz > 1.0f) {
 		wchar_t hzBuf[32];
 		swprintf_s(hzBuf, L"%.0f Hz", measuredHz);
-		renderer.DrawText(L"Pen", w - 420, y, 30, h, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
+		float penX = (penRateLimitEnabled.value && w > 900.0f) ? (w - 535.0f) : (w - 420.0f);
+		renderer.DrawText(L"Pen", penX, y, 30, h, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
 		D2D1_COLOR_F hzCol = (measuredHz > 200) ? Theme::Success() : (measuredHz > 50) ? Theme::AccentPrimary() : Theme::Warning();
-		renderer.DrawText(hzBuf, w - 385, y, 60, h, hzCol, renderer.pFontSmall, Renderer::AlignLeft);
+		renderer.DrawText(hzBuf, penX + 35.0f, y, 60, h, hzCol, renderer.pFontSmall, Renderer::AlignLeft);
+
+		if (penRateLimitEnabled.value && w > 900.0f) {
+			wchar_t capBuf[40];
+			swprintf_s(capBuf, L"Cap %.0f Hz", penRateLimitHz.value);
+			D2D1_COLOR_F capColor = Theme::TextMuted();
+			if (penRateLimitHz.value <= measuredHz + 1.0f)
+				capColor = Theme::AccentSecondary();
+			renderer.DrawText(capBuf, penX + 104.0f, y, 105, h, capColor, renderer.pFontSmall, Renderer::AlignLeft);
+		}
 	}
 }
 
@@ -3009,52 +5911,102 @@ void AetherApp::DrawThemeSelector(float x, float& y, float w) {
 
 
 
-void AetherApp::DrawProfileSelector(float x, float y, float w) {
-	float btnW = 80.0f;
-	float btnH = 26.0f;
-	float gap = 6.0f;
+void AetherApp::DrawConfigManager(float x, float& y, float w) {
+	RefreshConfigFiles();
 
-	for (int i = 0; i < MAX_PROFILES; i++) {
-		float bx = x + i * (btnW + gap);
-		profileBtns[i].x = bx;
-		profileBtns[i].y = y;
-		profileBtns[i].width = btnW;
-		profileBtns[i].height = btnH;
-		profileBtns[i].isPrimary = (i == currentProfile);
+	SectionHeader sec;
+	sec.Layout(x, y, w, L"CONFIGS");
+	y += sec.Draw(renderer);
 
-		if (profileBtns[i].Update(mouseX, mouseY, mouseClicked, deltaTime)) {
-			if (i == currentProfile) {
-				
-				wchar_t path[MAX_PATH];
-				GetModuleFileNameW(nullptr, path, MAX_PATH);
-				std::wstring dir(path);
-				size_t slash = dir.find_last_of(L"\\/");
-				if (slash != std::wstring::npos) dir = dir.substr(0, slash + 1);
-				std::wstring profilePath = dir + L"aether_profile_" + std::to_wstring(i) + L".cfg";
-				SaveConfig(profilePath);
-			} else {
-				
-				currentProfile = i;
-				wchar_t path[MAX_PATH];
-				GetModuleFileNameW(nullptr, path, MAX_PATH);
-				std::wstring dir(path);
-				size_t slash = dir.find_last_of(L"\\/");
-				if (slash != std::wstring::npos) dir = dir.substr(0, slash + 1);
-				std::wstring profilePath = dir + L"aether_profile_" + std::to_wstring(i) + L".cfg";
-				DWORD attrs = GetFileAttributesW(profilePath.c_str());
-				if (attrs != INVALID_FILE_ATTRIBUTES) {
-					LoadConfig(profilePath);
-					ApplyAllSettings();
-				}
+	float buttonW = 96.0f;
+	float gap = 8.0f;
+	float buttonY = y;
+	float saveX = x + w - buttonW * 2.0f - gap;
+	float loadX = x + w - buttonW;
+
+	saveConfigBtn.Layout(saveX, buttonY, buttonW, 28, L"Save As", false);
+	if (saveConfigBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		SaveConfigWithDialog();
+	}
+	saveConfigBtn.Draw(renderer);
+
+	loadConfigBtn.Layout(loadX, buttonY, buttonW, 28, L"Load File", false);
+	if (loadConfigBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		LoadConfigWithDialog();
+	}
+	loadConfigBtn.Draw(renderer);
+
+	std::wstring activeName = L"Last session";
+	if (!activeConfigPath.empty()) {
+		size_t slash = activeConfigPath.find_last_of(L"\\/");
+		activeName = (slash == std::wstring::npos) ? activeConfigPath : activeConfigPath.substr(slash + 1);
+	}
+	renderer.DrawText(activeName.c_str(), x + 4, y, saveX - x - 12, 28, Theme::TextSecondary(), renderer.pFontSmall);
+	y += 36;
+
+	if (configEntries.empty()) {
+		renderer.FillRoundedRect(x, y, w, 30, 6, Theme::BgElevated());
+		renderer.DrawRoundedRect(x, y, w, 30, 6, Theme::BorderSubtle());
+		renderer.DrawText(L"No configs in config folder", x + 10, y, w - 20, 30, Theme::TextMuted(), renderer.pFontSmall);
+		y += 38;
+		return;
+	}
+
+	float rowH = 30.0f;
+	for (int i = 0; i < (int)configEntries.size(); i++) {
+		float rowY = y + i * (rowH + 6.0f);
+		bool selected = (i == selectedConfigIndex);
+		bool hovered = PointInRect(mouseX, mouseY, x, rowY, w, rowH);
+		D2D1_COLOR_F bg = selected ? Theme::AccentDim() : (hovered ? Theme::BgHover() : Theme::BgElevated());
+		renderer.FillRoundedRect(x, rowY, w, rowH, 6, bg);
+		renderer.DrawRoundedRect(x, rowY, w, rowH, 6, selected ? Theme::BorderAccent() : Theme::BorderSubtle());
+
+		float miniW = 54.0f;
+		float loadBtnX = x + w - miniW - 8.0f;
+		float saveBtnX = loadBtnX - miniW - 6.0f;
+		float btnY = rowY + 4.0f;
+		float btnH = rowH - 8.0f;
+		bool saveHovered = PointInRect(mouseX, mouseY, saveBtnX, btnY, miniW, btnH);
+		bool loadHovered = PointInRect(mouseX, mouseY, loadBtnX, btnY, miniW, btnH);
+
+		renderer.DrawText(configEntries[i].name.c_str(), x + 10, rowY, saveBtnX - x - 18, rowH,
+			selected ? Theme::TextPrimary() : Theme::TextSecondary(), renderer.pFontSmall);
+
+		D2D1_COLOR_F saveBg = saveHovered ? Theme::BgHover() : Theme::BgSurface();
+		renderer.FillRoundedRect(saveBtnX, btnY, miniW, btnH, 5, saveBg);
+		renderer.DrawRoundedRect(saveBtnX, btnY, miniW, btnH, 5, Theme::BorderSubtle());
+		renderer.DrawText(L"Save", saveBtnX, btnY, miniW, btnH, Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+
+		D2D1_COLOR_F loadBg = loadHovered ? Theme::AccentPrimary() : Theme::BgSurface();
+		renderer.FillRoundedRect(loadBtnX, btnY, miniW, btnH, 5, loadBg);
+		renderer.DrawRoundedRect(loadBtnX, btnY, miniW, btnH, 5, loadHovered ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(L"Load", loadBtnX, btnY, miniW, btnH,
+			loadHovered ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+
+		if (mouseClicked) {
+			if (saveHovered) {
+				selectedConfigIndex = i;
+				activeConfigPath = configEntries[i].path;
+				SaveConfig(activeConfigPath);
+				RefreshConfigFiles();
+				break;
+			}
+			else if (loadHovered) {
+				selectedConfigIndex = i;
+				activeConfigPath = configEntries[i].path;
+				LoadConfig(activeConfigPath);
+				ApplyAllSettings();
+				RefreshConfigFiles();
+				break;
+			}
+			else if (hovered) {
+				selectedConfigIndex = i;
 			}
 		}
-		profileBtns[i].Draw(renderer);
 	}
+
+	y += (float)configEntries.size() * (rowH + 6.0f) + 4.0f;
 }
-
-
-
-
 
 void AetherApp::UpdateHzMeter() {
 	if (!driver.penActive.load()) {

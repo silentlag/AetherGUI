@@ -164,7 +164,7 @@ struct Slider {
 		return true;
 	}
 
-	bool IsNumericChar(wchar_t ch) const { return (ch >= L'0' && ch <= L'9') || ch == L'.' || ch == L'-'; }
+	bool IsNumericChar(wchar_t ch) const { return (ch >= L'0' && ch <= L'9') || ch == L'.' || ch == L',' || ch == L'-'; }
 
 	void InsertChar(wchar_t ch) {
 		if (!IsNumericChar(ch)) return;
@@ -308,13 +308,14 @@ struct Slider {
 		return false;
 	}
 
-	void OnChar(wchar_t ch) {
-		if (!editMode) return;
-		if (ch == L'\r' || ch == L'\n') { CommitEdit(); return; }
-		if (ch == 27) { editMode = false; return; }
-		if (ch < 32 && ch != L'\b') return;
-		if (ch == L'\b') { if (!DeleteSelection() && editCursor > 0) { for (int i = editCursor - 1; editBuffer[i]; i++) editBuffer[i] = editBuffer[i + 1]; editCursor--; ClearSelection(); } return; }
+	bool OnChar(wchar_t ch) {
+		if (!editMode) return false;
+		if (ch == L'\r' || ch == L'\n') return CommitEdit();
+		if (ch == 27) { editMode = false; return false; }
+		if (ch < 32 && ch != L'\b') return false;
+		if (ch == L'\b') { if (!DeleteSelection() && editCursor > 0) { for (int i = editCursor - 1; editBuffer[i]; i++) editBuffer[i] = editBuffer[i + 1]; editCursor--; ClearSelection(); } return false; }
 		InsertChar(ch);
+		return false;
 	}
 
 	bool OnKeyDown(int vk, bool ctrl, bool shift) {
@@ -336,7 +337,13 @@ struct Slider {
 	
 	bool CommitEdit() {
 		editMode = false;
-		float v = Clamp((float)_wtof(editBuffer), minVal, maxVal);
+		wchar_t parseBuffer[32];
+		wcscpy_s(parseBuffer, editBuffer);
+		for (int i = 0; parseBuffer[i]; i++) {
+			if (parseBuffer[i] == L',')
+				parseBuffer[i] = L'.';
+		}
+		float v = Clamp((float)_wtof(parseBuffer), minVal, maxVal);
 		bool changed = fabsf(v - value) > 0.0001f;
 		value = v; animValue = v; ClearSelection();
 		return changed;

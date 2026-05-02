@@ -4,6 +4,14 @@
 #define LOG_MODULE "Tablet"
 #include "Logger.h"
 
+static inline UINT16 ReadLe16(const UCHAR *data, int offset) {
+	return (UINT16)(data[offset] | (data[offset + 1] << 8));
+}
+
+static inline UINT16 ReadBe16(const UCHAR *data, int offset) {
+	return (UINT16)((data[offset] << 8) | data[offset + 1]);
+}
+
 
 
 
@@ -60,11 +68,7 @@ Tablet::Tablet() {
 	
 	filterTimed[0] = &smoothing;
 	filterTimedCount = 1;
-	filterPacket[0] = &noise;
-	filterPacket[1] = &reconstructor;
-	filterPacket[2] = &adaptive;
-	filterPacket[3] = &aetherSmooth;
-	filterPacketCount = 4;
+	ResetPacketFilters();
 
 	peak.isEnabled = true;
 
@@ -92,6 +96,7 @@ Tablet::Tablet() {
 
 
 Tablet::~Tablet() {
+	ClearPluginFilters();
 	CloseDevice();
 	if (usbDevice != NULL)
 		delete usbDevice;
@@ -103,6 +108,87 @@ Tablet::~Tablet() {
 		delete initReport;
 	if (initFeature != NULL)
 		delete initFeature;
+}
+
+
+void Tablet::ResetPacketFilters() {
+	filterPacketCount = 0;
+	filterPacket[filterPacketCount++] = &noise;
+	filterPacket[filterPacketCount++] = &reconstructor;
+	filterPacket[filterPacketCount++] = &adaptive;
+	filterPacket[filterPacketCount++] = &aetherSmooth;
+}
+
+
+void Tablet::ClearPluginFilters() {
+	for (size_t i = 0; i < pluginFilters.size(); i++) {
+		delete pluginFilters[i];
+	}
+	pluginFilters.clear();
+	ResetPacketFilters();
+}
+
+
+void Tablet::ReloadPluginFilters(const std::wstring& pluginDirectory) {
+	ClearPluginFilters();
+
+	DWORD attrs = GetFileAttributesW(pluginDirectory.c_str());
+	if (attrs == INVALID_FILE_ATTRIBUTES || !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+		LOG_INFO("Plugin directory is empty or missing: %ls\n", pluginDirectory.c_str());
+		return;
+	}
+
+	int loaded = 0;
+	WIN32_FIND_DATAW folderData = {};
+	std::wstring folderPattern = pluginDirectory + L"*";
+	HANDLE folderFind = FindFirstFileW(folderPattern.c_str(), &folderData);
+	if (folderFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (!(folderData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+				continue;
+			if (wcscmp(folderData.cFileName, L".") == 0 || wcscmp(folderData.cFileName, L"..") == 0)
+				continue;
+
+			std::wstring dllPattern = pluginDirectory + folderData.cFileName + L"\\*.dll";
+			WIN32_FIND_DATAW dllData = {};
+			HANDLE dllFind = FindFirstFileW(dllPattern.c_str(), &dllData);
+			if (dllFind == INVALID_HANDLE_VALUE)
+				continue;
+
+			do {
+				if (dllData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+					continue;
+				if (filterPacketCount >= (int)(sizeof(filterPacket) / sizeof(filterPacket[0]))) {
+					LOG_WARNING("Plugin filter limit reached, skipping remaining plugins.\n");
+					FindClose(dllFind);
+					FindClose(folderFind);
+					LOG_INFO("Loaded %d Aether plugin(s).\n", loaded);
+					return;
+				}
+
+				std::wstring dllPath = pluginDirectory + folderData.cFileName + L"\\" + dllData.cFileName;
+				TabletFilterPlugin* plugin = new TabletFilterPlugin();
+				if (plugin->Load(dllPath)) {
+					pluginFilters.push_back(plugin);
+					filterPacket[filterPacketCount++] = plugin;
+					loaded++;
+				}
+				else {
+					delete plugin;
+				}
+			} while (FindNextFileW(dllFind, &dllData));
+			FindClose(dllFind);
+		} while (FindNextFileW(folderFind, &folderData));
+		FindClose(folderFind);
+	}
+
+	LOG_INFO("Loaded %d Aether plugin(s).\n", loaded);
+}
+
+
+int Tablet::LoadPluginFilters(const std::wstring& pluginDirectory) {
+	ReloadPluginFilters(pluginDirectory);
+	return (int)pluginFilters.size();
 }
 
 
@@ -477,6 +563,221 @@ int Tablet::ReadPosition() {
 		reportData.y = ((data[5] | (data[4] << 8)) << 1) | (data[9] & 1);
 		reportData.pressure = (data[6] << 3) | ((data[7] & 0xC0) >> 5) | (data[1] & 1);
 		reportData.z = data[9] >> 2;
+	}
+	else if (settings.type == TabletSettings::TypeAcepen) {
+		if (data[1] != 0x41 || (data[2] & 0xF0) != 0xA0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[1];
+		reportData.buttons = data[2] & 0x06;
+		reportData.x = ReadLe16(data, 3);
+		reportData.y = ReadLe16(data, 5);
+		reportData.pressure = ReadLe16(data, 7);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeBosto) {
+		if (data[1] == 0x00) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = ((data[1] & 0x20) ? 0x02 : 0x00) | ((data[1] & 0x02) ? 0x04 : 0x00);
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeFlooGoo) {
+		if (data[0] != 0x01 || (data[1] & 0x20) == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & 0x0E;
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeGenius) {
+		if (data[0] != 0x10) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & 0x0F;
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeGeniusV2) {
+		if (data[0] != 0x02) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = ((data[5] & 0x08) ? 0x02 : 0x00) | ((data[5] & 0x10) ? 0x04 : 0x00);
+		reportData.x = ReadLe16(data, 1);
+		reportData.y = ReadLe16(data, 3);
+		reportData.pressure = (data[5] & 0x04) ? ReadLe16(data, 6) : 0;
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeLifetec) {
+		if (data[0] != 0x02) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = ((data[5] & 0x08) ? 0x02 : 0x00) | ((data[5] & 0x10) ? 0x04 : 0x00);
+		reportData.x = ReadLe16(data, 1);
+		reportData.y = ReadLe16(data, 3);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeRobotPen) {
+		if (data[1] != 0x42) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[1];
+		reportData.buttons = (data[11] & 0x02) ? 0x02 : 0x00;
+		reportData.x = ReadLe16(data, 6);
+		reportData.y = ReadLe16(data, 8);
+		reportData.pressure = ReadLe16(data, 10);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeVeikk) {
+		if (data[1] == 0x43 || (data[2] & 0x20) == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[1];
+		reportData.buttons = data[2] & 0x06;
+		reportData.x = ReadLe16(data, 3) | (data[5] << 16);
+		reportData.y = ReadLe16(data, 6) | (data[8] << 16);
+		reportData.pressure = ReadLe16(data, 9);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeVeikkA15) {
+		if (data[1] == 0x43 || (data[2] & 0x20) == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[1];
+		reportData.buttons = data[2] & 0x06;
+		reportData.x = ReadLe16(data, 3);
+		reportData.y = ReadLe16(data, 5);
+		reportData.pressure = ReadLe16(data, 7);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeVeikkV1) {
+		if (data[0] == 0x03 || data[1] != 0x41 || (data[2] & 0xF0) != 0xA0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[1];
+		reportData.buttons = data[2] & 0x06;
+		reportData.x = ReadLe16(data, 3);
+		reportData.y = ReadLe16(data, 5);
+		reportData.pressure = ReadLe16(data, 7);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeVeikkTilt) {
+		if (data[1] != 0x41 || data[2] == 0xC0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[1];
+		reportData.buttons = data[2] & 0x06;
+		reportData.x = ReadLe16(data, 3) | (data[5] << 16);
+		reportData.y = ReadLe16(data, 6) | (data[8] << 16);
+		reportData.pressure = ReadLe16(data, 9);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeWoodPad) {
+		if ((data[9] & 0x03) != 0x03) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = ((data[9] & 0x08) ? 0x02 : 0x00) | ((data[9] & 0x10) ? 0x04 : 0x00);
+		reportData.x = ReadLe16(data, 1);
+		reportData.y = ReadLe16(data, 5);
+		reportData.pressure = (data[9] & 0x04) ? ReadLe16(data, 10) : 0;
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeXenceLabs) {
+		if ((data[1] & 0xF0) == 0xF0 || (data[1] & 0x20) == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & 0x0E;
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeXENX) {
+		if (data[0] != 0x01 || data[1] == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & 0x46;
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeWacomGraphire) {
+		if (data[0] != 0x02) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & 0x07;
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = (data[1] & 0x01) ? (data[6] | ((data[7] & 0x03) << 8)) : 0;
+		reportData.z = 0;
+		if ((data[1] & 0x80) == 0 && reportData.x == 0 && reportData.y == 0 && reportData.pressure == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+	}
+	else if (settings.type == TabletSettings::TypeWacomBambooPad) {
+		if (data[0] != 0x10 || data[1] != 0x01) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = (data[2] & 0x02) ? 0x02 : 0x00;
+		reportData.x = ReadLe16(data, 3);
+		reportData.y = ReadLe16(data, 5);
+		reportData.pressure = ReadLe16(data, 7);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeWacomCintiqV1) {
+		if ((data[0] != 0x02 && data[0] != 0x10) || (data[0] == 0x10 && data[1] == 0x20) || data[1] == 0x80) {
+			return Tablet::PacketPositionInvalid;
+		}
+		if ((data[1] & 0x20) == 0 && (data[1] & 0x0A) != 0x0A) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = data[1] & ~0x01;
+		reportData.x = (ReadBe16(data, 2) << 1) | ((data[9] >> 1) & 1);
+		reportData.y = (ReadBe16(data, 4) << 1) | (data[9] & 1);
+		reportData.pressure = (data[6] << 3) | ((data[7] & 0xC0) >> 5) | (data[1] & 1);
+		reportData.z = data[9];
+	}
+	else if (settings.type == TabletSettings::TypeWacomPL) {
+		if ((data[1] & 0x40) == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
+		reportData.reportId = data[0];
+		reportData.buttons = ((data[4] & 0x10) ? 0x02 : 0x00) | ((data[4] & 0x20) ? 0x04 : 0x00);
+		reportData.x = ((data[1] & 0x03) << 14) | (data[2] << 7) | data[3];
+		reportData.y = ((data[4] & 0x03) << 14) | (data[5] << 7) | data[6];
+		reportData.pressure = ((data[7] ^ 0x40) << 2) | ((data[4] & 0x40) >> 5) | ((data[4] & 0x04) >> 2);
+		reportData.z = 0;
+	}
+	else if (settings.type == TabletSettings::TypeWacomPTU) {
+		reportData.reportId = data[0];
+		reportData.buttons = ((data[1] & 0x02) ? 0x02 : 0x00) | ((data[1] & 0x10) ? 0x04 : 0x00) | ((data[1] & 0x04) ? 0x08 : 0x00);
+		reportData.x = ReadLe16(data, 2);
+		reportData.y = ReadLe16(data, 4);
+		reportData.pressure = ReadLe16(data, 6);
+		reportData.z = 0;
+		if ((data[1] & 0x20) == 0 && reportData.x == 0 && reportData.y == 0 && reportData.pressure == 0) {
+			return Tablet::PacketPositionInvalid;
+		}
 	}
 	else {
 		reportData.reportId = data[0];

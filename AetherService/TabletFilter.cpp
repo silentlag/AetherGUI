@@ -11,6 +11,10 @@ TabletFilter::TabletFilter() {
 }
 
 
+void TabletFilter::SetReportState(BYTE buttons, double pressure, double hoverDistance) {
+}
+
+
 
 
 bool TabletFilter::StartTimer() {

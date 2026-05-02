@@ -12,6 +12,7 @@
 #include "TabletFilterReconstructor.h"
 #include "TabletFilterAdaptive.h"
 #include "TabletFilterAetherSmooth.h"
+#include "TabletFilterPlugin.h"
 #include "TabletBenchmark.h"
 #include "Vector2D.h"
 
@@ -85,12 +86,13 @@ public:
 	
 	TabletFilterAetherSmooth aetherSmooth;
 
+	std::vector<TabletFilterPlugin*> pluginFilters;
 	
 	TabletFilter *filterTimed[10];
 	int filterTimedCount;
 
 	
-	TabletFilter *filterPacket[10];
+	TabletFilter *filterPacket[32];
 	int filterPacketCount;
 
 	
@@ -122,6 +124,11 @@ public:
 	Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength = 0, int stringId = 0, string stringMatch = "", int stringId2 = 0, string stringMatch2 = "");
 	Tablet();
 	~Tablet();
+
+	void ResetPacketFilters();
+	void ClearPluginFilters();
+	int LoadPluginFilters(const std::wstring& pluginDirectory);
+	void ReloadPluginFilters(const std::wstring& pluginDirectory);
 
 	bool Init();
 	bool IsConfigured();

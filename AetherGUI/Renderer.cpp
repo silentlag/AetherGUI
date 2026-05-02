@@ -230,6 +230,21 @@ void Renderer::Resize(UINT width, UINT height) {
 	}
 }
 
+bool Renderer::SetDpiScale(float scale) {
+	scale = Clamp(scale, 0.75f, 2.50f);
+	if (fabsf(scale - dpiScale) < 0.001f)
+		return true;
+
+	dpiScale = scale;
+	SafeRelease(&pFontTitle);
+	SafeRelease(&pFontHeading);
+	SafeRelease(&pFontBody);
+	SafeRelease(&pFontSmall);
+	SafeRelease(&pFontMono);
+	SafeRelease(&pFontIcon);
+	return CreateTextFormats();
+}
+
 void Renderer::BeginFrame() {
 	if (!pRT) return;
 	pRT->BeginDraw();

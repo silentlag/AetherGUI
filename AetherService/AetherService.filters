@@ -15,6 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AetherPluginApi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AetherPluginManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -78,11 +84,17 @@
     <ClInclude Include="TabletFilterAetherSmooth.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TabletFilterPlugin.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="EmbeddedConfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AetherPluginManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -144,6 +156,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabletFilterAetherSmooth.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TabletFilterPlugin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

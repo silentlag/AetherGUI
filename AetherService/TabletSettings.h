@@ -19,7 +19,26 @@ public:
 		TypeXPPenOffsetPressure,
 		TypeXPPenGen2,
 		TypeXPPenOffsetAux,
-		TypeWacomDrivers
+		TypeWacomDrivers,
+		TypeAcepen,
+		TypeBosto,
+		TypeFlooGoo,
+		TypeGenius,
+		TypeGeniusV2,
+		TypeLifetec,
+		TypeRobotPen,
+		TypeVeikk,
+		TypeVeikkA15,
+		TypeVeikkV1,
+		TypeVeikkTilt,
+		TypeWoodPad,
+		TypeXenceLabs,
+		TypeXENX,
+		TypeWacomGraphire,
+		TypeWacomBambooPad,
+		TypeWacomCintiqV1,
+		TypeWacomPL,
+		TypeWacomPTU
 	};
 
 	BYTE detectMask;

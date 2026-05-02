@@ -188,6 +188,11 @@ double TabletFilterSmoothing::GetWeight(double latency) {
 
 
 void TabletFilterSmoothing::SetLatency(double latency) {
+	if (latency <= 0) {
+		this->weight = 1.0;
+		this->latency = 0;
+		return;
+	}
 	this->weight = GetWeight(latency);
 	this->latency = latency;
 }

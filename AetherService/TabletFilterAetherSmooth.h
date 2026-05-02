@@ -49,6 +49,15 @@ public:
 	bool enableDebounce;
 	double debounceMs;
 
+	bool enableRhythmFlow;
+	double rhythmStrength;
+	double rhythmTurnRelease;
+	double rhythmJitter;
+	Vector2D rhythmPos;
+	Vector2D rhythmPrevRaw;
+	Vector2D rhythmPrevVelocity;
+	bool rhythmFirstTime;
+
 	
 	TabletFilterAetherSmooth();
 	~TabletFilterAetherSmooth();
@@ -68,5 +77,7 @@ private:
 	
 	Vector2D AdaptiveFlow(Vector2D x, double dt, double minCutoff, double beta, double dCutoff);
 	void AdaptiveFlowReset(Vector2D pos);
+	Vector2D RhythmFlow(Vector2D x, Vector2D raw, double dt);
+	void RhythmFlowReset(Vector2D pos);
 	double CalculateAlpha(double dt, double fc);
 };

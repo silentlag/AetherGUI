@@ -166,6 +166,8 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AetherPluginApi.h" />
+    <ClInclude Include="AetherPluginManager.h" />
     <ClInclude Include="CommandLine.h" />
     <ClInclude Include="HIDDevice.h" />
     <ClInclude Include="Logger.h" />
@@ -181,6 +183,7 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClInclude Include="TabletFilterReconstructor.h" />
     <ClInclude Include="TabletFilterAdaptive.h" />
     <ClInclude Include="TabletFilterAetherSmooth.h" />
+    <ClInclude Include="TabletFilterPlugin.h" />
     <ClInclude Include="TabletFilterSmoothing.h" />
     <ClInclude Include="TabletSettings.h" />
     <ClInclude Include="targetver.h" />
@@ -190,6 +193,7 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClInclude Include="EmbeddedConfig.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AetherPluginManager.cpp" />
     <ClCompile Include="CommandLine.cpp" />
     <ClCompile Include="HIDDevice.cpp" />
     <ClCompile Include="Logger.cpp" />
@@ -204,6 +208,7 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClCompile Include="TabletFilterReconstructor.cpp" />
     <ClCompile Include="TabletFilterAdaptive.cpp" />
     <ClCompile Include="TabletFilterAetherSmooth.cpp" />
+    <ClCompile Include="TabletFilterPlugin.cpp" />
     <ClCompile Include="TabletFilterSmoothing.cpp" />
     <ClCompile Include="TabletSettings.cpp" />
     <ClCompile Include="USBDevice.cpp" />

@@ -4767,6 +4767,722 @@ Type UCLogic
 
 )CFG";
 
+const char* configDataOtdMissing = R"CFG(
+
+# === OTD 0.6.6.2 missing supported tablets ===
+
+# Acepen AP1060
+Tablet 0x5543 0x0082 0x0000 0x0000 11
+Name "Acepen AP1060"
+ReportLength 11
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152.4
+InitReport 0x09 0x0A 0xE1 0x4A 0x00 0x00 0x6C 0x3D 0x00
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+Type Acepen
+
+# Acepen AP906
+Tablet 0x5543 0x0091 0x0000 0x0000 11
+Name "Acepen AP906"
+ReportLength 11
+MaxX 45974
+MaxY 28448
+MaxPressure 8191
+Width 229.87
+Height 142.24
+InitReport 0x09 0x0A 0xE1 0x4A 0x00 0x00 0x6C 0x3D 0x00
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+Type Acepen
+
+# Bosto BT-12HD
+Tablet 0x0ED1 0x7821 0x0000 0x0000 16
+Name "Bosto BT-12HD"
+ReportLength 16
+MaxX 17920
+MaxY 10240
+MaxPressure 8191
+Width 113.792
+Height 65.024
+Type Bosto
+
+# FlooGoo FMA100
+Tablet 0x0A12 0x4007 0x0000 0x0000 12
+Name "FlooGoo FMA100"
+ReportLength 12
+MaxX 20640
+MaxY 15480
+MaxPressure 32767
+Width 262.128
+Height 196.596
+Type FlooGoo
+
+# Genius G-Pen 560
+Tablet 0x0458 0x5003 0x0000 0x0000 8
+Name "Genius G-Pen 560"
+ReportLength 8
+MaxX 11999
+MaxY 8999
+MaxPressure 1023
+Width 152.387
+Height 114.287
+InitFeature 0x02 0x04 0x00
+InitFeature 0x02 0x02 0x00
+InitFeature 0x02 0x10 0x01
+Type GeniusV2
+
+# Genius G-Pen F509
+Tablet 0x172F 0x0038 0x0000 0x0000 64
+Name "Genius G-Pen F509"
+ReportLength 64
+MaxX 17920
+MaxY 10752
+MaxPressure 1023
+Width 227.584
+Height 136.55
+InitFeature 0x02 0x04 0x00
+InitFeature 0x02 0x02 0x00
+InitFeature 0x02 0x10 0x01
+Type GeniusV2
+
+# Genius i405x
+Tablet 0x0458 0x5010 0x0000 0x0000 8
+Name "Genius i405x"
+ReportLength 8
+MaxX 14050
+MaxY 10240
+MaxPressure 1023
+Width 140.5
+Height 102.4
+InitFeature 0x05 0x12 0x10 0x11 0x12 0x00 0x00 0x00
+Type Genius
+
+# Genius i608x
+Tablet 0x0458 0x501A 0x0000 0x0000 16
+Tablet 0x0458 0x501A 0x0000 0x0000 8
+Name "Genius i608x"
+ReportLength 16
+MaxX 40960
+MaxY 30720
+MaxPressure 2047
+Width 204.8
+Height 153.6
+InitFeature 0x05 0x12 0x10 0x11 0x12 0x00 0x00 0x00
+Type Genius
+
+# LifeTec LT9570
+Tablet 0x08CA 0x0010 0x0000 0x0000 8
+Name "LifeTec LT9570"
+ReportLength 8
+MaxX 5999
+MaxY 4499
+MaxPressure 1023
+Width 299.95
+Height 224.95
+InitFeature 0x02 0x18 0x04
+InitFeature 0x02 0x02 0x00
+InitFeature 0x02 0x03 0x00
+InitFeature 0x02 0x04 0x00
+InitFeature 0x02 0x01 0x00
+InitFeature 0x02 0x01 0x01
+InitFeature 0x02 0x08 0x00
+InitFeature 0x02 0x10 0x01
+InitFeature 0x02 0x11 0x02
+Type Lifetec
+
+# RobotPen T9A
+Tablet 0x0483 0x6003 0x0000 0x0000 64
+Name "RobotPen T9A"
+ReportLength 64
+MaxX 22656
+MaxY 16636
+MaxPressure 1023
+Width 287.731
+Height 211.277
+InitReport 0xAA 0x10 0x02
+Type RobotPen
+
+# Trust Flex Design Tablet
+Tablet 0x172F 0x0037 0x0000 0x0000 64
+Name "Trust Flex Design Tablet"
+ReportLength 64
+MaxX 12288
+MaxY 9216
+MaxPressure 1023
+Width 153.6
+Height 115.2
+InitFeature 0x02 0x04 0x00
+InitFeature 0x02 0x02 0x00
+InitFeature 0x02 0x10 0x01
+Type GeniusV2
+
+# VEIKK A15
+Tablet 0x2FEB 0x0004 0x0000 0x0000 9
+Name "VEIKK A15"
+ReportLength 9
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152.4
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type VeikkA15
+
+# VEIKK A15 V2
+Tablet 0x2FEB 0x0004 0x0000 0x0000 13
+Name "VEIKK A15 V2"
+ReportLength 13
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158.75
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type Veikk
+
+# VEIKK A30 V2
+Tablet 0x2FEB 0x0002 0x0000 0x0000 13
+Name "VEIKK A30 V2"
+ReportLength 13
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158.75
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type Veikk
+
+# VEIKK A50
+Tablet 0x2FEB 0x0003 0x0000 0x0000 9
+Tablet 0x2FEB 0x0003 0x0000 0x0000 8
+Name "VEIKK A50"
+ReportLength 9
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152.4
+InitReport 0x09 0x01 0x04
+Type VeikkV1
+
+# VEIKK A50 (Variant 2)
+Tablet 0x2FEB 0x0003 0x0000 0x0000 13
+Name "VEIKK A50 (Variant 2)"
+ReportLength 13
+MaxX 50800
+MaxY 30480
+MaxPressure 8191
+Width 254
+Height 152.4
+InitReport 0x09 0x01 0x04
+Type Veikk
+
+# VEIKK S640
+Tablet 0x2FEB 0x0001 0x0000 0x0000 9
+Name "VEIKK S640"
+ReportLength 9
+MaxX 30480
+MaxY 20320
+MaxPressure 8191
+Width 152.4
+Height 101.6
+InitReport 0x09 0x01 0x04
+Type VeikkV1
+
+# VEIKK S640 V2
+Tablet 0x2FEB 0x0001 0x0000 0x0000 13
+Name "VEIKK S640 V2"
+ReportLength 13
+MaxX 30480
+MaxY 20320
+MaxPressure 8191
+Width 152.4
+Height 101.6
+InitReport 0x09 0x01 0x04
+Type Veikk
+
+# VEIKK VK1060
+Tablet 0x2FEB 0x0008 0x0000 0x0000 13
+Name "VEIKK VK1060"
+ReportLength 13
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158.75
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type VeikkTilt
+
+# VEIKK VK1060PRO
+Tablet 0x2FEB 0x0007 0x0000 0x0000 13
+Name "VEIKK VK1060PRO"
+ReportLength 13
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158.75
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type Veikk
+
+# VEIKK VK1200
+Tablet 0x2FEB 0x1005 0x0000 0x0000 13
+Name "VEIKK VK1200"
+ReportLength 13
+MaxX 58880
+MaxY 33120
+MaxPressure 8191
+Width 294.4
+Height 165.6
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type VeikkTilt
+
+# VEIKK VK2200PRO
+Tablet 0x2FEB 0x1006 0x0000 0x0000 13
+Name "VEIKK VK2200PRO"
+ReportLength 13
+MaxX 95200
+MaxY 53600
+MaxPressure 16383
+Width 476
+Height 268
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type VeikkTilt
+
+# VEIKK VK430
+Tablet 0x2FEB 0x0009 0x0000 0x0000 13
+Name "VEIKK VK430"
+ReportLength 13
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 101.6
+Height 76.2
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type Veikk
+
+# VEIKK VK430 V2
+Tablet 0x2FEB 0x0009 0x0000 0x0000 13
+Name "VEIKK VK430 V2"
+ReportLength 13
+MaxX 20320
+MaxY 15240
+MaxPressure 8191
+Width 101.6
+Height 76.2
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type Veikk
+
+# VEIKK VK640
+Tablet 0x2FEB 0x0005 0x0000 0x0000 13
+Name "VEIKK VK640"
+ReportLength 13
+MaxX 30480
+MaxY 20320
+MaxPressure 8191
+Width 152.4
+Height 101.6
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type VeikkTilt
+
+# VEIKK Voila (VO1060)
+Tablet 0x2FEB 0x000B 0x0000 0x0000 13
+Name "VEIKK Voila (VO1060)"
+ReportLength 13
+MaxX 50800
+MaxY 31750
+MaxPressure 8191
+Width 254
+Height 158.75
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+Type Veikk
+
+# ViewSonic Woodpad PF0730
+Tablet 0x0543 0xE667 0x0000 0x0000 14
+Tablet 0x0543 0xE667 0x0000 0x0000 33
+Name "ViewSonic Woodpad PF0730"
+ReportLength 14
+MaxX 16800
+MaxY 10640
+MaxPressure 4095
+Width 168
+Height 106.4
+InitFeature 0x02 0x10 0x01 0x00 0x00
+Type WoodPad
+
+# ViewSonic Woodpad PF1030
+Tablet 0x0543 0xE668 0x0000 0x0000 14
+Name "ViewSonic Woodpad PF1030"
+ReportLength 14
+MaxX 44800
+MaxY 28000
+MaxPressure 4095
+Width 224
+Height 140
+InitFeature 0x02 0x10 0x01 0x00 0x00
+Type WoodPad
+
+# Wacom Cintiq 12WX (DTZ-1200W)
+Tablet 0x056A 0x00C6 0x0000 0x0000 10
+Name "Wacom Cintiq 12WX (DTZ-1200W)"
+ReportLength 10
+MaxX 52220
+MaxY 32640
+MaxPressure 2046
+Width 261.1
+Height 163.2
+InitFeature 0x02 0x02
+Type WacomIntuos
+
+# Wacom Cintiq 18SX (PL-800-U)
+Tablet 0x056A 0x0035 0x0000 0x0000 8
+Name "Wacom Cintiq 18SX (PL-800-U)"
+ReportLength 8
+MaxX 7220
+MaxY 5780
+MaxPressure 511
+Width 361
+Height 289
+InitFeature 0x02 0x02
+Type WacomPL
+
+# Wacom Cintiq 21UX (DTK-2100)
+Tablet 0x056A 0x00CC 0x0000 0x0000
+Name "Wacom Cintiq 21UX (DTK-2100)"
+MaxX 87200
+MaxY 65600
+MaxPressure 2047
+Width 436
+Height 328
+InitFeature 0x02 0x02
+Type WacomCintiqV1
+
+# Wacom Cintiq 21UX (DTZ-2100)
+Tablet 0x056A 0x003F 0x0000 0x0000 10
+Name "Wacom Cintiq 21UX (DTZ-2100)"
+ReportLength 10
+MaxX 87200
+MaxY 65600
+MaxPressure 2046
+Width 436
+Height 328
+InitFeature 0x02 0x02
+Type WacomIntuos
+
+# Wacom Cintiq 22HD (DTK-2200)
+Tablet 0x056A 0x00FA 0x0000 0x0000 10
+Name "Wacom Cintiq 22HD (DTK-2200)"
+ReportLength 10
+MaxX 95040
+MaxY 54260
+MaxPressure 2047
+Width 475.2
+Height 271.3
+InitFeature 0x02 0x02
+Type WacomCintiqV1
+
+# Wacom Cintiq 22HD Touch (DTH-2200)
+Tablet 0x056A 0x005B 0x0000 0x0000 10
+Name "Wacom Cintiq 22HD Touch (DTH-2200)"
+ReportLength 10
+MaxX 95600
+MaxY 54200
+MaxPressure 2047
+Width 478
+Height 271
+InitFeature 0x02 0x02
+Type WacomCintiqV1
+
+# Wacom CTE-430
+Tablet 0x056A 0x0013 0x0000 0x0000 8
+Name "Wacom CTE-430"
+ReportLength 8
+MaxX 10208
+MaxY 7424
+MaxPressure 511
+Width 127.6
+Height 92.8
+InitFeature 0x02 0x02
+Type WacomGraphire
+
+# Wacom CTE-440
+Tablet 0x056A 0x0015 0x0000 0x0000 9
+Tablet 0x056A 0x0015 0x0000 0x0000 8
+Name "Wacom CTE-440"
+ReportLength 9
+MaxX 10208
+MaxY 7424
+MaxPressure 511
+Width 127.6
+Height 92.8
+Type WacomGraphire
+
+# Wacom CTE-630
+Tablet 0x056A 0x0014 0x0000 0x0000 8
+Name "Wacom CTE-630"
+ReportLength 8
+MaxX 16704
+MaxY 12064
+MaxPressure 511
+Width 208.8
+Height 150.8
+InitFeature 0x02 0x02
+Type WacomGraphire
+
+# Wacom CTH-300
+Tablet 0x056A 0x0319 0x0000 0x0000 32
+Name "Wacom CTH-300"
+ReportLength 32
+MaxX 10690
+MaxY 6680
+MaxPressure 511
+Width 106.9
+Height 66.8
+InitFeature 0x02 0x02
+Type WacomBambooPad
+
+# Wacom CTH-301
+Tablet 0x056A 0x0318 0x0000 0x0000 64
+Name "Wacom CTH-301"
+ReportLength 64
+MaxX 10690
+MaxY 6680
+MaxPressure 511
+Width 106.9
+Height 66.8
+InitFeature 0x02 0x02
+Type WacomBambooPad
+
+# Wacom ET-0405A-U
+Tablet 0x056A 0x0011 0x0000 0x0000 8
+Name "Wacom ET-0405A-U"
+ReportLength 8
+MaxX 10208
+MaxY 7424
+MaxPressure 511
+Width 127.6
+Height 92.8
+InitFeature 0x02 0x02
+Type WacomGraphire
+
+# Wacom PTU-600U
+Tablet 0x056A 0x0003 0x0000 0x0000 8
+Name "Wacom PTU-600U"
+ReportLength 8
+MaxX 20480
+MaxY 15360
+MaxPressure 511
+Width 204.8
+Height 153.6
+InitFeature 0x02 0x02
+Type WacomPTU
+
+# Wacom PTZ-1230
+Tablet 0x056A 0x00B3 0x0000 0x0000 10
+Name "Wacom PTZ-1230"
+ReportLength 10
+MaxX 60960
+MaxY 60960
+MaxPressure 2046
+Width 304.8
+Height 304.8
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Wacom PTZ-1231W
+Tablet 0x056A 0x00B4 0x0000 0x0000 10
+Name "Wacom PTZ-1231W"
+ReportLength 10
+MaxX 97536
+MaxY 60960
+MaxPressure 2046
+Width 487.68
+Height 304.8
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Wacom PTZ-430
+Tablet 0x056A 0x00B0 0x0000 0x0000 10
+Name "Wacom PTZ-430"
+ReportLength 10
+MaxX 25400
+MaxY 20320
+MaxPressure 2046
+Width 127
+Height 101.6
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Wacom PTZ-431W
+Tablet 0x056A 0x00B7 0x0000 0x0000 10
+Name "Wacom PTZ-431W"
+ReportLength 10
+MaxX 31496
+MaxY 19685
+MaxPressure 2046
+Width 157.48
+Height 98.425
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Wacom PTZ-630
+Tablet 0x056A 0x00B1 0x0000 0x0000 10
+Name "Wacom PTZ-630"
+ReportLength 10
+MaxX 40640
+MaxY 30480
+MaxPressure 2046
+Width 203.2
+Height 152.4
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Wacom PTZ-631W
+Tablet 0x056A 0x00B5 0x0000 0x0000 10
+Name "Wacom PTZ-631W"
+ReportLength 10
+MaxX 54204
+MaxY 31750
+MaxPressure 2046
+Width 271.02
+Height 158.75
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Wacom PTZ-930
+Tablet 0x056A 0x00B2 0x0000 0x0000 10
+Name "Wacom PTZ-930"
+ReportLength 10
+MaxX 60960
+MaxY 45720
+MaxPressure 2046
+Width 304.8
+Height 228.6
+InitFeature 0x02 0x02
+InitFeature 0x04 0x00
+Type WacomIntuos
+
+# Waltop Slim Tablet 5.8"
+Tablet 0x172F 0x0032 0x0000 0x0000 8
+Name "Waltop Slim Tablet 5.8\""
+ReportLength 8
+MaxX 10000
+MaxY 6000
+MaxPressure 1023
+Width 127
+Height 76.2
+InitFeature 0x02 0x04 0x00
+InitFeature 0x02 0x02 0x00
+InitFeature 0x02 0x10 0x01
+Type GeniusV2
+
+# XenceLabs Pen Tablet Medium
+Tablet 0x28BD 0x5201 0x0000 0x0000 10
+Name "XenceLabs Pen Tablet Medium"
+ReportLength 10
+MaxX 52324
+MaxY 29600
+MaxPressure 8191
+Width 261.62
+Height 148
+InitReport 0x02 0xB0 0x04
+Type XenceLabs
+
+# XenceLabs Pen Tablet Small
+Tablet 0x28BD 0x5204 0x0000 0x0000 10
+Name "XenceLabs Pen Tablet Small"
+ReportLength 10
+MaxX 35600
+MaxY 20200
+MaxPressure 8191
+Width 178
+Height 101
+InitReport 0x02 0xB0 0x04
+Type XenceLabs
+
+# XENX P1-640
+Tablet 0x2D80 0x2002 0x0000 0x0000 64
+Name "XENX P1-640"
+ReportLength 64
+MaxX 16800
+MaxY 10500
+MaxPressure 8191
+Width 168
+Height 105
+InitFeature 0x20 0x01
+Type XENX
+
+# XENX P3-1060
+Tablet 0x2D80 0x2001 0x0000 0x0000 64
+Name "XENX P3-1060"
+ReportLength 64
+MaxX 25400
+MaxY 15875
+MaxPressure 8191
+Width 254
+Height 158.75
+InitFeature 0x20 0x01
+Type XENX
+
+# XENX X1-640
+Tablet 0x2D80 0x6001 0x0000 0x0000 64
+Name "XENX X1-640"
+ReportLength 64
+MaxX 15200
+MaxY 9500
+MaxPressure 8191
+Width 152
+Height 95
+InitFeature 0x20 0x01
+Type XENX
+
+# XOPPOX D161
+Tablet 0x2FEB 0x1004 0x0000 0x0000 13
+Name "XOPPOX D161"
+ReportLength 13
+MaxX 68840
+MaxY 38720
+MaxPressure 8191
+Width 344.2
+Height 193.6
+InitReport 0x09 0x01 0x04
+InitReport 0x09 0x02 0x02
+InitReport 0x09 0x03 0x02
+Type Veikk
+
+)CFG";
+
 	std::vector<std::string> commands;
 	auto appendCommands = [&commands](const char* data) {
 		std::istringstream stream(data);
@@ -4794,6 +5510,7 @@ Type UCLogic
 	appendCommands(configDataCompatibleExtended3);
 	appendCommands(configDataCompatibleExtended4);
 appendCommands(configDataGaomonExtended);
+	appendCommands(configDataOtdMissing);
 	return commands;
 }
 

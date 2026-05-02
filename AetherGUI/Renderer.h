@@ -35,6 +35,8 @@ public:
 	
 	void Resize(UINT width, UINT height);
 
+	bool SetDpiScale(float scale);
+
 	
 	void BeginFrame();
 	

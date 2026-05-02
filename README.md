@@ -49,7 +49,7 @@
     <td align="center"><strong>Raw Input Fixes</strong><br/>Relative-mode resets · invalid-position handling · reduced event coalescing</td>
   </tr>
   <tr>
-    <td align="center"><strong>Native Plugin Manager</strong><br/>Install DLL filters · build source ports · browse GitHub plugin catalogs</td>
+    <td align="center"><strong>Native Plugin Manager</strong><br/>Animated lists · cached catalogs · install DLL filters · build source ports</td>
     <td align="center"><strong>Modern Quality-of-Life</strong><br/>Multi-monitor mapping · DPI scaling · undo · autosave · input visualizer</td>
   </tr>
 </table>
@@ -151,7 +151,7 @@
   </tr>
   <tr>
     <td align="center"><strong>High polling / overclock</strong></td>
-    <td align="center">Targets up to 2000 Hz. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
+    <td align="center">Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
   </tr>
   <tr>
     <td align="center"><strong>Pressure and pen buttons</strong></td>
@@ -174,8 +174,12 @@
     <td align="center">Aether DLL plugins can expose sliders/toggles through metadata and are applied in the packet filter pipeline.</td>
   </tr>
   <tr>
+    <td align="center"><strong>Pen Rate Limit</strong></td>
+    <td align="center">Can cap normal packet-driven output without taking over the Overclock timer, so 2000 Hz overclock remains active when both are enabled.</td>
+  </tr>
+  <tr>
     <td align="center"><strong>GitHub plugin catalog</strong></td>
-    <td align="center">The Plugin Manager can list Aether source filters and mapped OpenTabletDriver plugin ports from a configurable repository source.</td>
+    <td align="center">The Plugin Manager can list Aether source filters and mapped OpenTabletDriver plugin ports from a configurable repository source, with HTTP caching to reduce repeated loading stalls.</td>
   </tr>
 </table>
 
@@ -203,11 +207,15 @@
   </tr>
   <tr>
     <td align="center"><strong>Plugin Manager</strong></td>
-    <td align="center">Browses installed filters, Aether source filters, and available OTD source ports with source/wiki links.</td>
+    <td align="center">Browses installed filters, Aether source filters, and available OTD source ports with animated list transitions and source/wiki links.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin metadata</strong></td>
     <td align="center">Plugins can expose option metadata so the GUI automatically creates sliders and toggles.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Catalog cache</strong></td>
+    <td align="center">GitHub API/raw responses are cached during the session, and OTD metadata loading is capped per refresh to keep the UI more responsive.</td>
   </tr>
 </table>
 
@@ -294,7 +302,7 @@
   </tr>
   <tr>
     <td align="center"><strong>4</strong></td>
-    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, or native plugins as needed.</td>
+    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, overclock, Pen Rate Limit, or native plugins as needed.</td>
   </tr>
   <tr>
     <td align="center"><strong>5</strong></td>
@@ -305,6 +313,7 @@
 <p>
   For games that use raw input, test both Absolute and Relative modes.
   Keep the overclock value at the highest rate your system can handle without frame-time spikes.
+  Pen Rate Limit can be used separately for normal packet output; when Overclock is enabled, Overclock remains the active high-rate output timer.
 </p>
 
 <br/>
@@ -344,11 +353,15 @@
   </tr>
   <tr>
     <td align="center"><strong>Game stutters at high Hz</strong></td>
-    <td align="center">Lower overclock target to 1000-1500 Hz or enable Pen Rate Limit.</td>
+    <td align="center">Lower overclock target to 1000-1500 Hz. Pen Rate Limit can help normal output, but it no longer takes over the Overclock rate.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin does not appear</strong></td>
     <td align="center">Use Reload in the Plugin Manager and verify the DLL exports the Aether plugin API.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>OTD Ports tab loads slowly</strong></td>
+    <td align="center">Press Refresh only when needed. Catalog responses are cached during the session, and metadata requests are limited to reduce UI stalls.</td>
   </tr>
 </table>
 

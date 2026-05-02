@@ -1,10 +1,76 @@
 #include "stdafx.h"
 #include "ProcessCommand.h"
+#include "AetherPluginManager.h"
 
 #define LOG_MODULE ""
 #include "Logger.h"
 
 
+
+static std::string LowerService(std::string text) {
+	transform(text.begin(), text.end(), text.begin(), ::tolower);
+	return text;
+}
+
+static bool TryParsePluginIndex(const std::string& value, int* index) {
+	if (value.empty())
+		return false;
+
+	char* end = NULL;
+	long parsed = strtol(value.c_str(), &end, 10);
+	if (end == value.c_str() || *end != '\0')
+		return false;
+
+	*index = (int)parsed;
+	return true;
+}
+
+static std::wstring FileNameFromPath(const std::wstring& path) {
+	size_t slash = path.find_last_of(L"\\/");
+	return slash == std::wstring::npos ? path : path.substr(slash + 1);
+}
+
+static std::string PluginRelativeKey(TabletFilterPlugin* plugin) {
+	if (plugin == NULL)
+		return "";
+
+	std::wstring pluginPath = plugin->path;
+	std::wstring root = GetAetherPluginDirectory();
+	std::wstring lowerPath = pluginPath;
+	std::wstring lowerRoot = root;
+	transform(lowerPath.begin(), lowerPath.end(), lowerPath.begin(), ::towlower);
+	transform(lowerRoot.begin(), lowerRoot.end(), lowerRoot.begin(), ::towlower);
+
+	std::wstring relative = pluginPath;
+	if (lowerPath.find(lowerRoot) == 0)
+		relative = pluginPath.substr(root.size());
+	for (wchar_t& ch : relative) {
+		if (ch == L'/')
+			ch = L'\\';
+	}
+	return WideToUtf8Service(relative);
+}
+
+static int FindPluginFilterIndex(const std::string& selector) {
+	if (tablet == NULL)
+		return -1;
+
+	int parsedIndex = -1;
+	if (TryParsePluginIndex(selector, &parsedIndex))
+		return parsedIndex;
+
+	std::string needle = LowerService(selector);
+	for (size_t i = 0; i < tablet->pluginFilters.size(); i++) {
+		TabletFilterPlugin* plugin = tablet->pluginFilters[i];
+		std::string key = LowerService(PluginRelativeKey(plugin));
+		std::string name = LowerService(plugin != NULL ? plugin->name : "");
+		std::string dllName = LowerService(WideToUtf8Service(FileNameFromPath(plugin != NULL ? plugin->path : L"")));
+		if (needle == key || needle == name || needle == dllName)
+			return (int)i;
+	}
+
+	return -1;
+}
 
 
 
@@ -353,6 +419,101 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->settings.type = TabletSettings::TypeWacomDrivers;
 		}
 
+		
+		else if (cmd->GetStringLower(0, "") == "acepen") {
+			tablet->settings.type = TabletSettings::TypeAcepen;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "bosto") {
+			tablet->settings.type = TabletSettings::TypeBosto;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "floogoo" || cmd->GetStringLower(0, "") == "fma") {
+			tablet->settings.type = TabletSettings::TypeFlooGoo;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "genius") {
+			tablet->settings.type = TabletSettings::TypeGenius;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "geniusv2") {
+			tablet->settings.type = TabletSettings::TypeGeniusV2;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "lifetec") {
+			tablet->settings.type = TabletSettings::TypeLifetec;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "robotpen") {
+			tablet->settings.type = TabletSettings::TypeRobotPen;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "veikk") {
+			tablet->settings.type = TabletSettings::TypeVeikk;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "veikka15") {
+			tablet->settings.type = TabletSettings::TypeVeikkA15;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "veikkv1") {
+			tablet->settings.type = TabletSettings::TypeVeikkV1;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "veikktilt") {
+			tablet->settings.type = TabletSettings::TypeVeikkTilt;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "woodpad" || cmd->GetStringLower(0, "") == "viewsonicwoodpad") {
+			tablet->settings.type = TabletSettings::TypeWoodPad;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "xencelabs") {
+			tablet->settings.type = TabletSettings::TypeXenceLabs;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "xenx") {
+			tablet->settings.type = TabletSettings::TypeXENX;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "wacomgraphire") {
+			tablet->settings.type = TabletSettings::TypeWacomGraphire;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "wacombamboopad") {
+			tablet->settings.type = TabletSettings::TypeWacomBambooPad;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "wacomcintiqv1") {
+			tablet->settings.type = TabletSettings::TypeWacomCintiqV1;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "wacompl") {
+			tablet->settings.type = TabletSettings::TypeWacomPL;
+		}
+
+		
+		else if (cmd->GetStringLower(0, "") == "wacomptu") {
+			tablet->settings.type = TabletSettings::TypeWacomPTU;
+		}
+
 		LOG_INFO("Tablet type = %d\n", tablet->settings.type);
 	}
 
@@ -530,6 +691,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (tablet->filterTimedCount > 0 && tablet->filterTimed[0]->callback != NULL) {
 				tablet->smoothing.StartTimer();
 			}
+			RefreshTimedOutputTimer();
 			timeEndPeriod(1);
 			SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
 			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
@@ -537,6 +699,29 @@ bool ProcessCommand(CommandLine *cmd) {
 				SetThreadPriority(tabletThread->native_handle(), THREAD_PRIORITY_NORMAL);
 			}
 			LOG_INFO("Overclock = off\n");
+		}
+	}
+
+	
+	else if (cmd->is("PenRateLimit") || cmd->is("PenRate") || cmd->is("ReportRateLimit")) {
+		string first = cmd->GetStringLower(0, "");
+		bool hasExplicitState = (first == "on" || first == "off" || first == "true" || first == "false" || first == "0" || first == "1");
+		bool enabled = hasExplicitState ? cmd->GetBoolean(0, penRateLimitActive) : true;
+		double targetHz = hasExplicitState ? cmd->GetDouble(1, penRateLimitHz) : cmd->GetDouble(0, penRateLimitHz);
+
+		if (targetHz < 30.0) targetHz = 30.0;
+		if (targetHz > 1000.0) targetHz = 1000.0;
+
+		penRateLimitActive = enabled;
+		penRateLimitHz = targetHz;
+		ResetPenRateLimiter();
+		RefreshTimedOutputTimer();
+
+		if (penRateLimitActive) {
+			LOG_INFO("Pen rate limit = on (%0.0f Hz independent output target)\n", penRateLimitHz);
+		}
+		else {
+			LOG_INFO("Pen rate limit = off\n");
 		}
 	}
 
@@ -580,6 +765,22 @@ bool ProcessCommand(CommandLine *cmd) {
 			mapper->areaVirtualScreen.width,
 			mapper->areaVirtualScreen.height
 		);
+	}
+
+	else if (cmd->is("StaticMonitorInfo") || cmd->is("MonitorInfo")) {
+		if (vmulti != NULL) {
+			double primaryWidth = cmd->GetDouble(0, vmulti->monitorInfo.primaryWidth);
+			double primaryHeight = cmd->GetDouble(1, vmulti->monitorInfo.primaryHeight);
+			double virtualWidth = cmd->GetDouble(2, primaryWidth);
+			double virtualHeight = cmd->GetDouble(3, primaryHeight);
+			double virtualX = cmd->GetDouble(4, 0);
+			double virtualY = cmd->GetDouble(5, 0);
+			vmulti->SetMonitorInfo(primaryWidth, primaryHeight, virtualWidth, virtualHeight, virtualX, virtualY);
+			LOG_INFO("Static monitor info = primary=%0.0fx%0.0f virtual=%0.0fx%0.0f offset=%+0.0f,%+0.0f\n",
+				vmulti->monitorInfo.primaryWidth, vmulti->monitorInfo.primaryHeight,
+				vmulti->monitorInfo.virtualWidth, vmulti->monitorInfo.virtualHeight,
+				vmulti->monitorInfo.virtualX, vmulti->monitorInfo.virtualY);
+		}
 	}
 
 	
@@ -734,6 +935,7 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->smoothing.isEnabled = false;
 			LOG_INFO("Smoothing = off\n");
 		}
+		RefreshTimedOutputTimer();
 	}
 
 
@@ -744,6 +946,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		bool AntichatterEnabled = (bool)cmd->GetInt(0, tablet->smoothing.AntichatterEnabled);
 		tablet->smoothing.AntichatterEnabled = AntichatterEnabled;
 		LOG_INFO("Filter Antichatter Enabled = %d \n", tablet->smoothing.AntichatterEnabled);
+		RefreshTimedOutputTimer();
 	}
 	else if (cmd->is("AntichatterStrength")) {
 		double antichatterStrength = cmd->GetDouble(0, tablet->smoothing.antichatterStrength);
@@ -819,9 +1022,7 @@ bool ProcessCommand(CommandLine *cmd) {
 		if (interval != (int)round(tablet->smoothing.timerInterval)) {
 			tablet->smoothing.timerInterval = interval;
 			tablet->smoothing.SetLatency(tablet->smoothing.latency);
-			if (tablet->smoothing.StopTimer()) {
-				tablet->smoothing.StartTimer();
-			}
+			RefreshTimedOutputTimer();
 		}
 
 		LOG_INFO("Smoothing Interval = %d (%0.2f Hz, %0.2f ms, %f)\n", interval, 1000.0 / interval, tablet->smoothing.latency, tablet->smoothing.weight);
@@ -1025,6 +1226,28 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 	
+	else if (cmd->is("AetherRhythmFlow") || cmd->is("AS_RhythmFlow")) {
+		if (!CheckTablet()) return true;
+		tablet->aetherSmooth.enableRhythmFlow = cmd->GetBoolean(0, tablet->aetherSmooth.enableRhythmFlow);
+		tablet->aetherSmooth.rhythmStrength = cmd->GetDouble(1, tablet->aetherSmooth.rhythmStrength);
+		tablet->aetherSmooth.rhythmTurnRelease = cmd->GetDouble(2, tablet->aetherSmooth.rhythmTurnRelease);
+		tablet->aetherSmooth.rhythmJitter = cmd->GetDouble(3, tablet->aetherSmooth.rhythmJitter);
+
+		if (tablet->aetherSmooth.rhythmStrength < 0) tablet->aetherSmooth.rhythmStrength = 0;
+		if (tablet->aetherSmooth.rhythmStrength > 1) tablet->aetherSmooth.rhythmStrength = 1;
+		if (tablet->aetherSmooth.rhythmTurnRelease < 0) tablet->aetherSmooth.rhythmTurnRelease = 0;
+		if (tablet->aetherSmooth.rhythmTurnRelease > 1) tablet->aetherSmooth.rhythmTurnRelease = 1;
+		if (tablet->aetherSmooth.rhythmJitter < 0) tablet->aetherSmooth.rhythmJitter = 0;
+		if (tablet->aetherSmooth.rhythmJitter > 1.5) tablet->aetherSmooth.rhythmJitter = 1.5;
+
+		LOG_INFO("Aether Rhythm Flow = %s, flow = %0.2f, release = %0.2f, jitter = %0.2f mm\n",
+			tablet->aetherSmooth.enableRhythmFlow ? "on" : "off",
+			tablet->aetherSmooth.rhythmStrength,
+			tablet->aetherSmooth.rhythmTurnRelease,
+			tablet->aetherSmooth.rhythmJitter);
+	}
+
+	
 	else if (cmd->is("AetherSuppression") || cmd->is("AS_Suppress")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableDebounce = cmd->GetBoolean(0, tablet->aetherSmooth.enableDebounce);
@@ -1032,6 +1255,107 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Aether Suppression = %s, time = %0.1f ms\n",
 			tablet->aetherSmooth.enableDebounce ? "on" : "off",
 			tablet->aetherSmooth.debounceMs);
+	}
+
+	else if (cmd->is("PluginInstall") || cmd->is("InstallPlugin")) {
+		string source = cmd->GetString(0, "");
+		if (source.empty()) {
+			LOG_ERROR("PluginInstall requires a DLL path.\n");
+			return true;
+		}
+
+		if (tablet != NULL) {
+			lock_guard<mutex> lock(tabletStateMutex);
+			tablet->ClearPluginFilters();
+		}
+
+		std::wstring installedPath;
+		if (InstallAetherPluginDll(Utf8ToWideService(source), &installedPath)) {
+			LOG_INFO("Plugin installed. Reloading plugins...\n");
+			if (tablet != NULL) {
+				lock_guard<mutex> lock(tabletStateMutex);
+				tablet->ReloadPluginFilters(GetAetherPluginDirectory());
+			}
+		}
+	}
+
+	else if (cmd->is("PluginReload") || cmd->is("PluginsReload") || cmd->is("ReloadPlugins")) {
+		EnsureAetherPluginDirectory();
+		if (!CheckTablet()) return true;
+
+		lock_guard<mutex> lock(tabletStateMutex);
+		tablet->ReloadPluginFilters(GetAetherPluginDirectory());
+	}
+
+	else if (cmd->is("PluginList") || cmd->is("PluginsList") || cmd->is("ListPlugins")) {
+		if (!CheckTablet()) return true;
+
+		if (tablet->pluginFilters.empty()) {
+			LOG_INFO("No Aether plugins loaded. Folder: %ls\n", GetAetherPluginDirectory().c_str());
+		}
+		else {
+			for (size_t i = 0; i < tablet->pluginFilters.size(); i++) {
+				TabletFilterPlugin* plugin = tablet->pluginFilters[i];
+				LOG_INFO("Plugin %d: %s [%s] key=%s\n", (int)i, plugin->name.c_str(), plugin->isEnabled ? "on" : "off", PluginRelativeKey(plugin).c_str());
+			}
+		}
+	}
+
+	else if (cmd->is("PluginEnable") || cmd->is("EnablePlugin")) {
+		if (!CheckTablet()) return true;
+		string selector = cmd->GetString(0, "");
+		int index = FindPluginFilterIndex(selector);
+		if (index < 0 || index >= (int)tablet->pluginFilters.size()) {
+			LOG_WARNING("Plugin not loaded: %s\n", selector.c_str());
+			return true;
+		}
+
+		bool enabled = cmd->GetBoolean(1, true);
+		tablet->pluginFilters[index]->isEnabled = enabled;
+		LOG_INFO("Plugin %s = %s\n", PluginRelativeKey(tablet->pluginFilters[index]).c_str(), enabled ? "on" : "off");
+	}
+
+	else if (cmd->is("PluginSet") || cmd->is("SetPlugin")) {
+		if (!CheckTablet()) return true;
+		string selector = cmd->GetString(0, "");
+		int index = FindPluginFilterIndex(selector);
+		if (index < 0 || index >= (int)tablet->pluginFilters.size()) {
+			LOG_WARNING("Plugin not loaded: %s\n", selector.c_str());
+			return true;
+		}
+
+		string key = cmd->GetString(1, "");
+		if (key.empty()) {
+			LOG_ERROR("PluginSet requires option name.\n");
+			return true;
+		}
+
+		string raw = cmd->GetString(2, "");
+		if (raw.empty()) {
+			LOG_ERROR("PluginSet requires option value.\n");
+			return true;
+		}
+
+		char* parseEnd = NULL;
+		double numberValue = strtod(raw.c_str(), &parseEnd);
+		bool isNumber = parseEnd != raw.c_str() && *parseEnd == '\0';
+		bool applied = false;
+		if (isNumber)
+			applied = tablet->pluginFilters[index]->SetDoubleOption(key, numberValue);
+		if (!applied)
+			applied = tablet->pluginFilters[index]->SetStringOption(key, raw);
+
+		if (applied) {
+			LOG_INFO("Plugin %d option %s = %s\n", index, key.c_str(), raw.c_str());
+		}
+		else {
+			LOG_WARNING("Plugin %d did not accept option %s\n", index, key.c_str());
+		}
+	}
+
+	else if (cmd->is("PluginDir") || cmd->is("PluginsDir")) {
+		EnsureAetherPluginDirectory();
+		LOG_INFO("Plugin directory: %ls\n", GetAetherPluginDirectory().c_str());
 	}
 
 
@@ -1333,6 +1657,7 @@ void LogStatus() {
 	LOG_STATUS("MAX_X %d\n", tablet->settings.maxX);
 	LOG_STATUS("MAX_Y %d\n", tablet->settings.maxY);
 	LOG_STATUS("MAX_PRESSURE %d\n", tablet->settings.maxPressure);
+	LOG_STATUS("PEN_RATE_LIMIT %s %0.0f\n", penRateLimitActive ? "on" : "off", penRateLimitHz);
 }
 
 

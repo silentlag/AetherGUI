@@ -4,6 +4,7 @@ public:
 	virtual void SetTarget(Vector2D vector, double h) = 0;
 	virtual void Reset(Vector2D vector) = 0;
 	virtual void SetPosition(Vector2D vector, double h) = 0;
+	virtual void SetReportState(BYTE buttons, double pressure, double hoverDistance);
 	virtual bool GetPosition(Vector2D *vector) = 0;
 	virtual void Update() = 0;
 
@@ -21,4 +22,3 @@ public:
 	bool StopTimer();
 
 };
-

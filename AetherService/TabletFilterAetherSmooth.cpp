@@ -5,8 +5,6 @@
 #include "Logger.h"
 
 
-
-
 TabletFilterAetherSmooth::TabletFilterAetherSmooth() {
 	
 	flowFirstTime = true;
@@ -35,6 +33,12 @@ TabletFilterAetherSmooth::TabletFilterAetherSmooth() {
 	enableDebounce = true;
 	debounceMs = 5.0;
 
+	enableRhythmFlow = false;
+	rhythmStrength = 0.35;
+	rhythmTurnRelease = 0.75;
+	rhythmJitter = 0.18;
+	rhythmFirstTime = true;
+
 	lastTime = std::chrono::high_resolution_clock::now();
 	debounceTime = std::chrono::high_resolution_clock::now();
 }
@@ -59,6 +63,7 @@ void TabletFilterAetherSmooth::Reset(Vector2D pos) {
 	velocity = 0;
 	isFirstReport = true;
 	AdaptiveFlowReset(pos);
+	RhythmFlowReset(pos);
 	lastTime = std::chrono::high_resolution_clock::now();
 	debounceTime = std::chrono::high_resolution_clock::now();
 }
@@ -109,6 +114,15 @@ void TabletFilterAetherSmooth::AdaptiveFlowReset(Vector2D pos) {
 }
 
 
+void TabletFilterAetherSmooth::RhythmFlowReset(Vector2D pos) {
+	rhythmPos.Set(pos);
+	rhythmPrevRaw.Set(pos);
+	rhythmPrevVelocity.x = 0;
+	rhythmPrevVelocity.y = 0;
+	rhythmFirstTime = true;
+}
+
+
 
 
 
@@ -149,6 +163,66 @@ Vector2D TabletFilterAetherSmooth::AdaptiveFlow(Vector2D x, double dt, double mi
 	xPrev.Set(xFiltered);
 
 	return xFiltered;
+}
+
+
+Vector2D TabletFilterAetherSmooth::RhythmFlow(Vector2D x, Vector2D raw, double dt) {
+	if (rhythmFirstTime || dt <= 0) {
+		rhythmPos.Set(x);
+		rhythmPrevRaw.Set(raw);
+		rhythmPrevVelocity.x = 0;
+		rhythmPrevVelocity.y = 0;
+		rhythmFirstTime = false;
+		return x;
+	}
+
+	Vector2D rawVelocity;
+	rawVelocity.x = (raw.x - rhythmPrevRaw.x) / dt;
+	rawVelocity.y = (raw.y - rhythmPrevRaw.y) / dt;
+
+	double speed = rawVelocity.Length();
+	double prevSpeed = rhythmPrevVelocity.Length();
+
+	double turn = 0;
+	if (speed > 0.0001 && prevSpeed > 0.0001) {
+		double dot = (rawVelocity.x * rhythmPrevVelocity.x + rawVelocity.y * rhythmPrevVelocity.y) / (speed * prevSpeed);
+		if (dot < -1.0) dot = -1.0;
+		if (dot > 1.0) dot = 1.0;
+		turn = (1.0 - dot) * 0.5;
+	}
+
+	double speedRelease = speed / 160.0;
+	if (speedRelease < 0) speedRelease = 0;
+	if (speedRelease > 1) speedRelease = 1;
+
+	double accelRelease = fabs(speed - prevSpeed) / 220.0;
+	if (accelRelease < 0) accelRelease = 0;
+	if (accelRelease > 1) accelRelease = 1;
+
+	double release = speedRelease * 0.45 + turn * rhythmTurnRelease + accelRelease * 0.20;
+	if (release < 0) release = 0;
+	if (release > 1) release = 1;
+
+	double calm = rhythmStrength * (1.0 - release);
+	double rawStep = raw.Distance(rhythmPrevRaw);
+	if (rhythmJitter > 0.0001 && rawStep < rhythmJitter) {
+		double jitterHold = 1.0 - (rawStep / rhythmJitter);
+		calm += jitterHold * 0.55;
+	}
+
+	if (calm < 0) calm = 0;
+	if (calm > 0.92) calm = 0.92;
+
+	double response = 1.0 - calm;
+	Vector2D output;
+	output.x = rhythmPos.x + (x.x - rhythmPos.x) * response;
+	output.y = rhythmPos.y + (x.y - rhythmPos.y) * response;
+
+	rhythmPos.Set(output);
+	rhythmPrevRaw.Set(raw);
+	rhythmPrevVelocity.Set(rawVelocity);
+
+	return output;
 }
 
 
@@ -215,6 +289,13 @@ void TabletFilterAetherSmooth::Update() {
 		processedPos.y = lastSmoothedPos.y + (processedPos.y - lastSmoothedPos.y) * factor;
 	}
 	lastSmoothedPos.Set(processedPos);
+
+	if (enableRhythmFlow) {
+		processedPos = RhythmFlow(processedPos, currentPos, dt);
+	}
+	else {
+		RhythmFlowReset(processedPos);
+	}
 
 	
 	if (enableDebounce) {

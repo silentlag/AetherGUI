@@ -137,6 +137,11 @@ void DriverBridge::ReadLoop() {
 
 			ParseStatusLine(line);
 
+			// High-rate position updates drive the live cursor/Hz meter, but should not spam the Console tab.
+			if (line.find("[STATUS] POS ") != std::string::npos) {
+				continue;
+			}
+
 			{
 				std::lock_guard<std::mutex> lock(logMutex);
 				logLines.push_back(line);

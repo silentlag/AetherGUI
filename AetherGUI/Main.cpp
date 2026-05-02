@@ -363,6 +363,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		}
 		return 0;
 
+	case WM_CLOSE:
+		MinimizeToTray(hWnd);
+		return 0;
+
 	case WM_DISPLAYCHANGE:
 		app.OnDisplayChange();
 		FitWindowToWorkArea(hWnd);
@@ -537,6 +541,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	UpdateWindow(hWnd);
 
 	MSG msg = {};
+	auto nextFrameTime = std::chrono::steady_clock::now();
 	while (isRunning) {
 		while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
 			if (msg.message == WM_QUIT) {
@@ -548,8 +553,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		}
 
 		if (isRunning) {
-			app.Tick();
-			Sleep(1);
+			if (windowHidden) {
+				Sleep(50);
+				nextFrameTime = std::chrono::steady_clock::now();
+				continue;
+			}
+
+			auto now = std::chrono::steady_clock::now();
+			if (now >= nextFrameTime) {
+				app.Tick();
+				nextFrameTime = now + std::chrono::milliseconds(16);
+			}
+			else {
+				auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameTime - now).count();
+				Sleep((DWORD)Clamp((float)remaining, 1.0f, 8.0f));
+			}
 		}
 	}
 

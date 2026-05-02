@@ -28,8 +28,14 @@ extern void CleanupAndExit(int code);
 extern std::mutex tabletStateMutex;
 extern bool overclockActive;
 extern double overclockTargetHz;
+extern bool penRateLimitActive;
+extern double penRateLimitHz;
 extern void StartOverclockTimer(double targetHz);
 extern void StopOverclockTimer();
+extern void ResetPenRateLimiter();
+extern int WritePenReport(bool force);
+extern bool IsTimedOutputEnabled();
+extern void RefreshTimedOutputTimer();
 
 
 

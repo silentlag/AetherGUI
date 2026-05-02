@@ -30,6 +30,8 @@ public:
 
 	float detectedScreenW = 1920;
 	float detectedScreenH = 1080;
+	float primaryScreenW = 1920;
+	float primaryScreenH = 1080;
 	float virtualScreenX = 0;
 	float virtualScreenY = 0;
 	float clientWidth = Theme::Size::WindowWidth;
@@ -79,6 +81,16 @@ public:
 	static const int MAX_STARS = 6;
 	ShootingStar stars[MAX_STARS];
 	float starSpawnTimer = 0.0f;
+	struct TwinkleStar {
+		float x, y;
+		float phase;
+		float speed;
+		float size;
+		float alpha;
+	};
+	static const int MAX_TWINKLE_STARS = 70;
+	TwinkleStar twinkleStars[MAX_TWINKLE_STARS];
+	bool twinkleStarsInitialized = false;
 
 	
 	int particleStyle = 0;
@@ -109,7 +121,9 @@ public:
 		Slider tabletWidth, tabletHeight, tabletX, tabletY;
 		Slider screenWidth, screenHeight, screenX, screenY;
 		Slider rotation;
+		Slider aspectRatio;
 		Toggle customValues;
+		Toggle autoCenter;
 		Toggle lockAspect;
 	} area;
 
@@ -152,6 +166,7 @@ public:
 	} filters;
 
 	RadioGroup outputMode;
+	Slider dpiScale;
 
 	CycleSelector buttonTip;
 	CycleSelector buttonBottom;
@@ -163,9 +178,94 @@ public:
 	Slider tipThreshold;
 	Toggle overclockEnabled;
 	Slider overclockHz;
+	Toggle penRateLimitEnabled;
+	Slider penRateLimitHz;
 
 	Button saveConfigBtn;
 	Button loadConfigBtn;
+	Button installPluginBtn;
+	Button installSourcePluginBtn;
+	Button reloadPluginBtn;
+	Button listPluginBtn;
+	Button pluginManagerInstallBtn;
+	Button pluginManagerInstallSourceBtn;
+	Button pluginManagerRefreshBtn;
+	Button pluginManagerDeleteBtn;
+	Button pluginManagerCloseBtn;
+	Button pluginManagerSourceBtn;
+	Button pluginManagerAetherTabBtn;
+	Button pluginManagerOtdTabBtn;
+	Button pluginManagerSourceCodeBtn;
+	Button pluginManagerWikiBtn;
+	Button pluginManagerApplySourceBtn;
+	Button pluginManagerCancelSourceBtn;
+	Button pluginManagerInstallRepoBtn;
+	TextInput pluginRepoOwnerInput;
+	TextInput pluginRepoNameInput;
+	TextInput pluginRepoRefInput;
+	struct PluginCatalogEntry {
+		std::wstring name;
+		std::wstring owner;
+		std::wstring description;
+		std::wstring version;
+		std::wstring driverVersion;
+		std::wstring downloadUrl;
+		std::wstring repositoryUrl;
+		std::wstring wikiUrl;
+		std::wstring license;
+		std::string sourcePath;
+		bool nativeAvailable = false;
+		bool sourcePort = false;
+		bool installed = false;
+	};
+	struct PluginEntry {
+		struct PluginOption {
+			enum Kind {
+				SliderOption,
+				ToggleOption
+			};
+			Kind kind = SliderOption;
+			std::string key;
+			std::wstring label;
+			Slider slider;
+			Toggle toggle;
+		};
+		std::wstring key;
+		std::wstring name;
+		std::wstring dllName;
+		std::wstring description;
+		Toggle enabled;
+		std::vector<PluginOption> options;
+	};
+	std::vector<PluginEntry> pluginEntries;
+	std::vector<PluginCatalogEntry> pluginCatalogEntries;
+	std::wstring pluginListStatus = L"Plugin list not scanned";
+	std::wstring pluginCatalogStatus = L"Repository not loaded";
+	std::wstring pluginRepoOwner;
+	std::wstring pluginRepoName = L"Plugin-Repository";
+	std::wstring pluginRepoRef = L"master";
+	bool pluginListDirty = true;
+	bool pluginManagerOpen = false;
+	bool pluginSourceEditorOpen = false;
+	float pluginCatalogScrollY = 0.0f;
+	float pluginCatalogDragStartY = 0.0f;
+	float pluginCatalogDragStartOffset = 0.0f;
+	bool isPluginCatalogDragScrolling = false;
+	int pluginManagerTab = 0;
+	int selectedPluginIndex = 0;
+	int selectedCatalogIndex = 0;
+	float pluginCatalogAnimT = 1.0f;
+	int pluginCatalogAnimDirection = 1;
+	bool autoStartEnabled = true;
+	float autoStartRetryTimer = 0.0f;
+	int autoStartRetryCount = 0;
+	struct ConfigEntry {
+		std::wstring name;
+		std::wstring path;
+	};
+	std::vector<ConfigEntry> configEntries;
+	std::wstring activeConfigPath;
+	int selectedConfigIndex = -1;
 
 	float consoleScrollY = 0;
 	TextInput consoleInput;
@@ -177,6 +277,16 @@ public:
 	bool autoStartAttempted = false;
 	bool vmultiInstalled = false;
 	bool vmultiCheckDone = false;
+
+	struct SettingsSnapshot {
+		std::vector<float> sliders;
+		std::vector<int> ints;
+		std::vector<bool> toggles;
+	};
+	std::vector<SettingsSnapshot> undoStack;
+	SettingsSnapshot lastSettingsSnapshot;
+	bool hasSettingsSnapshot = false;
+	bool applyingUndo = false;
 
 	void SaveConfig(const std::wstring& path);
 	void LoadConfig(const std::wstring& path);
@@ -204,6 +314,10 @@ public:
 		Toggle snappingEnabled;
 		Slider snappingInner;
 		Slider snappingOuter;
+		Toggle rhythmFlowEnabled;
+		Slider rhythmFlowStrength;
+		Slider rhythmFlowRelease;
+		Slider rhythmFlowJitter;
 		Toggle suppressionEnabled;
 		Slider suppressionTime;
 	} aether;
@@ -234,17 +348,6 @@ public:
 	void GetThemeSlotColor(Theme::ThemeData& t, int slot, float& r, float& g, float& b);
 	void SetThemeSlotColor(Theme::ThemeData& t, int slot, float r, float g, float b);
 	void ResetThemeToDefault(int themeIndex);
-
-	
-	int currentProfile = 0;
-	static const int MAX_PROFILES = 4;
-	struct ProfileSlot {
-		std::wstring name;
-		std::wstring path;
-		bool exists;
-	};
-	ProfileSlot profiles[MAX_PROFILES];
-	Button profileBtns[MAX_PROFILES];
 
 	
 	float liveCursorAnimT = 0;
@@ -299,12 +402,92 @@ private:
 	void SendFilterSettings();
 	
 	void ApplyAllSettings();
+
+	void CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const;
+
+	void ApplySettingsSnapshot(const SettingsSnapshot& snapshot);
+
+	bool SettingsSnapshotsEqual(const SettingsSnapshot& a, const SettingsSnapshot& b) const;
+
+	void TrackSettingsUndo();
+
+	void PushUndoCheckpoint();
+
+	void InitializeSettingsUndo();
+
+	void UndoLastSettingsChange();
+
+	bool IsTextEditingActive() const;
+
+	bool FocusNextEditableRow(bool reverse);
+
+	void SwitchTabByKeyboard(int direction);
+
+	float GetSystemDpiScale() const;
+
+	float GetSelectedDpiScale() const;
+
+	void ApplyDpiScale();
 	
 	void AutoSaveConfig();
 	
 	void AutoLoadConfig();
+
+	void PrepareModalDialog();
+
+	void SyncLoadedControlVisuals();
 	
 	std::wstring GetConfigPath();
+
+	std::wstring GetConfigDirectory();
+	
+	void EnsureConfigDirectory();
+	
+	void RefreshConfigFiles();
+	
+	bool SaveConfigWithDialog();
+	
+	bool LoadConfigWithDialog();
+
+	bool InstallPluginWithDialog();
+
+	bool InstallPluginSourceWithDialog();
+
+	void RefreshPluginList();
+
+	void ConfigurePluginDefaults(PluginEntry& entry);
+
+	void SendPluginSettings();
+
+	void SendPluginEnable(size_t pluginIndex);
+
+	void SendPluginOptions(size_t pluginIndex);
+
+	void SendPluginOption(size_t pluginIndex, const PluginEntry::PluginOption& option);
+
+	bool RefreshPluginCatalog();
+
+	void UpdatePluginCatalogInstallState();
+
+	void ClampPluginCatalogScroll();
+
+	void DrawPluginFilterControls(float cx, float& y, float cw, float hw, float filterRightX, bool filterSingleColumn, bool& filterChanged);
+
+	void DrawPluginManagerModal();
+
+	void DrawPluginSourceModal();
+
+	bool DeleteInstalledPlugin(size_t index);
+
+	std::wstring GetPluginDirectory() const;
+
+	bool InstallRepositoryPlugin(const PluginCatalogEntry& entry);
+
+	bool DownloadGitHubSourcePort(const PluginCatalogEntry& entry, std::wstring& folderPath, std::wstring& status);
+
+	void OpenExternalUrl(const std::wstring& url);
+
+	void DrawConfigManager(float x, float& y, float w);
 
 	
 	void DrawHeader();
@@ -331,8 +514,6 @@ private:
 	
 	void DrawThemeSelector(float x, float& y, float w);
 	
-	void DrawProfileSelector(float x, float y, float w);
-	
 	void UpdateHzMeter();
 	
 	void DrawOverclockInfo(float x, float y, float w);
@@ -342,6 +523,8 @@ private:
 	void ClampScrollOffsets();
 	
 	void SendDisplaySettingsToDriver();
+	
+	void SendStaticMonitorInfoToDriver();
 	
 	bool StartDriverService();
 	
