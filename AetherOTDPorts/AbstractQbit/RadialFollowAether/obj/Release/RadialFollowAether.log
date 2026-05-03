@@ -1,8 +1,7 @@
-﻿  Plugin.cpp
-     Создается библиотека C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\RadialFollowAether\bin\Release\RadialFollowAether.lib и объект C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\RadialFollowAether\bin\Release\RadialFollowAether.exp
+﻿     Создается библиотека C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\RadialFollowAether\bin\Release\RadialFollowAether.lib и объект C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\RadialFollowAether\bin\Release\RadialFollowAether.exp
   Создание кода
-  1 of 11 functions ( 9.1%) were compiled, the rest were copied from previous compilation.
+  0 of 11 functions ( 0.0%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Создание кода завершено
   RadialFollowAether.vcxproj -> C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\RadialFollowAether\bin\Release\RadialFollowAether.dll

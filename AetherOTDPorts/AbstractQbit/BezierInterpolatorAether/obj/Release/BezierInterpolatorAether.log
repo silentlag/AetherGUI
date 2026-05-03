@@ -1,8 +1,7 @@
-﻿  Plugin.cpp
-     Создается библиотека C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\BezierInterpolatorAether\bin\Release\BezierInterpolatorAether.lib и объект C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\BezierInterpolatorAether\bin\Release\BezierInterpolatorAether.exp
+﻿     Создается библиотека C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\BezierInterpolatorAether\bin\Release\BezierInterpolatorAether.lib и объект C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\BezierInterpolatorAether\bin\Release\BezierInterpolatorAether.exp
   Создание кода
-  1 of 13 functions ( 7.7%) were compiled, the rest were copied from previous compilation.
+  0 of 13 functions ( 0.0%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Создание кода завершено
   BezierInterpolatorAether.vcxproj -> C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherOTDPorts\AbstractQbit\BezierInterpolatorAether\bin\Release\BezierInterpolatorAether.dll

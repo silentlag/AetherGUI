@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "AetherPluginManager.h"
+#include "AetherPluginApi.h"
 
 #define LOG_MODULE "Plugin"
 #include "Logger.h"
@@ -97,6 +98,39 @@ static bool SamePath(const std::wstring& a, const std::wstring& b) {
 	return _wcsicmp(NormalizeFullPath(a).c_str(), NormalizeFullPath(b).c_str()) == 0;
 }
 
+static bool ValidateAetherPluginDll(const std::wstring& path) {
+	DWORD oldMode = SetErrorMode(SEM_FAILCRITICALERRORS);
+	HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
+	if (!module)
+		module = LoadLibraryW(path.c_str());
+	DWORD loadError = module ? 0 : GetLastError();
+	SetErrorMode(oldMode);
+
+	if (!module) {
+		LOG_ERROR("Invalid plugin DLL or architecture/dependency mismatch: %ls (error %lu)\n", path.c_str(), loadError);
+		if (loadError == ERROR_BAD_EXE_FORMAT)
+			LOG_ERROR("Plugin DLL has the wrong architecture or is not a native DLL. Build it as Release x64.\n");
+		else if (loadError == ERROR_MOD_NOT_FOUND)
+			LOG_ERROR("Plugin DLL dependency is missing. Rebuild with the correct runtime/toolset or ship dependencies.\n");
+		return false;
+	}
+
+	auto getInfo = (AetherPluginGetInfoFn)GetProcAddress(module, "AetherPluginGetInfo");
+	auto process = (AetherPluginProcessFn)GetProcAddress(module, "AetherPluginProcess");
+	if (!getInfo || !process) {
+		LOG_ERROR("Plugin DLL missing required Aether exports: %ls\n", path.c_str());
+		FreeLibrary(module);
+		return false;
+	}
+
+	AetherPluginInfo info = {};
+	bool ok = getInfo(&info) != 0 && info.apiVersion == AETHER_PLUGIN_API_VERSION;
+	if (!ok)
+		LOG_ERROR("Plugin DLL API version mismatch: %ls\n", path.c_str());
+	FreeLibrary(module);
+	return ok;
+}
+
 static bool FindFirstDll(const std::wstring& directory, std::wstring* dllPath) {
 	std::wstring dir = TrimTrailingSlash(directory);
 	std::wstring pattern = dir + L"\\*.dll";
@@ -132,6 +166,8 @@ static bool CopyDllsFromDirectory(const std::wstring& sourceDir, const std::wstr
 			continue;
 
 		std::wstring src = source + L"\\" + data.cFileName;
+		if (!ValidateAetherPluginDll(src))
+			continue;
 		std::wstring dst = destinationDir + data.cFileName;
 		if (SamePath(src, dst)) {
 			if (firstInstalledPath != NULL && firstInstalledPath->empty())
@@ -197,6 +233,9 @@ bool InstallAetherPluginDll(const std::wstring& sourcePath, std::wstring* instal
 		LOG_INFO("Installed plugin folder: %ls\n", pluginDir.c_str());
 		return true;
 	}
+
+	if (!ValidateAetherPluginDll(sourcePath))
+		return false;
 
 	std::wstring pluginName = GetFileNameWithoutExtension(sourcePath);
 	std::wstring pluginDir = GetAetherPluginDirectory() + pluginName + L"\\";
