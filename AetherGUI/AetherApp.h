@@ -205,8 +205,6 @@ public:
 	Button pluginManagerDeleteBtn;
 	Button pluginManagerCloseBtn;
 	Button pluginManagerSourceBtn;
-	Button pluginManagerAetherTabBtn;
-	Button pluginManagerOtdTabBtn;
 	Button pluginManagerSourceCodeBtn;
 	Button pluginManagerWikiBtn;
 	Button pluginManagerApplySourceBtn;
@@ -256,8 +254,8 @@ public:
 	std::wstring pluginListStatus = L"Plugin list not scanned";
 	std::wstring pluginCatalogStatus = L"Repository not loaded";
 	std::wstring pluginRepoOwner;
-	std::wstring pluginRepoName = L"Plugin-Repository";
-	std::wstring pluginRepoRef = L"master";
+	std::wstring pluginRepoName = L"AetherGUI";
+	std::wstring pluginRepoRef = L"main";
 	bool pluginListDirty = true;
 	bool pluginManagerOpen = false;
 	bool pluginSourceEditorOpen = false;

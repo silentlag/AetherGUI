@@ -69,29 +69,19 @@ static bool WideContainsNoCase(const std::wstring& text, const wchar_t* needle) 
 }
 
 static bool IsDefaultPluginRepoOwner(const std::wstring& owner) {
-	return owner.empty() || LowerWide(owner) == L"opentabletdriver" || LowerWide(owner) == LowerWide(std::wstring(AETHERGUI_GITHUB_OWNER));
+	return owner.empty() || LowerWide(owner) == LowerWide(std::wstring(AETHERGUI_GITHUB_OWNER));
 }
 
 static std::wstring GetSourceCatalogOwner(const std::wstring& configuredOwner) {
-	return configuredOwner.empty() || LowerWide(configuredOwner) == L"opentabletdriver"
-		? std::wstring(AETHERGUI_GITHUB_OWNER)
-		: configuredOwner;
+	return configuredOwner.empty() ? std::wstring(AETHERGUI_GITHUB_OWNER) : configuredOwner;
 }
 
-static std::wstring GetSourceCatalogName(const std::wstring& configuredOwner, const std::wstring& configuredName) {
-	if (configuredName.empty())
-		return std::wstring(AETHERGUI_GITHUB_REPO);
-	if (configuredOwner.empty() && LowerWide(configuredName) == L"plugin-repository")
-		return std::wstring(AETHERGUI_GITHUB_REPO);
-	return configuredName;
+static std::wstring GetSourceCatalogName(const std::wstring&, const std::wstring& configuredName) {
+	return configuredName.empty() ? std::wstring(AETHERGUI_GITHUB_REPO) : configuredName;
 }
 
-static std::wstring GetSourceCatalogRef(const std::wstring& configuredOwner, const std::wstring& configuredName, const std::wstring& configuredRef) {
-	if (configuredRef.empty())
-		return L"main";
-	if (configuredOwner.empty() && LowerWide(configuredName) == L"plugin-repository" && LowerWide(configuredRef) == L"master")
-		return L"main";
-	return configuredRef;
+static std::wstring GetSourceCatalogRef(const std::wstring&, const std::wstring&, const std::wstring& configuredRef) {
+	return configuredRef.empty() ? L"main" : configuredRef;
 }
 
 static bool StringEndsWithNoCase(const std::string& text, const char* suffix) {
@@ -192,16 +182,6 @@ static std::wstring NormalizePluginIdentity(const std::wstring& text) {
 		}
 	}
 	return token;
-}
-
-static bool IsKnownAetherOtdPortMatch(const std::wstring& otdName, const std::wstring& sourcePath) {
-	std::wstring name = LowerWide(otdName);
-	std::wstring path = LowerWide(sourcePath);
-	if (WideContainsNoCase(path, L"bezierinterpolatoraether"))
-		return WideContainsNoCase(name, L"bezier") && !WideContainsNoCase(name, L"spring");
-	if (WideContainsNoCase(path, L"radialfollowaether"))
-		return WideContainsNoCase(name, L"radial") && WideContainsNoCase(name, L"follow");
-	return false;
 }
 
 static std::vector<std::wstring> CatalogWords(const std::wstring& text) {
@@ -1194,8 +1174,6 @@ void AetherApp::InitControls() {
 	pluginManagerDeleteBtn.Layout(0, 0, 120, 28, L"Uninstall", false, L"Remove the selected plugin");
 	pluginManagerCloseBtn.Layout(0, 0, 120, 28, L"Close", false, L"Close plugin manager");
 	pluginManagerSourceBtn.Layout(0, 0, 120, 28, L"Source", false, L"Switch repository source");
-	pluginManagerAetherTabBtn.Layout(0, 0, 120, 28, L"Aether Filters", true, L"Installed native Aether filters");
-	pluginManagerOtdTabBtn.Layout(0, 0, 120, 28, L"OTD Ports", false, L"GitHub source ports in OTDPlugins");
 	pluginManagerSourceCodeBtn.Layout(0, 0, 120, 28, L"Source Code", false, L"Open selected plugin source code");
 	pluginManagerWikiBtn.Layout(0, 0, 120, 28, L"Wiki", false, L"Open selected plugin wiki");
 	pluginManagerApplySourceBtn.Layout(0, 0, 120, 28, L"Apply", true, L"Apply repository source");
@@ -1206,6 +1184,7 @@ void AetherApp::InitControls() {
 	pluginRepoOwnerInput.Layout(0, 0, 240, L"Owner");
 	pluginRepoNameInput.Layout(0, 0, 240, L"Name");
 	pluginRepoRefInput.Layout(0, 0, 240, L"Ref");
+	pluginManagerTab = 0;
 	wcscpy_s(pluginRepoOwnerInput.buffer, pluginRepoOwner.c_str());
 	pluginRepoOwnerInput.cursor = (int)pluginRepoOwner.length();
 	wcscpy_s(pluginRepoNameInput.buffer, pluginRepoName.c_str());
@@ -3098,15 +3077,14 @@ bool AetherApp::RefreshPluginCatalog() {
 
 	std::string sourceTreeJson;
 	bool sourceTreeLoaded = HttpGetUtf8(L"api.github.com", sourceTreePath, sourceTreeJson);
-	if (!sourceTreeLoaded && pluginManagerTab == 0 && pluginEntries.empty()) {
+	if (!sourceTreeLoaded && pluginEntries.empty()) {
 		pluginCatalogStatus = L"Failed to load GitHub repository tree";
 		return false;
 	}
 
-	std::string sourcePrefix = pluginManagerTab == 0 ? "Plugins/" : "AetherOTDPorts/";
+	std::string sourcePrefix = "Plugins/";
 	std::vector<std::string> allPaths = sourceTreeLoaded ? JsonTreePaths(sourceTreeJson, false) : std::vector<std::string>();
 	std::set<std::string> sourceFolders;
-	std::set<std::string> sourceBuildFolders;
 	for (const std::string& path : allPaths) {
 		if (path.find(sourcePrefix) != 0)
 			continue;
@@ -3117,21 +3095,7 @@ bool AetherApp::RefreshPluginCatalog() {
 		std::string topFolder = path.substr(sourcePrefix.size(), nextSlash - sourcePrefix.size());
 		sourceFolders.insert(topFolder);
 
-		std::string fileName = path.substr(path.find_last_of('/') + 1);
-		bool isPortFile = StringEndsWithNoCase(fileName, ".dll") || StringEndsWithNoCase(fileName, ".vcxproj") ||
-			StringEndsWithNoCase(fileName, ".csproj") || StringEndsWithNoCase(fileName, "aether-plugin.json") ||
-			StringEndsWithNoCase(fileName, "plugin.json") || StringEndsWithNoCase(fileName, "metadata.json");
-		if (StringEndsWithNoCase(fileName, ".ps1") && path.find('/', nextSlash + 1) != std::string::npos)
-			isPortFile = true;
-		if (isPortFile) {
-			size_t folderSlash = path.find_last_of('/');
-			if (folderSlash != std::string::npos && folderSlash > sourcePrefix.size())
-				sourceBuildFolders.insert(path.substr(sourcePrefix.size(), folderSlash - sourcePrefix.size()));
-		}
 	}
-	if (pluginManagerTab == 1 && !sourceBuildFolders.empty())
-		sourceFolders = sourceBuildFolders;
-
 	auto applySourceMetadata = [&](PluginCatalogEntry& entry) {
 		const char* metadataNames[] = { "aether-plugin.json", "plugin.json", "metadata.json" };
 		for (const char* metaName : metadataNames) {
@@ -3159,248 +3123,51 @@ bool AetherApp::RefreshPluginCatalog() {
 		}
 	};
 
-	auto applyOtdPortFallbackMetadata = [&](PluginCatalogEntry& entry) {
-		if (pluginManagerTab != 1)
-			return;
-
-		std::wstring identity = LowerWide(entry.name + L" " + entry.owner + L" " + Utf8ToWide(entry.sourcePath));
-		if (WideContainsNoCase(identity, L"bezier")) {
-			entry.name = L"BezierInterpolator";
-			entry.owner = L"AbstractQbit";
-			if (entry.description.empty() || WideContainsNoCase(entry.description, L"Aether native port"))
-				entry.description = L"Bezier interpolation smoothing filter ported from OpenTabletDriver.";
-			if (entry.driverVersion.empty())
-				entry.driverVersion = L"OpenTabletDriver / Aether port";
-		}
-		else if (WideContainsNoCase(identity, L"radial") || WideContainsNoCase(identity, L"follow")) {
-			entry.name = L"AbstractQbit's Radial Follow Smoothing";
-			entry.owner = L"AbstractQbit";
-			if (entry.description.empty() || WideContainsNoCase(entry.description, L"Aether native port"))
-				entry.description = L"Radial follow smoothing filter ported from OpenTabletDriver.";
-			if (entry.driverVersion.empty())
-				entry.driverVersion = L"OpenTabletDriver / Aether port";
-		}
-	};
-
-	auto findPortFolder = [&](const PluginCatalogEntry& entry) -> std::string {
-		std::wstring nameToken = NormalizePluginIdentity(entry.name);
-		for (const std::string& folder : sourceFolders) {
-			std::wstring folderWide = Utf8ToWide(folder);
-			std::wstring folderName = folderWide;
-			size_t slash = folderName.find_last_of(L"/");
-			if (slash != std::wstring::npos)
-				folderName = folderName.substr(slash + 1);
-
-			std::wstring folderToken = NormalizePluginIdentity(folderName);
-			if (IsKnownAetherOtdPortMatch(entry.name, folderWide))
-				return folder;
-			if (!nameToken.empty() && !folderToken.empty() && folderToken == nameToken)
-				return folder;
-		}
-		return std::string();
-	};
-
 	int loaded = 0;
-	if (pluginManagerTab == 0) {
-		for (const std::string& folder : sourceFolders) {
-			PluginCatalogEntry entry;
-			entry.name = Utf8ToWide(folder);
-			entry.owner = sourceOwner;
-			entry.description = L"Aether C++ filter source from Plugins.";
-			entry.driverVersion = L"Aether";
-			entry.sourcePath = sourcePrefix + folder;
-			entry.sourcePort = true;
-			entry.nativeAvailable = true;
-			entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
-			applySourceMetadata(entry);
-			pluginCatalogEntries.push_back(entry);
-			loaded++;
-		}
-
-		for (const PluginEntry& plugin : pluginEntries) {
-			bool alreadyListed = false;
-			std::wstring pluginIdentity = plugin.key + L" " + plugin.name + L" " + plugin.dllName;
-			for (const PluginCatalogEntry& entry : pluginCatalogEntries) {
-				if (CatalogNamesMatch(pluginIdentity, entry.name + L" " + Utf8ToWide(entry.sourcePath))) {
-					alreadyListed = true;
-					break;
-				}
-			}
-			if (alreadyListed)
-				continue;
-
-			PluginCatalogEntry local;
-			local.name = plugin.name.empty() ? plugin.dllName : plugin.name;
-			local.owner = L"Local";
-			local.description = plugin.description.empty() ? L"Installed native Aether DLL filter." : plugin.description;
-			local.version = L"Installed";
-			local.driverVersion = L"Aether";
-			local.downloadUrl = plugin.dllName;
-			local.nativeAvailable = true;
-			local.installed = true;
-			pluginCatalogEntries.push_back(local);
-		}
-	}
-	else {
-		for (const std::string& folder : sourceFolders) {
-			PluginCatalogEntry entry;
-			entry.name = Utf8ToWide(folder);
-			size_t slash = entry.name.find_last_of(L"/");
-			if (slash != std::wstring::npos)
-				entry.name = entry.name.substr(slash + 1);
-			entry.owner = sourceOwner;
-			entry.description = L"Aether native port for an OpenTabletDriver plugin.";
-			entry.driverVersion = L"Aether";
-			entry.sourcePath = sourcePrefix + folder;
-			entry.sourcePort = true;
-			entry.nativeAvailable = true;
-			entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
-			applySourceMetadata(entry);
-			applyOtdPortFallbackMetadata(entry);
-			pluginCatalogEntries.push_back(entry);
-			loaded++;
-		}
-
-		std::wstring otdOwner = L"OpenTabletDriver";
-		std::wstring otdName = L"Plugin-Repository";
-		std::wstring otdRef = L"master";
-		std::wstring otdTreePath = L"/repos/" + otdOwner + L"/" + otdName + L"/git/trees/" + otdRef + L"?recursive=1";
-		std::string otdTreeJson;
-		if (!HttpGetUtf8(L"api.github.com", otdTreePath, otdTreeJson)) {
-			pluginCatalogStatus = pluginCatalogEntries.empty()
-				? L"Failed to load OTD plugin repository"
-				: (std::to_wstring(pluginCatalogEntries.size()) + L" Aether OTD source port(s); failed to load OTD metadata");
-			UpdatePluginCatalogInstallState();
-			return !pluginCatalogEntries.empty();
-		}
-
-		std::vector<std::string> paths = JsonTreePaths(otdTreeJson);
-		std::set<std::wstring> names;
-		for (const PluginCatalogEntry& port : pluginCatalogEntries)
-			names.insert(CatalogToken(port.name + L" " + Utf8ToWide(port.sourcePath)) + L"|port");
-		int metadataRequestBudget = 220;
-		for (const std::string& path : paths) {
-			if (path.find("Repository/0.6.0.0/") == std::string::npos &&
-				path.find("Repository/0.6.6.0/") == std::string::npos &&
-				path.find("Repository/0.6.") == std::string::npos)
-				continue;
-
-			if (metadataRequestBudget-- <= 0)
-				break;
-
-			std::wstring rawPath = L"/" + otdOwner + L"/" + otdName + L"/" + otdRef + L"/" + Utf8ToWide(path);
-			std::string json;
-			if (!HttpGetUtf8(L"raw.githubusercontent.com", rawPath, json))
-				continue;
-
-			PluginCatalogEntry entry;
-			entry.name = Utf8ToWide(JsonStringValue(json, "Name"));
-			entry.owner = Utf8ToWide(JsonStringValue(json, "Owner"));
-			entry.description = Utf8ToWide(JsonStringValue(json, "Description"));
-			entry.version = Utf8ToWide(JsonStringValue(json, "PluginVersion"));
-			entry.driverVersion = Utf8ToWide(JsonStringValue(json, "SupportedDriverVersion"));
-			entry.downloadUrl = Utf8ToWide(JsonStringValue(json, "DownloadUrl"));
-			entry.repositoryUrl = Utf8ToWide(JsonStringValue(json, "RepositoryUrl"));
-			entry.wikiUrl = Utf8ToWide(JsonStringValue(json, "WikiUrl"));
-			entry.license = Utf8ToWide(JsonStringValue(json, "LicenseIdentifier"));
-			if (entry.name.empty())
-				continue;
-
-			std::string portFolder = findPortFolder(entry);
-			std::wstring token = CatalogToken(entry.name + L" " + (portFolder.empty() ? L"" : Utf8ToWide(portFolder)));
-			if (!portFolder.empty()) {
-				entry.sourcePath = sourcePrefix + portFolder;
-				entry.sourcePort = true;
-				entry.nativeAvailable = true;
-				entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
-				applySourceMetadata(entry);
-
-				bool merged = false;
-				std::wstring portIdentity = Utf8ToWide(portFolder);
-				for (PluginCatalogEntry& existing : pluginCatalogEntries) {
-					if (existing.sourcePath == entry.sourcePath || IsKnownAetherOtdPortMatch(entry.name, Utf8ToWide(existing.sourcePath))) {
-						existing.name = entry.name;
-						existing.owner = entry.owner.empty() ? existing.owner : entry.owner;
-						existing.description = entry.description.empty() ? existing.description : entry.description;
-						existing.version = entry.version;
-						existing.driverVersion = entry.driverVersion;
-						existing.downloadUrl = entry.downloadUrl;
-						existing.wikiUrl = entry.wikiUrl;
-						existing.license = entry.license;
-						existing.sourcePath = entry.sourcePath;
-						existing.sourcePort = true;
-						existing.nativeAvailable = true;
-						existing.repositoryUrl = entry.repositoryUrl;
-						merged = true;
-						break;
-					}
-				}
-				if (merged)
-					continue;
-			}
-
-			if (!names.insert(token).second)
-				continue;
-			pluginCatalogEntries.push_back(entry);
-			loaded++;
-		}
+	for (const std::string& folder : sourceFolders) {
+		PluginCatalogEntry entry;
+		entry.name = Utf8ToWide(folder);
+		entry.owner = sourceOwner;
+		entry.description = L"Aether C++ filter source from Plugins.";
+		entry.driverVersion = L"Aether";
+		entry.sourcePath = sourcePrefix + folder;
+		entry.sourcePort = true;
+		entry.nativeAvailable = true;
+		entry.repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(entry.sourcePath);
+		applySourceMetadata(entry);
+		pluginCatalogEntries.push_back(entry);
+		loaded++;
 	}
 
-	if (pluginManagerTab == 1) {
-		for (size_t i = 0; i < pluginCatalogEntries.size();) {
-			if (pluginCatalogEntries[i].sourcePort) {
-				i++;
-				continue;
-			}
-
-			std::wstring otdIdentity = pluginCatalogEntries[i].name + L" " + pluginCatalogEntries[i].owner + L" " + pluginCatalogEntries[i].description;
-			bool merged = false;
-			for (size_t j = 0; j < pluginCatalogEntries.size(); ++j) {
-				if (i == j || !pluginCatalogEntries[j].sourcePort)
-					continue;
-
-				std::wstring sourcePathWide = Utf8ToWide(pluginCatalogEntries[j].sourcePath);
-				std::wstring portName = sourcePathWide;
-				size_t slash = portName.find_last_of(L"/");
-				if (slash != std::wstring::npos)
-					portName = portName.substr(slash + 1);
-				if (!IsKnownAetherOtdPortMatch(pluginCatalogEntries[i].name, sourcePathWide) && NormalizePluginIdentity(pluginCatalogEntries[i].name) != NormalizePluginIdentity(portName))
-					continue;
-
-				std::string installSourcePath = pluginCatalogEntries[j].sourcePath;
-				bool sourcePort = pluginCatalogEntries[j].sourcePort;
-				bool nativeAvailable = pluginCatalogEntries[j].nativeAvailable;
-				bool installed = pluginCatalogEntries[j].installed;
-				bool needsUpdate = pluginCatalogEntries[j].needsUpdate;
-				std::wstring installedIdentity = pluginCatalogEntries[j].installedIdentity;
-
-				pluginCatalogEntries[j] = pluginCatalogEntries[i];
-				pluginCatalogEntries[j].sourcePath = installSourcePath;
-				pluginCatalogEntries[j].sourcePort = sourcePort;
-				pluginCatalogEntries[j].nativeAvailable = nativeAvailable;
-				pluginCatalogEntries[j].installed = installed;
-				pluginCatalogEntries[j].needsUpdate = needsUpdate;
-				pluginCatalogEntries[j].installedIdentity = installedIdentity;
-				pluginCatalogEntries[j].repositoryUrl = L"https://github.com/" + sourceOwner + L"/" + sourceName + L"/tree/" + sourceRef + L"/" + Utf8ToWide(installSourcePath);
-
-				pluginCatalogEntries.erase(pluginCatalogEntries.begin() + i);
-				merged = true;
+	for (const PluginEntry& plugin : pluginEntries) {
+		bool alreadyListed = false;
+		std::wstring pluginIdentity = plugin.key + L" " + plugin.name + L" " + plugin.dllName;
+		for (const PluginCatalogEntry& entry : pluginCatalogEntries) {
+			if (CatalogNamesMatch(pluginIdentity, entry.name + L" " + Utf8ToWide(entry.sourcePath))) {
+				alreadyListed = true;
 				break;
 			}
-
-			if (!merged)
-				i++;
 		}
+		if (alreadyListed)
+			continue;
+
+		PluginCatalogEntry local;
+		local.name = plugin.name.empty() ? plugin.dllName : plugin.name;
+		local.owner = L"Local";
+		local.description = plugin.description.empty() ? L"Installed native Aether DLL filter." : plugin.description;
+		local.version = L"Installed";
+		local.driverVersion = L"Aether";
+		local.downloadUrl = plugin.dllName;
+		local.nativeAvailable = true;
+		local.installed = true;
+		pluginCatalogEntries.push_back(local);
 	}
 
 	UpdatePluginCatalogInstallState();
 	if (pluginCatalogEntries.empty())
-		pluginCatalogStatus = pluginManagerTab == 0
-			? L"No Aether filters found in Plugins/ or local DLL plugins"
-			: L"No OTD plugin metadata found";
+		pluginCatalogStatus = L"No Aether filters found in Plugins/ or local DLL plugins";
 	else
-		pluginCatalogStatus = std::to_wstring(pluginCatalogEntries.size()) +
-			(pluginManagerTab == 0 ? L" Aether filter(s)" : L" OTD plugin(s)");
+		pluginCatalogStatus = std::to_wstring(pluginCatalogEntries.size()) + L" Aether filter(s)";
 
 	if (selectedCatalogIndex >= (int)pluginCatalogEntries.size())
 		selectedCatalogIndex = (int)pluginCatalogEntries.size() - 1;
@@ -3466,7 +3233,7 @@ bool AetherApp::InstallPluginWithDialog() {
 		Sleep(80);
 		RefreshPluginList();
 		SendPluginSettings();
-		if (pluginManagerOpen && pluginManagerTab == 0)
+		if (pluginManagerOpen)
 			RefreshPluginCatalog();
 		else
 			UpdatePluginCatalogInstallState();
@@ -3474,7 +3241,7 @@ bool AetherApp::InstallPluginWithDialog() {
 	}
 
 	RefreshPluginList();
-	if (pluginManagerOpen && pluginManagerTab == 0)
+	if (pluginManagerOpen)
 		RefreshPluginCatalog();
 	return false;
 }
@@ -3515,7 +3282,7 @@ bool AetherApp::InstallPluginSourceWithDialog() {
 						Sleep(100);
 						RefreshPluginList();
 						SendPluginSettings();
-						if (pluginManagerOpen && pluginManagerTab == 0)
+						if (pluginManagerOpen)
 							RefreshPluginCatalog();
 						else
 							UpdatePluginCatalogInstallState();
@@ -3676,93 +3443,8 @@ bool AetherApp::InstallRepositoryPlugin(PluginCatalogEntry& entry) {
 		return true;
 	}
 
-	wchar_t userProfile[MAX_PATH] = {};
-	GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH);
-	std::wstring desktop111 = std::wstring(userProfile) + L"\\Desktop\\111\\";
-
-	std::wstring sourceDir;
-	std::wstring expectedDll;
-	std::wstring identity = entry.name + L" " + entry.description + L" " + entry.downloadUrl;
-	if (WideContainsNoCase(identity, L"Pleasant")) {
-		sourceDir = desktop111 + L"PleasantAim";
-		expectedDll = sourceDir + L"\\bin\\Release\\native\\PleasantAim.dll";
-	}
-	else if (WideContainsNoCase(identity, L"Hawku") && WideContainsNoCase(identity, L"Noise")) {
-		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
-		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_HawkuNoiseReduction.dll";
-	}
-	else if (WideContainsNoCase(identity, L"Hawku") || WideContainsNoCase(identity, L"Smoothing")) {
-		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
-		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_HawkuSmoothing.dll";
-	}
-	else if (WideContainsNoCase(identity, L"Devocub") || WideContainsNoCase(identity, L"Antichatter")) {
-		sourceDir = desktop111 + L"OTDNativePorts\\TabletDriverFilters";
-		expectedDll = sourceDir + L"\\bin\\Release\\TabletDriverFilters\\OTD_DevocubAntichatter.dll";
-	}
-	else if (WideContainsNoCase(identity, L"Bezier")) {
-		sourceDir = desktop111 + L"AetherGUI\\AetherOTDPorts\\BezierInterpolatorAether";
-		expectedDll = sourceDir + L"\\bin\\Release\\BezierInterpolatorAether.dll";
-	}
-	else if (WideContainsNoCase(identity, L"Radial") || WideContainsNoCase(identity, L"Follow")) {
-		sourceDir = desktop111 + L"AetherGUI\\AetherOTDPorts\\RadialFollowAether";
-		expectedDll = sourceDir + L"\\bin\\Release\\RadialFollowAether.dll";
-	}
-
-	if (sourceDir.empty()) {
-		pluginCatalogStatus = L"No native Aether port is mapped yet. Use Build Source with an Aether plugin source folder.";
-		return false;
-	}
-	if (!DirectoryExistsWide(sourceDir)) {
-		pluginCatalogStatus = L"Native port source folder was not found";
-		return false;
-	}
-
-	std::wstring status;
-	std::wstring script = FindBuildScript(sourceDir);
-	DWORD exitCode = 1;
-	if (!script.empty()) {
-		std::wstring commandLine = L"powershell.exe -ExecutionPolicy Bypass -File " + QuoteArg(script);
-		if (!RunHiddenProcess(commandLine, sourceDir, exitCode) || exitCode != 0) {
-			wchar_t buffer[128];
-			swprintf_s(buffer, L"Native port build failed (%lu)", exitCode);
-			pluginCatalogStatus = buffer;
-			return false;
-		}
-	}
-	else {
-		std::wstring builtDll;
-		if (!BuildAetherPluginSourceFolder(sourceDir, builtDll, status)) {
-			pluginCatalogStatus = status;
-			return false;
-		}
-		expectedDll = builtDll;
-	}
-
-	if (!FileExistsWide(expectedDll) || !DllHasAetherExports(expectedDll)) {
-		pluginCatalogStatus = L"Native port did not produce a valid Aether DLL";
-		return false;
-	}
-
-	if (!driver.isConnected)
-		StartDriverService();
-	if (!driver.isConnected) {
-		pluginCatalogStatus = L"Native port built, but service is offline";
-		return false;
-	}
-
-	if (replacingInstalled && !replaceKey.empty())
-		driver.SendCommand("PluginEnable " + QuoteCommandArg(WideToUtf8(replaceKey)) + " off");
-	driver.SendCommand("PluginInstall \"" + WideToUtf8(expectedDll) + "\"");
-	driver.SendCommand("PluginReload");
-	driver.SendCommand("PluginList");
-	Sleep(120);
-	RefreshPluginList();
-	SendPluginSettings();
-	UpdatePluginCatalogInstallState();
-	pluginCatalogStatus = replacingInstalled ? L"Rebuilt and replaced native Aether port" : L"Installed native Aether port";
-	entry.installed = true;
-	entry.needsUpdate = false;
-	return true;
+	pluginCatalogStatus = L"This entry is not installable automatically. Use Install DLL or Build Source.";
+	return false;
 }
 
 void AetherApp::ClampScrollOffsets() {
@@ -5252,33 +4934,16 @@ void AetherApp::DrawPluginManagerModal() {
 	renderer.DrawRoundedRect(x, y, w, h, 8, Theme::BorderAccent());
 
 	renderer.DrawText(L"Plugin Manager", x + 18, y + 12, 200, 28, Theme::TextPrimary(), renderer.pFontBody);
-	pluginManagerAetherTabBtn.Layout(x + 18, y + 46, 142, 30, L"Aether Filters", pluginManagerTab == 0);
-	if (pluginManagerAetherTabBtn.Update(mouseX, mouseY, mouseClicked, deltaTime) && pluginManagerTab != 0) {
-		aboutAnimT = 0.0f;
-		pluginManagerTab = 0;
-		selectedCatalogIndex = 0;
-		pluginCatalogScrollY = 0.0f;
-		pluginCatalogAnimDirection = -1;
-		RefreshPluginCatalog();
-	}
-	pluginManagerAetherTabBtn.Draw(renderer);
-	pluginManagerOtdTabBtn.Layout(x + 168, y + 46, 132, 30, L"OTD Ports", pluginManagerTab == 1);
-	if (pluginManagerOtdTabBtn.Update(mouseX, mouseY, mouseClicked, deltaTime) && pluginManagerTab != 1) {
-		aboutAnimT = 0.0f;
-		pluginManagerTab = 1;
-		selectedCatalogIndex = 0;
-		pluginCatalogScrollY = 0.0f;
-		pluginCatalogAnimDirection = 1;
-		RefreshPluginCatalog();
-	}
-	pluginManagerOtdTabBtn.Draw(renderer);
+	renderer.FillRoundedRect(x + 18, y + 46, 142, 30, 6, Theme::AccentPrimary());
+	renderer.DrawText(L"Aether Filters", x + 18, y + 46, 142, 30, D2D1::ColorF(0xFFFFFF), renderer.pFontSmall, Renderer::AlignCenter);
+	pluginManagerTab = 0;
 
-	std::wstring sourceFolder = pluginManagerTab == 0 ? L"Plugins" : L"AetherOTDPorts";
+	std::wstring sourceFolder = L"Plugins";
 	std::wstring sourceOwnerDisplay = GetSourceCatalogOwner(pluginRepoOwner);
 	std::wstring sourceNameDisplay = GetSourceCatalogName(pluginRepoOwner, pluginRepoName);
 	std::wstring sourceRefDisplay = GetSourceCatalogRef(pluginRepoOwner, pluginRepoName, pluginRepoRef);
 	std::wstring source = sourceOwnerDisplay + L"/" + sourceNameDisplay + L" / " + sourceFolder + L" @ " + sourceRefDisplay;
-	renderer.DrawText(source.c_str(), x + 314, y + 49, w - 500, 24, Theme::TextMuted(), renderer.pFontSmall);
+	renderer.DrawText(source.c_str(), x + 174, y + 49, w - 360, 24, Theme::TextMuted(), renderer.pFontSmall);
 
 	pluginManagerSourceBtn.Layout(x + w - 366, y + 12, 108, 28, L"Source", false);
 	if (pluginManagerSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
@@ -5320,7 +4985,7 @@ void AetherApp::DrawPluginManagerModal() {
 		pluginCatalogDragStartOffset = pluginCatalogScrollY;
 	}
 
-	if (false && pluginManagerTab == 0) {
+	if (false) {
 		if (pluginListDirty)
 			RefreshPluginList();
 		if (selectedPluginIndex >= (int)pluginEntries.size())
@@ -5396,7 +5061,7 @@ void AetherApp::DrawPluginManagerModal() {
 
 	renderer.FillRoundedRect(listX, listY, listW, listH, 6, Theme::BgDeep());
 	renderer.DrawRoundedRect(listX, listY, listW, listH, 6, Theme::BorderSubtle());
-	renderer.DrawText(pluginManagerTab == 0 ? L"Aether Filters" : L"OTD Plugin Ports", listX + 10, listY + 8, listW - 20, 20, Theme::TextSecondary(), renderer.pFontSmall);
+	renderer.DrawText(L"Aether Filters", listX + 10, listY + 8, listW - 20, 20, Theme::TextSecondary(), renderer.pFontSmall);
 
 	if (pluginCatalogAnimT < 1.0f) {
 		pluginCatalogAnimT += deltaTime * 7.5f;
@@ -5500,8 +5165,8 @@ void AetherApp::DrawPluginManagerModal() {
 		pluginManagerWikiBtn.Draw(renderer);
 		dy += 42;
 		const wchar_t* state = entry.installed
-			? (entry.needsUpdate ? L"Installed, but GitHub source port differs. Reinstall will rebuild and replace it." : L"Installed")
-			: (entry.sourcePort ? L"Ready to download, build, and install" : L"Port is not available yet. Needs an Aether C++ port.");
+			? (entry.needsUpdate ? L"Installed, but repository source differs. Reinstall will rebuild and replace it." : L"Installed")
+			: (entry.sourcePort ? L"Ready to download, build, and install" : L"Local/manual entry. Use Install DLL or Build Source.");
 		renderer.DrawText(state, detailX + 14, dy, detailW - 28, 26,
 			entry.installed ? (entry.needsUpdate ? Theme::Warning() : Theme::Success()) : (entry.sourcePort ? Theme::AccentPrimary() : Theme::Warning()), renderer.pFontSmall);
 
@@ -5532,22 +5197,17 @@ void AetherApp::DrawPluginManagerModal() {
 		renderer.DrawText(L"Press Refresh to load plugins from the selected GitHub repository.", detailX + 14, listY + 18, detailW - 28, 32, Theme::TextMuted(), renderer.pFontSmall);
 	}
 
-	if (pluginManagerTab == 0) {
-		pluginManagerInstallBtn.Layout(x + 14, y + h - 46, 112, 30, L"Install DLL", true);
-		if (pluginManagerInstallBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
-			InstallPluginWithDialog();
-		}
-		pluginManagerInstallBtn.Draw(renderer);
-		pluginManagerInstallSourceBtn.Layout(x + 134, y + h - 46, 128, 30, L"Build Source", false);
-		if (pluginManagerInstallSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
-			InstallPluginSourceWithDialog();
-		}
-		pluginManagerInstallSourceBtn.Draw(renderer);
-		renderer.DrawText(pluginCatalogStatus.c_str(), x + 274, y + h - 46, w - 560, 30, Theme::TextMuted(), renderer.pFontSmall);
+	pluginManagerInstallBtn.Layout(x + 14, y + h - 46, 112, 30, L"Install DLL", true);
+	if (pluginManagerInstallBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		InstallPluginWithDialog();
 	}
-	else {
-		renderer.DrawText(pluginCatalogStatus.c_str(), x + 14, y + h - 46, w - 280, 30, Theme::TextMuted(), renderer.pFontSmall);
+	pluginManagerInstallBtn.Draw(renderer);
+	pluginManagerInstallSourceBtn.Layout(x + 134, y + h - 46, 128, 30, L"Build Source", false);
+	if (pluginManagerInstallSourceBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		InstallPluginSourceWithDialog();
 	}
+	pluginManagerInstallSourceBtn.Draw(renderer);
+	renderer.DrawText(pluginCatalogStatus.c_str(), x + 274, y + h - 46, w - 560, 30, Theme::TextMuted(), renderer.pFontSmall);
 }
 void AetherApp::DrawFilterPanel() {
 	bool filterChanged = false;

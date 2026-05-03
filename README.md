@@ -24,7 +24,7 @@
 
 <p>
   <strong>Latest update:</strong> safer screen-area bounds for resolution changes, fixed edge-clamped sliders,
-  native OTD test ports, improved update notifications, a richer tray menu,
+  a simplified Aether-only plugin manager, improved update notifications, a richer tray menu,
   and automatic service start when <code>AetherService.exe</code> is launched directly.
 </p>
 
@@ -55,7 +55,7 @@
     <td align="center"><strong>Raw Input Fixes</strong><br/>Relative-mode resets · invalid-position handling · reduced event coalescing</td>
   </tr>
   <tr>
-    <td align="center"><strong>Native Plugin Manager</strong><br/>Animated lists · cached catalogs · install DLL filters · build source ports</td>
+    <td align="center"><strong>Native Plugin Manager</strong><br/>Aether Filters catalog · install DLL filters · build source filters</td>
     <td align="center"><strong>Modern Quality-of-Life</strong><br/>Safe area bounds · themed updater · tray controls · DPI scaling · undo · autosave</td>
   </tr>
 </table>
@@ -185,7 +185,7 @@
   </tr>
   <tr>
     <td align="center"><strong>GitHub plugin catalog</strong></td>
-    <td align="center">The Plugin Manager can list Aether source filters and mapped OpenTabletDriver plugin ports from a configurable repository source, with HTTP caching to reduce repeated loading stalls.</td>
+    <td align="center">The Plugin Manager now uses a single Aether Filters catalog from the configurable repository source. OTD catalog loading and automatic OTD-port mapping were removed to keep plugin management manual and predictable.</td>
   </tr>
   <tr>
     <td align="center"><strong>Screen area safety</strong></td>
@@ -212,9 +212,8 @@
 <p>
   AetherGUI includes a native plugin pipeline for custom packet filters. Plugins are installed into the local
   <code>plugins/</code> folder next to the built application and can be enabled, disabled, configured, reloaded, or removed from the GUI.
-  A source-build template for porting OpenTabletDriver filters is included in <code>AetherPluginTemplate/</code>.
-  Test native ports for <code>BezierInterpolator</code> and <code>RadialFollow</code> are included in <code>AetherOTDPorts/</code>.
-  These ports can be tested through <strong>Filters -> Plugins -> Build Source</strong>.
+  Source filters can be added manually through <strong>Filters -> Plugins -> Build Source</strong>.
+  The Plugin Manager intentionally shows only the <strong>Aether Filters</strong> catalog; OpenTabletDriver repository browsing and automatic OTD-port mapping are not used.
 </p>
 
 <table align="center">
@@ -228,11 +227,11 @@
   </tr>
   <tr>
     <td align="center"><strong>Build Source</strong></td>
-    <td align="center">Builds a plugin source folder using a PowerShell build script, Visual Studio project/solution, or .NET project when available. Use <code>AetherPluginTemplate/</code> as a starting point for OTD filter ports.</td>
+    <td align="center">Builds a native Aether plugin source folder using a PowerShell build script, Visual Studio project/solution, or .NET project when available.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin Manager</strong></td>
-    <td align="center">Browses installed filters, Aether source filters, and available OTD source ports with animated list transitions and source/wiki links.</td>
+    <td align="center">Browses installed filters and Aether source filters in one <strong>Aether Filters</strong> view with animated list transitions and source/wiki links.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin metadata</strong></td>
@@ -240,7 +239,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Catalog cache</strong></td>
-    <td align="center">GitHub API/raw responses are cached during the session, and OTD metadata loading is capped per refresh to keep the UI more responsive.</td>
+    <td align="center">GitHub API/raw responses for the Aether Filters catalog are cached during the session to reduce repeated loading stalls.</td>
   </tr>
 </table>
 
@@ -455,8 +454,8 @@
     <td align="center">Use the tray icon. The tray menu can restore the GUI, start/stop the driver, open Plugins, open Console, or exit.</td>
   </tr>
   <tr>
-    <td align="center"><strong>OTD Ports tab loads slowly</strong></td>
-    <td align="center">Press Refresh only when needed. Catalog responses are cached during the session, and metadata requests are limited to reduce UI stalls.</td>
+    <td align="center"><strong>Plugin catalog loads slowly</strong></td>
+    <td align="center">Press Refresh only when needed. The manager now loads only the Aether Filters catalog and caches GitHub responses during the session.</td>
   </tr>
 </table>
 
