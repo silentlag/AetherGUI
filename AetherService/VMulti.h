@@ -21,7 +21,13 @@ public:
 		ModeRelativeMouse,
 		ModeDigitizer,
 		ModeSendInput,
-		ModeAbsoluteVMulti
+		ModeAbsoluteVMulti,
+		// "Artist" mode: emits both absolute (digitizer) events for
+		// desktop apps and relative-motion deltas on the virtual
+		// mouse so games that grab the cursor or use raw mouse input
+		// keep receiving input. Mirrors OpenTabletDriver's Artist
+		// Mode.
+		ModeArtist
 	};
 
 	struct {

@@ -808,6 +808,13 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Digitizer\n");
 		}
 
+		else if (mode.compare(0, 3, "art") == 0) {
+			if (vmulti->mode != VMulti::ModeArtist)
+				vmulti->ResetReport();
+			vmulti->mode = VMulti::ModeArtist;
+			LOG_INFO("Output Mode = Artist (absolute pen + relative mouse for games)\n");
+		}
+
 		else if (mode.compare(0, 4, "send") == 0) {
 			if (vmulti->mode != VMulti::ModeSendInput)
 				vmulti->ResetReport();
@@ -1388,21 +1395,25 @@ bool ProcessCommand(CommandLine *cmd) {
 }
 
 bool ReadCommandFile(string filename) {
-	CommandLine *cmd;
-	ifstream file;
-	string line = "";
-
-	file.open(filename);
-	if (!file.is_open()) {
+	// Use C stdio instead of std::ifstream to avoid a libstdc++ static-
+	// init crash on recent Arch toolchains where ~basic_ifstream segfaults
+	// inside ios_base::_M_call_callbacks.
+	FILE* fp = std::fopen(filename.c_str(), "r");
+	if (fp == nullptr) {
 		return false;
 	}
 
 	LOG_INFO("\\ Reading '%s'\n", filename.c_str());
 
-	while (!file.eof()) {
-		getline(file, line);
-		if (line.length() == 0) continue;
-		cmd = new CommandLine(line);
+	char buf[4096];
+	while (std::fgets(buf, sizeof(buf), fp) != nullptr) {
+		size_t n = std::strlen(buf);
+		while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r')) {
+			buf[--n] = 0;
+		}
+		if (n == 0) continue;
+
+		CommandLine* cmd = new CommandLine(std::string(buf));
 
 		if (cmd->is("Tablet") && tablet != NULL && tablet->IsConfigured()) {
 			LOG_INFO(">> %s\n", cmd->line.c_str());
@@ -1413,7 +1424,7 @@ bool ReadCommandFile(string filename) {
 		ProcessCommand(cmd);
 		delete cmd;
 	}
-	file.close();
+	std::fclose(fp);
 
 	LOG_INFO("/ End of '%s'\n", filename.c_str());
 

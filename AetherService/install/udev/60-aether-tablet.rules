@@ -1,0 +1,1291 @@
+# Aether tablet driver -- udev rules.
+# Generated from OpenTabletDriver 0.6.7 device configurations.
+# Grants the seat-owner uaccess to /dev/uinput and to the matching
+# /dev/hidraw* nodes for every supported tablet.
+
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", TAG+="uaccess", TAG+="udev-acl"
+KERNEL=="js[0-9]*", SUBSYSTEM=="input", ATTRS{name}=="AetherService Virtual*", RUN+="/usr/bin/env rm %E{DEVNAME}"
+SUBSYSTEM=="input", ATTRS{name}=="AetherService Virtual*", ENV{LIBINPUT_DEVICE_GROUP}="AetherService"
+
+# Classify our uinput devices for libinput. Without ID_INPUT_TABLET on
+# the virtual pen, libinput's tablet code never picks it up on Wayland,
+# which is why the pen-driven cursor didn't move at all under Hyprland /
+# GNOME / KDE Wayland.
+SUBSYSTEM=="input", ATTRS{name}=="AetherService Virtual Pen", ENV{ID_INPUT}="1", ENV{ID_INPUT_TABLET}="1"
+SUBSYSTEM=="input", ATTRS{name}=="AetherService Virtual Mouse", ENV{ID_INPUT}="1", ENV{ID_INPUT_MOUSE}="1"
+
+# Genius G-Pen 560
+KERNEL=="hidraw*", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="5003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="5003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="5003", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Genius i405x
+KERNEL=="hidraw*", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="5010", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="5010", TAG+="uaccess", TAG+="udev-acl"
+
+# Genius i608x
+KERNEL=="hidraw*", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="501a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0458", ATTRS{idProduct}=="501a", TAG+="uaccess", TAG+="udev-acl"
+
+# RobotPen T9A
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="6003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="6003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="6003", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Ninos M
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a005", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a005", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a005", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Ninos S
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a006", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a006", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a006", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Intangbo M
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a013", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a013", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a013", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Intangbo S
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a014", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a014", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a014", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Intangbo SW
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a016", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a016", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a016", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Ninos N4
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a019", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a019", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a019", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Ninos N7
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a020", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a020", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a020", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo A610 Pro (Variant 2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a022", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a022", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a022", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo Ninos N7B
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a20b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a20b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a20b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo A640 V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a640", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a640", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="a640", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Wacom CTC-4110WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="0531", ATTRS{idProduct}=="0100", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0531", ATTRS{idProduct}=="0100", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTC-6110WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="0531", ATTRS{idProduct}=="0102", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0531", ATTRS{idProduct}=="0102", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTC-6110WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="0531", ATTRS{idProduct}=="0103", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0531", ATTRS{idProduct}=="0103", TAG+="uaccess", TAG+="udev-acl"
+
+# ViewSonic Woodpad PF0730
+KERNEL=="hidraw*", ATTRS{idVendor}=="0543", ATTRS{idProduct}=="e667", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0543", ATTRS{idProduct}=="e667", TAG+="uaccess", TAG+="udev-acl"
+
+# ViewSonic Woodpad PF1030
+KERNEL=="hidraw*", ATTRS{idVendor}=="0543", ATTRS{idProduct}=="e668", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0543", ATTRS{idProduct}=="e668", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTU-600U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0003", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom ET-0405-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0010", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0010", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom ET-0405A-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0011", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0011", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-430
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0013", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0013", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-630
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0014", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0014", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-440
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0015", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0015", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-640
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0016", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0016", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-450
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0017", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0017", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-650
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0018", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0018", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom GD-0405-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0020", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0020", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom GD-0608-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0021", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0021", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom GD-0912-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0022", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0022", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom GD-1212-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0023", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0023", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom GD-1218-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0024", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0024", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-450
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0026", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0026", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-650
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0027", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0027", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-850
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0028", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0028", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-450
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0029", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0029", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-650
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="002a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="002a", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 18SX (PL-800-U)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0035", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0035", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 21UX (DTZ-2100)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="003f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="003f", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom XD-0405-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0041", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0041", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom XD-0608-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0042", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0042", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom XD-0912-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0043", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0043", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom XD-1212-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0044", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0044", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom XD-1218-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0045", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0045", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 22HD Touch (DTH-2200)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="005b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="005b", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom FT-0405-U
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0060", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0060", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom MTE-450
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0065", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0065", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTF-430
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0069", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0069", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-460
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="006a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="006a", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTE-660
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="006b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="006b", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-430
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b0", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b0", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-630
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b1", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b1", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-930
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b2", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b2", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-1230
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b3", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b3", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-1231W
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b4", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b4", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-631W
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b5", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b5", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTZ-431W
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b7", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b7", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-440
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b8", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b8", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-640
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b9", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00b9", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-840
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00ba", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00ba", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-1240
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00bb", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00bb", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-540WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00bc", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00bc", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 12WX (DTZ-1200W)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00c6", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00c6", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 21UX (DTK-2100)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00cc", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00cc", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00cc", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Wacom CTH-460
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d1", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d1", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-461
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d2", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d2", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-661
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d3", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d3", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-460
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d4", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d4", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-460
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d6", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d6", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-461
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d7", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d7", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-661
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d8", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00d8", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-461
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00da", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00da", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-661
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00db", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00db", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-470
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00dd", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00dd", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-470
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00de", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00de", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-670
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00df", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00df", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 22HD (DTK-2200)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00f9", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00f9", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 22HD (DTK-2200)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00fa", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="00fa", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-471
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0300", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0300", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-671
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0301", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0301", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-480
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0302", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0302", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-680
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0303", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0303", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 13HD (DTK-1300)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0304", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0304", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-480
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="030e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="030e", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-451
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0314", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0314", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-651
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0315", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0315", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-851
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0317", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0317", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-301
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0318", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0318", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-300
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0319", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0319", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-680
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0323", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0323", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-490
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033b", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-490
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033c", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-690
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033d", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTH-690
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="033e", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom DTH-1320
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="034f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="034f", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-660
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0357", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0357", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-860
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0358", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0358", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-660
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0360", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0360", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-4100
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0374", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0374", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-6100
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0375", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0375", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-4100WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0376", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0376", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-4100WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0377", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0377", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-6100WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0378", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0378", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-472
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="037a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="037a", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-672
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="037b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="037b", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 16 (DTK-1660)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0390", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0390", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-460
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0392", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="0392", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom DTC-133
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03a6", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03a6", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq 16 (DTK-1660)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03ae", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03ae", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq Pro 27 (DTH-271)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03c0", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03c0", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-4100WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03c5", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03c5", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom CTL-6100WL
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03c7", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03c7", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom DTC-121
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03ce", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03ce", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Cintiq Pro 22 (DTH-227)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03d0", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03d0", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTH-460
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03dc", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03dc", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom Movink 13 (DTH-135)
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f0", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f0", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-470
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f5", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f5", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-670
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f7", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f7", TAG+="uaccess", TAG+="udev-acl"
+
+# Wacom PTK-870
+KERNEL=="hidraw*", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f9", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="056a", ATTRS{idProduct}=="03f9", TAG+="uaccess", TAG+="udev-acl"
+
+# LifeTec LT9570
+KERNEL=="hidraw*", ATTRS{idVendor}=="08ca", ATTRS{idProduct}=="0010", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="08ca", ATTRS{idProduct}=="0010", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="08ca", ATTRS{idProduct}=="0010", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# FlooGoo FMA100
+KERNEL=="hidraw*", ATTRS{idVendor}=="0a12", ATTRS{idProduct}=="4007", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0a12", ATTRS{idProduct}=="4007", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0a12", ATTRS{idProduct}=="4007", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo A609
+KERNEL=="hidraw*", ATTRS{idVendor}=="0b57", ATTRS{idProduct}=="9091", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0b57", ATTRS{idProduct}=="9091", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0b57", ATTRS{idProduct}=="9091", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Bosto BT-12HD
+KERNEL=="hidraw*", ATTRS{idVendor}=="0ed1", ATTRS{idProduct}=="7821", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0ed1", ATTRS{idProduct}=="7821", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="0ed1", ATTRS{idProduct}=="7821", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Waltop Slim Tablet 5.8"
+KERNEL=="hidraw*", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0032", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0032", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0032", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Trust Flex Design Tablet
+KERNEL=="hidraw*", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0037", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0037", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0037", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Genius G-Pen F509
+KERNEL=="hidraw*", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0038", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0038", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="172f", ATTRS{idProduct}=="0038", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion Q630M
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0060", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0060", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0060", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion G930L
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0061", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0061", TAG+="uaccess", TAG+="udev-acl"
+
+# Artisul A1201
+# Gaomon 1060 Pro
+# Gaomon M5
+# Gaomon M6
+# Gaomon M7
+# Gaomon M8 (Variant 2)
+# Gaomon M8
+# Huion H1060P
+# Huion H1161
+# Huion H420X
+# Huion H430P
+# Huion H580X
+# Huion H610 Pro V2
+# Huion H610X
+# Huion H640P
+# Huion H642
+# Huion H950P
+# Huion HC16 (Variant 2)
+# Huion HC16
+# Huion HS610
+# Huion RTE-100
+# Huion RTM-500
+# Huion RTP-700
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0064", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0064", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0064", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion H641P
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0066", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0066", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0066", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion H951P
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0067", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0067", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0067", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion H1061P
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0068", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0068", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="0068", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion Kamvas Pro 19 (4K)
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006b", TAG+="uaccess", TAG+="udev-acl"
+
+# Huion Kamvas Pro 24 (Gen 3)
+# Huion Kamvas Pro 27
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Artisul A1201
+# Artisul D16 Pro
+# Gaomon 1060 Pro
+# Gaomon GM116HD
+# Gaomon GM156HD
+# Gaomon M106K Pro
+# Gaomon M10K Pro
+# Gaomon M1220
+# Gaomon M1230
+# Gaomon M6
+# Gaomon PD1161
+# Gaomon PD1320
+# Gaomon PD156 Pro
+# Gaomon PD1561
+# Gaomon PD2200
+# Gaomon S56K
+# Gaomon S620
+# Gaomon S630
+# Gaomon S830
+# Huion GC610
+# Huion H1060P
+# Huion H1161
+# Huion H320M
+# Huion H420X
+# Huion H430P
+# Huion H580X
+# Huion H610 Pro V2
+# Huion H610 Pro
+# Huion H610X
+# Huion H640P
+# Huion H642
+# Huion H950P
+# Huion HC16
+# Huion HS610
+# Huion HS611
+# Huion HS64
+# Huion HS95
+# Huion Kamvas 12
+# Huion Kamvas 13
+# Huion Kamvas 16 (2021)
+# Huion Kamvas 16
+# Huion Kamvas 22 Plus
+# Huion Kamvas 22
+# Huion Kamvas 24 Plus
+# Huion Kamvas 24
+# Huion Kamvas Pro 12
+# Huion Kamvas Pro 13 (2.5k)
+# Huion Kamvas Pro 13
+# Huion Kamvas Pro 16 (2.5k)
+# Huion Kamvas Pro 16 (4k)
+# Huion Kamvas Pro 16 Plus (4k)
+# Huion Kamvas Pro 16
+# Huion Kamvas Pro 24 (4K)
+# Huion New 1060 Plus
+# Huion Note X10
+# Huion Q11K
+# Huion Q620M
+# Huion RDS-160
+# Huion RTM-500
+# Huion RTP-700
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006d", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Artisul D22S
+# Artisul M0610 Pro
+# Gaomon 1060 Pro
+# Gaomon M106K
+# Gaomon M10K
+# Gaomon PD1560
+# Gaomon PD2200
+# Gaomon S56K
+# Huion 1060 Plus
+# Huion 420
+# Huion G10T
+# Huion GC610
+# Huion GT-156HD V2
+# Huion GT-191 V2
+# Huion GT-220 V2 (2048)
+# Huion GT-220 V2
+# Huion GT-221 Pro
+# Huion GT-221
+# Huion H1060P
+# Huion H420
+# Huion H430P
+# Huion H610 Pro V2
+# Huion H610 Pro V3
+# Huion H610 Pro
+# Huion H640P
+# Huion H690
+# Huion H950P
+# Huion HS64
+# Huion Kamvas 20
+# Huion Kamvas Pro 12
+# Huion Kamvas Pro 13
+# Huion Kamvas Pro 20
+# Huion Kamvas Pro 22 (2019)
+# Huion Kamvas Pro 24
+# Huion New 1060 Plus (2048)
+# Huion New 1060 Plus
+# Huion Q11K V2
+# Huion Q11K
+# Huion WH1409 V2 (Variant 2)
+# Huion WH1409 V2
+# Huion WH1409
+# Monoprice 10594
+# Turcom TS-6580
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006e", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Artisul M0610 Pro
+# Gaomon M106K Pro
+# Gaomon M10K Pro
+# Gaomon M10K
+# Gaomon M1230
+# Gaomon S620
+# Huion H320M
+# Huion H430P
+# Huion H950P
+# Huion HS611
+# Huion HS64
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="006f", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion Kamvas Pro 16 V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2000", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2000", TAG+="uaccess", TAG+="udev-acl"
+
+# Huion RDS-220
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2001", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Gaomon 1060 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2004", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion Kamvas 13 (Gen 3)
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2008", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2008", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2008", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion Kamvas 16 (Gen 3)
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2009", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2009", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2009", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion L310
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2011", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2011", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2011", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Huion L610
+KERNEL=="hidraw*", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2012", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2012", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="256c", ATTRS{idProduct}=="2012", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 13.3
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="000b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="000b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="000b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 15.6
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="000c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="000c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="000c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 01
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0042", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0042", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0042", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G540 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0061", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0061", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0061", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star 06C
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0062", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0062", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0062", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star 05 V3
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0071", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0071", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0071", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G430
+# XP-Pen Star G430S
+# XP-Pen Star G540
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0075", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0075", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0075", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star 03 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0077", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0077", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0077", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star 06
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0078", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0078", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0078", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G640
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0094", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0094", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0094", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 03
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0096", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0096", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0096", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 02
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0803", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0803", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0803", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 12
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="080a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="080a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="080a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 01 V2 (Variant 2)
+# XP-Pen Deco 01 V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0902", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0902", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0902", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco Pro Medium
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0904", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0904", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0904", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 01 V2 (Variant 2)
+# XP-Pen Deco 01 V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0905", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0905", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0905", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G640S
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0906", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0906", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0906", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star 03 V2
+# XP-Pen Star 03
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0907", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0907", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0907", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco Pro Small
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0909", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0909", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0909", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 15.6 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="090d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="090d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="090d", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Adesso Cybertablet K8
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0910", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0910", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0910", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G430S V2
+# XP-Pen Star G430S
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0913", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0913", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0913", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G640 (Variant 2)
+# XP-Pen Star G640
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0914", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0914", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0914", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G960S
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0917", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0917", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0917", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G960S Plus
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0918", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0918", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0918", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 15.6
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 22R Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091b", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Artist 12 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="091f", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star G960
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0920", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0920", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0920", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE M708 V2
+# UGEE M708 V3
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0924", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0924", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0924", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco mini7
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0928", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0928", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0928", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco mini4
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0929", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0929", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Artist 13.3 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Innovator 16
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 24 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092d", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist Pro 16TP
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092e", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Artist 22 (2nd Gen)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="092f", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Deco Fun XS (CT430)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0930", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0930", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0930", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco Fun S (CT640)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0931", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0931", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Deco Fun L (CT1060)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0932", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0932", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Deco Pro SW
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0933", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0933", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Deco Pro MW
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0934", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0934", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Deco L
+# XP-Pen Deco LW
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0935", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0935", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0935", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco M
+# XP-Pen Deco MW
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0936", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0936", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0936", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE S640
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0937", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0937", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0937", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE S1060
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0938", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0938", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0938", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 24
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE U1200
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE U1600
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="093c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco Pro MW Gen2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0942", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0942", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0942", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco Pro LW Gen2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0943", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0943", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0943", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco Pro XLW Gen2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0944", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0944", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0944", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 01 V3 (Variant 2)
+# XP-Pen Deco 01 V3
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0947", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0947", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Deco mini7 V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0948", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0948", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0948", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco mini7W V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0949", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0949", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="0949", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 12 (2nd Gen)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 16 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 16 (2nd Gen)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 10 (2nd Gen)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094d", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 13 (2nd Gen)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="094e", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist Pro 14 (Gen2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist Pro 16 (Gen2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist Pro 24 (Gen2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="095c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist Pro 19 (Gen2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist Pro 22 (Gen2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 13.3 Pro V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096e", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096e", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 15.6 Pro V2
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096f", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="096f", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo A610 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="1903", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="1903", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="1903", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE M908
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2902", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2902", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2902", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UGEE M808
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2903", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2903", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2903", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Deco 640 (IT640)
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2904", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="2904", TAG+="uaccess", TAG+="udev-acl"
+
+# UGEE UE16
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="290c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="290c", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="290c", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XenceLabs Pen Tablet Medium
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="5201", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="5201", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="5201", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XenceLabs Pen Tablet Small
+KERNEL=="hidraw*", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="5204", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="5204", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="28bd", ATTRS{idProduct}=="5204", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XENX P3-1060
+KERNEL=="hidraw*", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="2001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="2001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="2001", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XENX P1-640
+KERNEL=="hidraw*", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="2002", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="2002", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="2002", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XENX X1-640
+KERNEL=="hidraw*", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="6001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="6001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2d80", ATTRS{idProduct}=="6001", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK S640 V2
+# VEIKK S640
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0001", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK A30 V2
+# VEIKK A30
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0002", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0002", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0002", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK A50 (Variant 2)
+# VEIKK A50
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0003", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0003", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK A15 V2
+# VEIKK A15
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0004", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK VK640
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0005", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0005", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0005", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK A15 Pro
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0006", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0006", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0006", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK VK1060PRO
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0007", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0007", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0007", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK VK1060
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0008", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0008", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0008", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK VK430 V2
+# VEIKK VK430
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0009", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0009", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="0009", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK Voila (VO1060)
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="000b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="000b", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="000b", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XOPPOX D161
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1004", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK VK1200
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1005", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1005", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1005", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# VEIKK VK2200PRO
+KERNEL=="hidraw*", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1006", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1006", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="2feb", ATTRS{idProduct}=="1006", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# KENTING K5540
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0004", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0004", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UC-Logic PF1209
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0042", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0042", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0042", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 22HD
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0047", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0047", TAG+="uaccess", TAG+="udev-acl"
+
+# XP-Pen Artist 10S
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="004a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="004a", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="004a", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Artist 16
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="004d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="004d", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="004d", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# XP-Pen Star 02
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0050", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0050", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0050", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Artisul AP604
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0054", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0054", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0054", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Parblo A640
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0061", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0061", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0061", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# UC-Logic TWMNA62
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0071", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0071", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0071", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Artisul M0610 Pro
+# Parblo A610
+# UC-Logic 1060N
+# UGEE M708
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0081", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0081", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0081", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# Acepen AP1060
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0082", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0082", TAG+="uaccess", TAG+="udev-acl"
+
+# Acepen AP906
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0091", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0091", TAG+="uaccess", TAG+="udev-acl"
+
+# Monoprice MP1060-HA60
+KERNEL=="hidraw*", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0781", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0781", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="5543", ATTRS{idProduct}=="0781", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+
+# LetSketch WP9620C
+KERNEL=="hidraw*", ATTRS{idVendor}=="6161", ATTRS{idProduct}=="4d15", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="6161", ATTRS{idProduct}=="4d15", TAG+="uaccess", TAG+="udev-acl"
+SUBSYSTEM=="input", ATTRS{idVendor}=="6161", ATTRS{idProduct}=="4d15", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+

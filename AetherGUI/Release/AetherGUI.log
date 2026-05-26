@@ -1,4 +1,6 @@
 ﻿  AetherApp.cpp
+  Main.cpp
+  Renderer.cpp
   Аргумент "C:\Users\tsukuyomi\Desktop\111\AetherGUI\AetherGUI\assets\generate_ico.ps1" для параметра -File не существует. Укажите путь к существующему файлу с расширением ".ps1" в качестве аргумента параметра -File.
   Windows PowerShell
   (C) Корпорация Майкрософт (Microsoft Corporation). Все права защищены.
@@ -6,8 +8,8 @@
   Попробуйте новую кроссплатформенную оболочку PowerShell (https://aka.ms/pscore6)
   
   Создание кода
-  1 of 2859 functions (<0.1%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
-    24 functions had inline decision re-evaluated but remain unchanged
+  118 of 2774 functions ( 4.3%) were compiled, the rest were copied from previous compilation.
+    2 functions were new in current compilation
+    75 functions had inline decision re-evaluated but remain unchanged
   Создание кода завершено
   AetherGUI.vcxproj -> C:\Users\tsukuyomi\Desktop\111\AetherGUI\bin\Release\AetherGUI.exe

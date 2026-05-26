@@ -55,7 +55,12 @@ private:
 	void run();
 	mutex lockMessages;
 	bool newMessage;
-	ofstream logFile;
+	// Pointer (lazily allocated) instead of value-typed ofstream. A
+	// value member would trigger std::basic_ios::_M_init -> locale()
+	// during Logger's construction; when `logger` is a static global,
+	// this can run before libstdc++ has finished initializing the
+	// global locale and segfaults during static init.
+	ofstream* logFile;
 	bool logToFile;
 
 public:

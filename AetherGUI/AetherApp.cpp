@@ -5654,7 +5654,9 @@ void AetherApp::DrawAboutPanel() {
 	renderer.DrawText(L"High-performance tablet driver for creative workflows", cx, y, cw, 20, Theme::TextSecondary(), renderer.pFontBody, Renderer::AlignCenter);
 	y += 30;
 	renderer.DrawText(L"Made by q1xlf (known as sophia)", cx, y, cw, 20, Theme::TextAccent(), renderer.pFontSmall, Renderer::AlignCenter);
-	y += 50;
+	y += 22;
+	renderer.DrawText(L"Contributors: tazik", cx, y, cw, 20, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignCenter);
+	y += 28;
 
 	renderer.DrawText(L"Filters: Smoothing \x2022 Antichatter \x2022 Noise Reduction", cx, y, cw, 18, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignCenter);
 	y += 22;
