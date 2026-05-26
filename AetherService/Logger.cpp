@@ -1,15 +1,26 @@
 #include "stdafx.h"
 #include "Logger.h"
 
+#if defined(_WIN32)
+	#include <windows.h>
+#else
+	#include <thread>
+	#include <chrono>
+#endif
 
-
+static inline void LoggerSleepMs(unsigned ms) {
+#if defined(_WIN32)
+	Sleep(ms);
+#else
+	std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+#endif
+}
 
 Logger::Logger() {
 	verbosity = LogLevelDebug;
 	newMessage = false;
 	directPrint = false;
 }
-
 
 void Logger::OutputMessage(LogItem *message) {
 	char timeBuffer[64];
@@ -32,22 +43,15 @@ void Logger::OutputMessage(LogItem *message) {
 	}
 }
 
-
-
-
 void Logger::ProcessMessages() {
 
-	
 	lockMessages.lock();
 
-	
 	vector<LogItem> tmp(messages);
 	messages.clear();
 
-	
 	lockMessages.unlock();
 
-	
 	for(auto message : tmp) {
 		if(!directPrint) {
 			OutputMessage(&message);
@@ -55,17 +59,12 @@ void Logger::ProcessMessages() {
 	}
 }
 
-
-
-
-
 void Logger::LogMessage(int level, string module, const char *fmt, ...) {
 	char message[4096];
 	int maxLength = sizeof(message) - 1;
 	int index;
 	message[0] = 0;
 
-	
 	if(level < 2)
 		level = 2;
 	else if(level > 8)
@@ -74,23 +73,19 @@ void Logger::LogMessage(int level, string module, const char *fmt, ...) {
 	if(level <= verbosity) {
 		index = 0;
 
-		
 		va_list ap;
 		va_start(ap, fmt);
 		if(index < maxLength) index += vsnprintf(message + index, maxLength - index, fmt, ap);
 		va_end(ap);
 
-		
 		if(index >= maxLength) {
 			message[maxLength - 1] = '\n';
 			message[maxLength] = 0;
 		}
 
-		
 		time_t t;
 		time(&t);
 
-		
 		LogItem logItem;
 		localtime_s(&logItem.time, &t);
 		logItem.level = level;
@@ -99,9 +94,6 @@ void Logger::LogMessage(int level, string module, const char *fmt, ...) {
 		AddMessage(&logItem);
 	}
 }
-
-
-
 
 void Logger::LogBuffer(int level, string module, void *buffer, int length, const char *fmt, ...) {
 	bool newLine = false;
@@ -111,7 +103,6 @@ void Logger::LogBuffer(int level, string module, void *buffer, int length, const
 	int index;
 	message[0] = 0;
 
-	
 	if(level < 2)
 		level = 2;
 	else if(level > 7)
@@ -121,13 +112,11 @@ void Logger::LogBuffer(int level, string module, void *buffer, int length, const
 		index = 0;
 		time(&t);
 
-		
 		va_list ap;
 		va_start(ap, fmt);
 		if(index < maxLength) index += vsnprintf(message + index, maxLength - index, fmt, ap);
 		va_end(ap);
 
-		
 		newLine = (fmt[strlen(fmt) - 1] == '\n');
 		if(newLine) {
 			if(index < maxLength) index += snprintf(message + index, maxLength - index, "  { ");
@@ -136,35 +125,28 @@ void Logger::LogBuffer(int level, string module, void *buffer, int length, const
 			if(index < maxLength) index += snprintf(message + index, maxLength - index, "{ ");
 		}
 
-
-		
 		for(int i = 0; i < length; i++) {
 
-			
 			if(i == length - 1) {
 				if(index < maxLength) index += snprintf(message + index, maxLength - index, "0x%02x", ((unsigned char*)buffer)[i]);
 
-				
 			} else {
 				if(index < maxLength) index += snprintf(message + index, maxLength - index, "0x%02x, ", ((unsigned char*)buffer)[i]);
 
 			}
-			
+
 			if(newLine && (i + 1) % 12 == 0 && i != length - 1) {
 				if(index < maxLength) index += snprintf(message + index, maxLength - index, "\n    ");
 			}
 		}
 
-		
 		if(index < maxLength) index += snprintf(message + index, maxLength - index, " }\n");
 
-		
 		if(index >= maxLength) {
 			message[maxLength - 1] = '\n';
 			message[maxLength] = 0;
 		}
 
-		
 		LogItem logItem;
 		localtime_s(&logItem.time, &t);
 		logItem.level = level;
@@ -174,55 +156,36 @@ void Logger::LogBuffer(int level, string module, void *buffer, int length, const
 	}
 }
 
-
-
-
 void Logger::AddMessage(LogItem *message) {
 
-	
 	if(directPrint) {
 		OutputMessage(message);
 	}
 
-	
 	lockMessages.lock();
 
-	
 	messages.push_back(*message);
 
-	
 	lockMessages.unlock();
 
 	newMessage = true;
 }
 
-
-
-
-
 void Logger::run() {
 	while(true) {
 
-		
 		if(newMessage) {
 
-		
 			newMessage = false;
 
-			
 			ProcessMessages();
 		}
 
-		
 		if(!isRunning && !newMessage) break;
 
-		
-		Sleep(2);
+		LoggerSleepMs(2);
 	}
 }
-
-
-
 
 bool Logger::OpenLogFile(string filename) {
 	if(logFile && logFile.is_open()) {
@@ -236,9 +199,6 @@ bool Logger::OpenLogFile(string filename) {
 	return true;
 }
 
-
-
-
 bool Logger::CloseLogFile() {
 	if(logFile && logFile.is_open()) {
 		logFile.close();
@@ -247,19 +207,12 @@ bool Logger::CloseLogFile() {
 	return false;
 }
 
-
-
-
-
 void Logger::Start() {
 	if(!isRunning) {
 		isRunning = true;
 		threadLog = thread([this] { this->run(); });
 	}
 }
-
-
-
 
 void Logger::Stop() {
 	if(isRunning) {

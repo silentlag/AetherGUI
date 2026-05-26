@@ -1,5 +1,10 @@
+
+
 #include "stdafx.h"
+#if defined(_WIN32)
+
 #include "VMulti.h"
+#include "Platform.h"
 
 #define LOG_MODULE "VMulti"
 #include "Logger.h"
@@ -7,7 +12,6 @@
 #ifndef MOUSEEVENTF_MOVE_NOCOALESCE
 #define MOUSEEVENTF_MOVE_NOCOALESCE 0x2000
 #endif
-
 
 VMulti::VMulti() {
 	isOpen = false;
@@ -19,14 +23,12 @@ VMulti::VMulti() {
 
 	mode = ModeAbsoluteMouse;
 
-	
 	reportAbsoluteMouse.vmultiId = 0x40;
 	reportAbsoluteMouse.reportLength = 7;
 	reportAbsoluteMouse.reportId = 3;
 	reportAbsoluteMouse.buttons = 0;
 	reportAbsoluteMouse.wheel = 0;
 
-	
 	reportRelativeMouse.vmultiId = 0x40;
 	reportRelativeMouse.reportLength = 5;
 	reportRelativeMouse.reportId = 4;
@@ -35,27 +37,22 @@ VMulti::VMulti() {
 	reportRelativeMouse.y = 0;
 	reportRelativeMouse.wheel = 0;
 
-	
 	reportDigitizer.vmultiId = 0x40;
 	reportDigitizer.reportLength = 8;
 	reportDigitizer.reportId = 5;
 	reportDigitizer.buttons = 0;
 	reportDigitizer.pressure = 0;
 
-	
 	memset(&relativeData, 0, sizeof(relativeData));
 	relativeData.sensitivity = 1;
 	relativeData.resetDistance = 400;
 	relativeData.firstReport = true;
 
-	
 	UpdateMonitorInfo();
 
-	
 	memset(reportBuffer, 0, 65);
 	memset(lastReportBuffer, 0, 65);
 
-	
 	hidDevice = new HIDDevice(0x00FF, 0xBACC, 0xFF00, 0x0001);
 	if (hidDevice->isOpen) {
 		isOpen = true;
@@ -64,36 +61,32 @@ VMulti::VMulti() {
 	else {
 		delete hidDevice;
 		hidDevice = NULL;
-		
+
 		isOpen = true;
 		outputEnabled = true;
 	}
 }
-
 
 VMulti::~VMulti() {
 	if (hidDevice != NULL)
 		delete hidDevice;
 }
 
-
-
-
-bool VMulti::HasReportChanged() {
-	
-	int cmpLen;
+static inline int ActiveReportSize(VMulti::VMultiMode mode) {
 	switch (mode) {
-		case ModeDigitizer: cmpLen = sizeof(reportDigitizer); break;
-		case ModeRelativeMouse: cmpLen = sizeof(INPUT); break;
-		case ModeAbsoluteMouse: cmpLen = sizeof(INPUT); break;
-		case ModeSendInput: cmpLen = sizeof(INPUT); break;
-		default: cmpLen = 65; break;
+		case VMulti::ModeDigitizer:      return (int)sizeof(((VMulti*)0)->reportDigitizer);
+		case VMulti::ModeAbsoluteVMulti: return (int)sizeof(((VMulti*)0)->reportAbsoluteMouse);
+		case VMulti::ModeRelativeMouse:  return (int)sizeof(INPUT);
+		case VMulti::ModeAbsoluteMouse:  return (int)sizeof(INPUT);
+		case VMulti::ModeSendInput:      return (int)sizeof(INPUT);
+		default:                         return 65;
 	}
-	return memcmp(reportBuffer, lastReportBuffer, cmpLen) != 0;
 }
 
-
-
+bool VMulti::HasReportChanged() {
+	int cmpLen = ActiveReportSize(mode);
+	return memcmp(reportBuffer, lastReportBuffer, cmpLen) != 0;
+}
 
 void VMulti::ResetRelativeData(double x, double y) {
 	relativeData.targetPosition.Set(x, y);
@@ -114,12 +107,13 @@ void VMulti::UpdateMonitorInfo() {
 	if (monitorInfoLocked) {
 		return;
 	}
-	monitorInfo.primaryWidth = GetSystemMetrics(SM_CXSCREEN);
-	monitorInfo.primaryHeight = GetSystemMetrics(SM_CYSCREEN);
-	monitorInfo.virtualWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-	monitorInfo.virtualHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-	monitorInfo.virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-	monitorInfo.virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	platform::MonitorInfo m = platform::QueryMonitorInfo();
+	monitorInfo.primaryWidth  = m.primaryWidth;
+	monitorInfo.primaryHeight = m.primaryHeight;
+	monitorInfo.virtualWidth  = m.virtualWidth;
+	monitorInfo.virtualHeight = m.virtualHeight;
+	monitorInfo.virtualX      = m.virtualX;
+	monitorInfo.virtualY      = m.virtualY;
 }
 
 void VMulti::SetMonitorInfo(double primaryWidth, double primaryHeight, double virtualWidth, double virtualHeight, double virtualX, double virtualY) {
@@ -135,13 +129,9 @@ void VMulti::SetMonitorInfo(double primaryWidth, double primaryHeight, double vi
 void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 	double dx, dy, distance;
 
-	
 	buttonsChanged = (buttons != pendingButtons);
 	pendingButtons = buttons;
 
-	
-	
-	
 	if (mode == VMulti::ModeAbsoluteMouse) {
 		INPUT input = { 0 };
 		input.type = INPUT_MOUSE;
@@ -165,12 +155,8 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 		memcpy(reportBuffer, &input, sizeof(INPUT));
 	}
 
-	
-	
-	
 	else if (mode == VMulti::ModeRelativeMouse) {
 
-		
 		if (relativeData.firstReport) {
 			relativeData.firstReport = false;
 			ResetRelativeData(x, y);
@@ -181,8 +167,6 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 			dy = y - relativeData.lastPosition.y;
 			distance = sqrt(dx * dx + dy * dy);
 
-			
-			
 			if (distance > relativeData.resetDistance) {
 				ResetRelativeData(x, y);
 				dx = 0;
@@ -193,19 +177,15 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 		dx *= relativeData.sensitivity;
 		dy *= relativeData.sensitivity;
 
-		
-		
 		relativeData.accumX += dx;
 		relativeData.accumY += dy;
 
 		int intMoveX = (int)relativeData.accumX;
 		int intMoveY = (int)relativeData.accumY;
 
-		
 		relativeData.accumX -= intMoveX;
 		relativeData.accumY -= intMoveY;
 
-		
 		if (intMoveX > 500) intMoveX = 500;
 		if (intMoveX < -500) intMoveX = -500;
 		if (intMoveY > 500) intMoveY = 500;
@@ -234,9 +214,6 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 		}
 	}
 
-	
-	
-	
 	else if (mode == VMulti::ModeDigitizer) {
 		reportDigitizer.buttons = buttons | 0x20;
 		double digNormX = x / monitorInfo.primaryWidth;
@@ -255,9 +232,25 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 		}
 	}
 
-	
-	
-	
+	else if (mode == VMulti::ModeAbsoluteVMulti) {
+		reportAbsoluteMouse.buttons = (BYTE)(buttons & 0x07);
+		reportAbsoluteMouse.wheel = 0;
+
+		double normX = x / monitorInfo.primaryWidth;
+		double normY = y / monitorInfo.primaryHeight;
+		if (normX < 0) normX = 0; if (normX > 1) normX = 1;
+		if (normY < 0) normY = 0; if (normY > 1) normY = 1;
+
+		reportAbsoluteMouse.x = (USHORT)(normX * 32767.0 + 0.5);
+		reportAbsoluteMouse.y = (USHORT)(normY * 32767.0 + 0.5);
+
+		lastButtons = buttons;
+		memcpy(reportBuffer, &reportAbsoluteMouse, sizeof(reportAbsoluteMouse));
+		if (debugEnabled) {
+			LOG_DEBUGBUFFER(&reportAbsoluteMouse, sizeof(reportAbsoluteMouse), "VMulti Absolute: ");
+		}
+	}
+
 	else if (mode == ModeSendInput) {
 
 		if (debugEnabled) {
@@ -278,15 +271,12 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 		input.mi.dy = (LONG)floor(sendNormY * 65535.0);
 		input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_MOVE_NOCOALESCE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
 
-		
 		if ((buttons & 0x01) && !(lastButtons & 0x01)) input.mi.dwFlags |= MOUSEEVENTF_LEFTDOWN;
 		else if (!(buttons & 0x01) && (lastButtons & 0x01)) input.mi.dwFlags |= MOUSEEVENTF_LEFTUP;
 
-		
 		if ((buttons & 0x02) && !(lastButtons & 0x02)) input.mi.dwFlags |= MOUSEEVENTF_RIGHTDOWN;
 		else if (!(buttons & 0x02) && (lastButtons & 0x02)) input.mi.dwFlags |= MOUSEEVENTF_RIGHTUP;
 
-		
 		if ((buttons & 0x04) && !(lastButtons & 0x04)) input.mi.dwFlags |= MOUSEEVENTF_MIDDLEDOWN;
 		else if (!(buttons & 0x04) && (lastButtons & 0x04)) input.mi.dwFlags |= MOUSEEVENTF_MIDDLEUP;
 
@@ -295,18 +285,11 @@ void VMulti::CreateReport(BYTE buttons, double x, double y, double pressure) {
 		memcpy(reportBuffer, &input, sizeof(INPUT));
 	}
 
-
 }
-
-
-
-
-
 
 int VMulti::ResetReport() {
 	if (!outputEnabled) return true;
 
-	
 	if (mode == ModeAbsoluteMouse) {
 		INPUT input = { 0 };
 		input.type = INPUT_MOUSE;
@@ -328,14 +311,17 @@ int VMulti::ResetReport() {
 		relativeData.firstReport = true;
 		return 0;
 
-		
 	}
 	else if (mode == ModeDigitizer) {
 		reportDigitizer.buttons = 0;
 		reportDigitizer.pressure = 0;
 		memcpy(reportBuffer, &reportDigitizer, sizeof(reportDigitizer));
 
-		
+	}
+	else if (mode == ModeAbsoluteVMulti) {
+		reportAbsoluteMouse.buttons = 0;
+		memcpy(reportBuffer, &reportAbsoluteMouse, sizeof(reportAbsoluteMouse));
+		lastButtons = 0;
 	}
 	else if (mode == ModeSendInput) {
 		INPUT input = { 0 };
@@ -354,22 +340,30 @@ int VMulti::ResetReport() {
 	return hidDevice->Write(reportBuffer, 65);
 }
 
-
-
-
-
 int VMulti::WriteReport() {
 	if (!outputEnabled) return true;
 
-	memcpy(lastReportBuffer, reportBuffer, 65);
+	int payloadLen = ActiveReportSize(mode);
+	memcpy(lastReportBuffer, reportBuffer, payloadLen);
 	buttonsChanged = false;
 
 	if (mode == ModeSendInput || mode == ModeRelativeMouse || mode == ModeAbsoluteMouse) {
 		return SendInput(1, (LPINPUT)reportBuffer, sizeof(INPUT));
 	}
 	else {
-		
+
 		if (hidDevice == NULL) return 0;
 		return hidDevice->Write(reportBuffer, 65);
 	}
 }
+
+void VMulti::EmulateWheel(int delta) {
+
+	INPUT ip = {};
+	ip.type = INPUT_MOUSE;
+	ip.mi.dwFlags = MOUSEEVENTF_WHEEL;
+	ip.mi.mouseData = (DWORD)delta;
+	SendInput(1, &ip, sizeof(INPUT));
+}
+
+#endif

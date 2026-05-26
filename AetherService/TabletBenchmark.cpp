@@ -1,9 +1,6 @@
 #include "stdafx.h"
 #include "TabletBenchmark.h"
 
-
-
-
 TabletBenchmark::TabletBenchmark() {
 	maxX = 0;
 	minX = 0;
@@ -13,15 +10,8 @@ TabletBenchmark::TabletBenchmark() {
 	packetCounter = 0;
 }
 
-
-
-
 TabletBenchmark::~TabletBenchmark() {
 }
-
-
-
-
 
 void TabletBenchmark::Start(int packetCount) {
 	maxX = -10000;

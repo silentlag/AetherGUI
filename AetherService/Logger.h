@@ -7,7 +7,6 @@
 #include <cstring>
 #include <ctime>
 
-
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -16,7 +15,6 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-
 
 #ifndef LOG_MODULE
 #define LOG_MODULE "Logger"
@@ -48,7 +46,6 @@
 
 #define LOG_DEBUG(...) logger.LogMessage(logger.LogLevelDebug, LOG_MODULE, __VA_ARGS__)
 #define LOG_DEBUGBUFFER(buf, len, ...) logger.LogBuffer(logger.LogLevelDebug, LOG_MODULE, buf, len, __VA_ARGS__)
-
 
 using namespace std;
 

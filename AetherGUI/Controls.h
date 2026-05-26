@@ -12,20 +12,104 @@ inline bool PointInRect(float px, float py, float x, float y, float w, float h) 
 struct Tooltip {
 	static inline const wchar_t* text = nullptr;
 	static inline const wchar_t* pendingTip = nullptr;
-	static inline float x = 0, y = 0;
+	static inline float x = 0, y = 0;       // top-left of the tooltip box
+	static inline float boxW = 0, boxH = 0; // measured size
 	static inline bool visible = false;
 	static inline float timer = 0;
 	static inline bool hoveredThisFrame = false;
 
+	// Anchor rect (the control we are describing). When set, the tooltip is
+	// drawn below this rect instead of next to the cursor, so it never sits on
+	// top of the hovered button.
+	static inline bool hasAnchor = false;
+	static inline float anchorX = 0, anchorY = 0, anchorW = 0, anchorH = 0;
+
+	// --- Sizing ---
+	// We try DirectWrite for accurate measurement. The empirical fallback below
+	// is used only if no Renderer pointer was attached yet (e.g. during very
+	// early frames before the first Draw call).
+	static constexpr float kCharW   = 5.6f;
+	static constexpr float kLineH   = 16.0f;
+	static constexpr float kPadX    = 10.0f;
+	static constexpr float kPadY    = 6.0f;
+	static constexpr float kMaxW    = 320.0f;
+	static constexpr float kAnchorGap = 6.0f;
+
+	static int CountWrappedLines(const wchar_t* s, float innerW) {
+		if (!s || !s[0]) return 1;
+		int lines = 1;
+		float cur = 0.0f, wordW = 0.0f;
+		for (const wchar_t* p = s; *p; ++p) {
+			if (*p == L'\n') { lines++; cur = 0.0f; wordW = 0.0f; continue; }
+			if (*p == L' ' || *p == L'\t') {
+				cur += wordW + kCharW;
+				wordW = 0.0f;
+				if (cur > innerW) { lines++; cur = 0.0f; }
+				continue;
+			}
+			wordW += kCharW;
+			if (cur + wordW > innerW) {
+				lines++;
+				cur = 0.0f;
+			}
+		}
+		return lines;
+	}
+
+	static void Measure(Renderer* r, const wchar_t* s, float* outW, float* outH) {
+		float innerMax = kMaxW - kPadX * 2.0f;
+
+		// Preferred path: ask DirectWrite. It returns the exact wrapped size,
+		// which keeps the panel snug around any string regardless of glyph widths.
+		if (r && r->pFontSmall) {
+			float tw = 0, th = 0;
+			if (r->MeasureText(s, r->pFontSmall, innerMax, &tw, &th)) {
+				float w = tw + kPadX * 2.0f;
+				float h = th + kPadY * 2.0f;
+				if (w < 60.0f) w = 60.0f;
+				if (w > kMaxW) w = kMaxW;
+				if (h < kLineH + kPadY * 2.0f) h = kLineH + kPadY * 2.0f;
+				*outW = w;
+				*outH = h;
+				return;
+			}
+		}
+
+		// Fallback: the old empirical estimate.
+		float rawW = (float)wcslen(s) * kCharW + kPadX * 2.0f;
+		float w = (rawW < kMaxW) ? rawW : kMaxW;
+		if (w < 60.0f) w = 60.0f;
+		float innerW = w - kPadX * 2.0f;
+		int lines = CountWrappedLines(s, innerW);
+		float h = kLineH * (float)lines + kPadY * 2.0f;
+		*outW = w;
+		*outH = h;
+	}
+
+	// Show tooltip near a hovered control. Anchored variant — tooltip floats
+	// below the rect (or above if it would clip the window bottom). Use this
+	// for buttons / radios so the tip never covers the thing being hovered.
+	static void ShowFor(float ax, float ay, float aw, float ah,
+						float mx, float my, const wchar_t* tip, float dt) {
+		if (!tip || !tip[0]) return;
+		hoveredThisFrame = true;
+		hasAnchor = true;
+		anchorX = ax; anchorY = ay; anchorW = aw; anchorH = ah;
+		if (pendingTip != tip) { pendingTip = tip; timer = 0; visible = false; }
+		timer += dt;
+		if (timer > 0.35f) {
+			text = tip;
+			visible = true;
+			(void)mx; (void)my; // anchored placement, ignore cursor
+		}
+	}
+
+	// Cursor-anchored variant. Kept for any non-rect callers.
 	static void Show(float mx, float my, const wchar_t* tip, float dt) {
 		if (!tip || !tip[0]) return;
 		hoveredThisFrame = true;
-		
-		if (pendingTip != tip) {
-			pendingTip = tip;
-			timer = 0;
-			visible = false;
-		}
+		hasAnchor = false;
+		if (pendingTip != tip) { pendingTip = tip; timer = 0; visible = false; }
 		timer += dt;
 		if (timer > 0.35f) {
 			text = tip;
@@ -34,32 +118,50 @@ struct Tooltip {
 			visible = true;
 		}
 	}
+
 	static void Reset() {
-		
 		if (!hoveredThisFrame) {
 			timer = 0;
 			visible = false;
 			text = nullptr;
 			pendingTip = nullptr;
+			hasAnchor = false;
 		}
 		hoveredThisFrame = false;
 	}
+
 	static void Draw(Renderer& r) {
 		if (!visible || !text) return;
-		float maxW = 280.0f;
-		float rawW = (float)wcslen(text) * 5.6f + 16.0f;
-		float w = (rawW < maxW) ? rawW : maxW;
-		
-		float h = (rawW > maxW) ? 36.0f : 22.0f;
-		float dx = x, dy = y;
-		
-		if (dx + w > Theme::Runtime::WindowWidth - 8) dx = Theme::Runtime::WindowWidth - w - 8;
+
+		float w, h;
+		Measure(&r, text, &w, &h);
+
+		float dx, dy;
+		if (hasAnchor) {
+			// Center the tooltip horizontally under the anchor and place it
+			// below with a small gap. Flip above if it would clip the window.
+			dx = anchorX + (anchorW - w) * 0.5f;
+			dy = anchorY + anchorH + kAnchorGap;
+			if (dy + h > Theme::Runtime::WindowHeight - 8) {
+				dy = anchorY - h - kAnchorGap;
+			}
+		}
+		else {
+			dx = x;
+			dy = y;
+		}
+
+		if (dx + w > Theme::Runtime::WindowWidth - 8)
+			dx = Theme::Runtime::WindowWidth - w - 8;
 		if (dx < 4) dx = 4;
-		if (dy + h > Theme::Runtime::WindowHeight - 8) dy -= h + 8;
+		if (dy + h > Theme::Runtime::WindowHeight - 8)
+			dy = Theme::Runtime::WindowHeight - h - 8;
 		if (dy < 4) dy = 4;
+
 		r.FillRoundedRect(dx, dy, w, h, 4, Theme::BgElevated());
 		r.DrawRoundedRect(dx, dy, w, h, 4, Theme::BorderSubtle());
-		r.DrawText(text, dx + 8, dy, w - 16, h, Theme::TextSecondary(), r.pFontSmall);
+		r.DrawText(text, dx + kPadX, dy + kPadY, w - kPadX * 2.0f, h - kPadY * 2.0f,
+			Theme::TextSecondary(), r.pFontSmall);
 	}
 };
 
@@ -83,7 +185,12 @@ struct Toggle {
 		isHovered = PointInRect(mx, my, x, y, Theme::Size::ToggleWidth + 120, Theme::Size::ToggleHeight);
 		hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
 		animT = Lerp(animT, value ? 1.0f : 0.0f, dt * Theme::Anim::Speed);
-		if (isHovered && tooltip[0]) Tooltip::Show(mx, my, tooltip, dt);
+		if (isHovered && tooltip[0]) {
+			// Anchor under the toggle row so the tooltip never overlaps the
+			// switch itself or the label text.
+			Tooltip::ShowFor(x, y, Theme::Size::ToggleWidth + 120, Theme::Size::ToggleHeight,
+				mx, my, tooltip, dt);
+		}
 		if (isHovered && clicked) { value = !value; return true; }
 		return false;
 	}
@@ -221,7 +328,8 @@ struct Slider {
 		hoverT = Lerp(hoverT, isHovered || isDragging ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
 		animValue = Lerp(animValue, value, dt * Theme::Anim::SpeedFast);
 		editBlinkT += dt;
-		if (isHovered && tooltip[0]) Tooltip::Show(mx, my, tooltip, dt);
+		if (isHovered && tooltip[0]) Tooltip::ShowFor(x, trackY - thumbR, width, trackH + thumbR * 2,
+			mx, my, tooltip, dt);
 
 		
 		if (editMode) {
@@ -271,7 +379,7 @@ struct Slider {
 		isHovered = hovered;
 		hoverT = Lerp(hoverT, hovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
 		editBlinkT += dt;
-		if (hovered && tooltip[0]) Tooltip::Show(mx, my, tooltip, dt);
+		if (hovered && tooltip[0]) Tooltip::ShowFor(x, inputY, width, inputH, mx, my, tooltip, dt);
 
 		float charW = 7.2f;
 		float boxPad = 8.0f;
@@ -456,7 +564,7 @@ struct Button {
 		isHovered = PointInRect(mx, my, x, y, width, height);
 		hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
 		pressT = Lerp(pressT, (isHovered && clicked) ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast * 2);
-		if (isHovered && tooltip[0]) Tooltip::Show(mx, my, tooltip, dt);
+		if (isHovered && tooltip[0]) Tooltip::ShowFor(x, y, width, height, mx, my, tooltip, dt);
 		return isHovered && clicked;
 	}
 
@@ -553,11 +661,13 @@ struct SectionHeader {
 struct RadioGroup {
 	float x = 0, y = 0;
 	int selected = 0;
-	struct Option { const wchar_t* text; float hoverT = 0.0f; };
+	struct Option { const wchar_t* text; const wchar_t* tooltip = nullptr; float hoverT = 0.0f; };
 	Option options[8];
 	int optionCount = 0;
 
-	void AddOption(const wchar_t* text) { if (optionCount < 8) options[optionCount++] = { text, 0.0f }; }
+	void AddOption(const wchar_t* text, const wchar_t* tooltip = nullptr) {
+		if (optionCount < 8) options[optionCount++] = { text, tooltip, 0.0f };
+	}
 
 	int Update(float mx, float my, bool clicked, float dt, float btnW = 100) {
 		float btnH = 28, gap = 6; int result = -1;
@@ -565,7 +675,15 @@ struct RadioGroup {
 			float bx = x + i * (btnW + gap);
 			bool hovered = PointInRect(mx, my, bx, y, btnW, btnH);
 			options[i].hoverT = Lerp(options[i].hoverT, hovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
-			if (hovered && clicked) { selected = i; result = i; }
+			if (hovered) {
+				if (options[i].tooltip) {
+					// Anchor to the button rect so the tooltip floats below the
+					// button instead of sitting on top of it (and on top of the
+					// next button to the right when the cursor moves).
+					Tooltip::ShowFor(bx, y, btnW, btnH, mx, my, options[i].tooltip, dt);
+				}
+				if (clicked) { selected = i; result = i; }
+			}
 		}
 		return result;
 	}
@@ -605,7 +723,7 @@ struct CycleSelector {
 		float valX = x + width * 0.45f, valW = width * 0.55f;
 		bool hovered = PointInRect(mx, my, valX, y, valW, 28);
 		hoverT = Lerp(hoverT, hovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
-		if (hovered && tooltip[0]) Tooltip::Show(mx, my, tooltip, dt);
+		if (hovered && tooltip[0]) Tooltip::ShowFor(valX, y, valW, 28, mx, my, tooltip, dt);
 		if (hovered && clicked && optionCount > 0) { selected = (selected + 1) % optionCount; return true; }
 		return false;
 	}

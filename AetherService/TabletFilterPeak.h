@@ -16,7 +16,6 @@ public:
 	bool GetPosition(Vector2D *outputVector);
 	void Update();
 
-
 	TabletFilterPeak();
 	~TabletFilterPeak();
 };

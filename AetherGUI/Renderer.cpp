@@ -356,6 +356,33 @@ void Renderer::DrawTextSimple(const wchar_t* text, float x, float y,
 	DrawText(text, x, y, 500, 30, color, font, AlignLeft);
 }
 
+bool Renderer::MeasureText(const wchar_t* text, IDWriteTextFormat* font,
+	float maxWidth, float* outWidth, float* outHeight) {
+	if (!text || !text[0] || !font || !pDWriteFactory) {
+		if (outWidth) *outWidth = 0;
+		if (outHeight) *outHeight = 0;
+		return false;
+	}
+
+	IDWriteTextLayout* layout = nullptr;
+	HRESULT hr = pDWriteFactory->CreateTextLayout(
+		text, (UINT32)wcslen(text), font,
+		maxWidth, 4096.0f, &layout);
+	if (FAILED(hr) || !layout) {
+		if (outWidth) *outWidth = 0;
+		if (outHeight) *outHeight = 0;
+		return false;
+	}
+
+	DWRITE_TEXT_METRICS metrics = {};
+	layout->GetMetrics(&metrics);
+	layout->Release();
+
+	if (outWidth)  *outWidth  = metrics.widthIncludingTrailingWhitespace;
+	if (outHeight) *outHeight = metrics.height;
+	return true;
+}
+
 void Renderer::FillRectGradientV(float x, float y, float w, float h,
 	D2D1_COLOR_F topColor, D2D1_COLOR_F bottomColor) {
 	ID2D1GradientStopCollection* pStops = nullptr;

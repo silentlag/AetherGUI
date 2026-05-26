@@ -57,6 +57,12 @@ public:
 	void DrawTextSimple(const wchar_t* text, float x, float y,
 		D2D1_COLOR_F color, IDWriteTextFormat* font);
 
+	// Measure wrapped text size in DIPs given a max width. Returns the actual
+	// box DirectWrite produces (with line wrapping at maxWidth). Used for
+	// auto-sized panels like tooltips.
+	bool MeasureText(const wchar_t* text, IDWriteTextFormat* font,
+		float maxWidth, float* outWidth, float* outHeight);
+
 	void FillRectGradientV(float x, float y, float w, float h,
 		D2D1_COLOR_F topColor, D2D1_COLOR_F bottomColor);
 	void FillRectGradientH(float x, float y, float w, float h,

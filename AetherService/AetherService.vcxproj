@@ -191,6 +191,7 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClInclude Include="Vector2D.h" />
     <ClInclude Include="VMulti.h" />
     <ClInclude Include="EmbeddedConfig.h" />
+    <ClInclude Include="Platform.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AetherPluginManager.cpp" />
@@ -221,6 +222,7 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Vector2D.cpp" />
     <ClCompile Include="VMulti.cpp" />
+    <ClCompile Include="Platform_Win32.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="config\init.cfg" />

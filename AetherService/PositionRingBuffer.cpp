@@ -1,10 +1,6 @@
 #include "stdafx.h"
 #include "PositionRingBuffer.h"
 
-
-
-
-
 PositionRingBuffer::PositionRingBuffer() {
 	maxLength = sizeof(buffer) / sizeof(Vector2D);
 	length = 0;
@@ -13,16 +9,8 @@ PositionRingBuffer::PositionRingBuffer() {
 	isValid = false;
 }
 
-
-
-
-
 PositionRingBuffer::~PositionRingBuffer() {
 }
-
-
-
-
 
 void PositionRingBuffer::SetLength(int len) {
 	if(len > maxLength) {
@@ -31,10 +19,6 @@ void PositionRingBuffer::SetLength(int len) {
 		length = len;
 	}
 }
-
-
-
-
 
 void PositionRingBuffer::Add(Vector2D vector) {
 	buffer[index].x = vector.x;
@@ -50,22 +34,15 @@ void PositionRingBuffer::Add(Vector2D vector) {
 	isValid = true;
 }
 
-
-
-
-
 bool PositionRingBuffer::GetLatest(Vector2D *output, int delta) {
 	int newIndex;
 
-	
 	if(count == 0) return false;
 
-	
 	if(delta > 0 || delta <= -count) return false;
 
 	newIndex = index - 1 + delta;
 
-	
 	if(newIndex < 0) newIndex = count + newIndex;
 
 	if(newIndex < 0 || newIndex >= count) {
@@ -77,20 +54,11 @@ bool PositionRingBuffer::GetLatest(Vector2D *output, int delta) {
 	return true;
 }
 
-
-
-
-
 void PositionRingBuffer::Reset() {
 	count = 0;
 	index = 0;
 	isValid = false;
 }
-
-
-
-
-
 
 Vector2D *PositionRingBuffer::operator[](std::size_t index) {
 	return &(buffer[index]);

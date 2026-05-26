@@ -11,12 +11,10 @@
 class TabletFilterAetherSmooth : public TabletFilter {
 public:
 
-	
 	Vector2D xPrev;
 	Vector2D dxPrev;
 	bool flowFirstTime;
 
-	
 	Vector2D lastPos;
 	Vector2D lastAntismoothPos;
 	Vector2D lastSmoothedPos;
@@ -25,27 +23,20 @@ public:
 	bool isFirstReport;
 	double velocity;
 
-	
 	std::chrono::high_resolution_clock::time_point lastTime;
 	std::chrono::high_resolution_clock::time_point debounceTime;
 
-	
-
-	
 	bool enableAntismoothing;
 	double antismoothing;
 
-	
 	bool enableSmoothing;
-	double stability;        
-	double speedSensitivity; 
+	double stability;
+	double speedSensitivity;
 
-	
 	bool enableRadialFollow;
 	double radialInner;
 	double radialOuter;
 
-	
 	bool enableDebounce;
 	double debounceMs;
 
@@ -58,11 +49,9 @@ public:
 	Vector2D rhythmPrevVelocity;
 	bool rhythmFirstTime;
 
-	
 	TabletFilterAetherSmooth();
 	~TabletFilterAetherSmooth();
 
-	
 	void SetTarget(Vector2D vector, double h);
 	void SetPosition(Vector2D vector, double h);
 	bool GetPosition(Vector2D *outputVector);
@@ -74,7 +63,6 @@ private:
 	Vector2D target;
 	double z;
 
-	
 	Vector2D AdaptiveFlow(Vector2D x, double dt, double minCutoff, double beta, double dCutoff);
 	void AdaptiveFlowReset(Vector2D pos);
 	Vector2D RhythmFlow(Vector2D x, Vector2D raw, double dt);

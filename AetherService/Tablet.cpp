@@ -1,8 +1,17 @@
 #include "stdafx.h"
 #include "Tablet.h"
+#include "Platform.h"
 
 #define LOG_MODULE "Tablet"
 #include "Logger.h"
+
+#if !defined(_WIN32)
+	#include <dirent.h>
+	#include <sys/stat.h>
+	#include <cstdlib>
+	#include <cstring>
+	#include <cwchar>
+#endif
 
 static inline UINT16 ReadLe16(const UCHAR *data, int offset) {
 	return (UINT16)(data[offset] | (data[offset + 1] << 8));
@@ -11,10 +20,6 @@ static inline UINT16 ReadLe16(const UCHAR *data, int offset) {
 static inline UINT16 ReadBe16(const UCHAR *data, int offset) {
 	return (UINT16)((data[offset] << 8) | data[offset + 1]);
 }
-
-
-
-
 
 Tablet::Tablet(string usbGUID, int stringId, string stringMatch) : Tablet() {
 	usbDevice = new USBDevice(usbGUID, stringId, stringMatch);
@@ -28,9 +33,6 @@ Tablet::Tablet(string usbGUID, int stringId, string stringMatch) : Tablet() {
 	}
 }
 
-
-
-
 Tablet::Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength, int stringId, string stringMatch, int stringId2, string stringMatch2) : Tablet() {
 	hidDevice = new HIDDevice(vendorId, productId, usagePage, usage, inputReportLength, stringId, stringMatch, stringId2, stringMatch2);
 	if (hidDevice->isOpen) {
@@ -42,9 +44,6 @@ Tablet::Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage
 	}
 }
 
-
-
-
 Tablet::Tablet() {
 
 	name = "Unknown";
@@ -54,7 +53,6 @@ Tablet::Tablet() {
 
 	usbPipeId = 0;
 
-	
 	initFeature = NULL;
 	initFeatureLength = 0;
 	initReport = NULL;
@@ -62,38 +60,28 @@ Tablet::Tablet() {
 	memset(initStringIds, 0, sizeof(initStringIds));
 	initStringCount = 0;
 
-	
 	memset(&state, 0, sizeof(state));
 
-	
 	filterTimed[0] = &smoothing;
 	filterTimedCount = 1;
 	ResetPacketFilters();
 
 	peak.isEnabled = true;
 
-	
 	memset(&buttonMap, 0, sizeof(buttonMap));
 	buttonMap[0] = 1;
 	buttonMap[1] = 2;
 	buttonMap[2] = 3;
 
-	
 	isOpen = false;
 
-	
 	debugEnabled = false;
 
-	
 	skipPackets = 5;
 
-	
 	tipDownCounter = 0;
 
 }
-
-
-
 
 Tablet::~Tablet() {
 	ClearPluginFilters();
@@ -110,7 +98,6 @@ Tablet::~Tablet() {
 		delete initFeature;
 }
 
-
 void Tablet::ResetPacketFilters() {
 	filterPacketCount = 0;
 	filterPacket[filterPacketCount++] = &noise;
@@ -118,7 +105,6 @@ void Tablet::ResetPacketFilters() {
 	filterPacket[filterPacketCount++] = &adaptive;
 	filterPacket[filterPacketCount++] = &aetherSmooth;
 }
-
 
 void Tablet::ClearPluginFilters() {
 	for (int i = 0; i < filterPacketCount; ++i) {
@@ -136,11 +122,12 @@ void Tablet::ClearPluginFilters() {
 	ResetPacketFilters();
 }
 
-
 void Tablet::ReloadPluginFilters(const std::wstring& pluginDirectory) {
 	StopOverclockTimer();
 	smoothing.StopTimer();
 	ClearPluginFilters();
+
+#if defined(_WIN32)
 
 	DWORD attrs = GetFileAttributesW(pluginDirectory.c_str());
 	if (attrs == INVALID_FILE_ATTRIBUTES || !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -193,18 +180,74 @@ void Tablet::ReloadPluginFilters(const std::wstring& pluginDirectory) {
 	}
 
 	LOG_INFO("Loaded %d Aether plugin(s).\n", loaded);
+#else
+
+	char narrowDir[1024] = {0};
+	wcstombs(narrowDir, pluginDirectory.c_str(), sizeof(narrowDir) - 1);
+
+	DIR* root = opendir(narrowDir);
+	if (root == nullptr) {
+		LOG_INFO("Plugin directory is empty or missing: %s\n", narrowDir);
+		return;
+	}
+
+	int loaded = 0;
+	dirent* sub;
+	while ((sub = readdir(root)) != nullptr) {
+		if (sub->d_name[0] == '.') continue;
+
+		char subPath[1024];
+		snprintf(subPath, sizeof(subPath), "%s%s", narrowDir, sub->d_name);
+
+		struct stat st;
+		if (stat(subPath, &st) != 0) continue;
+		if (!S_ISDIR(st.st_mode)) continue;
+
+		DIR* inner = opendir(subPath);
+		if (inner == nullptr) continue;
+
+		dirent* entry;
+		while ((entry = readdir(inner)) != nullptr) {
+			const char* name = entry->d_name;
+			size_t len = strlen(name);
+			if (len < 4 || strcmp(name + len - 3, ".so") != 0) continue;
+
+			if (filterPacketCount >= (int)(sizeof(filterPacket) / sizeof(filterPacket[0]))) {
+				LOG_WARNING("Plugin filter limit reached, skipping remaining plugins.\n");
+				closedir(inner);
+				closedir(root);
+				LOG_INFO("Loaded %d Aether plugin(s).\n", loaded);
+				return;
+			}
+
+			char full[1024];
+			snprintf(full, sizeof(full), "%s/%s", subPath, name);
+			wchar_t wide[1024];
+			mbstowcs(wide, full, sizeof(wide) / sizeof(wide[0]) - 1);
+
+			TabletFilterPlugin* plugin = new TabletFilterPlugin();
+			if (plugin->Load(std::wstring(wide))) {
+				pluginFilters.push_back(plugin);
+				filterPacket[filterPacketCount++] = plugin;
+				loaded++;
+			}
+			else {
+				delete plugin;
+			}
+		}
+		closedir(inner);
+	}
+	closedir(root);
+
+	LOG_INFO("Loaded %d Aether plugin(s).\n", loaded);
+#endif
 	RefreshTimedOutputTimer();
 }
-
 
 int Tablet::LoadPluginFilters(const std::wstring& pluginDirectory) {
 	ReloadPluginFilters(pluginDirectory);
 	return (int)pluginFilters.size();
 }
-
-
-
-
 
 bool Tablet::Init() {
 	const int MAX_RETRIES = 5;
@@ -222,28 +265,41 @@ bool Tablet::Init() {
 		}
 	}
 
-	
 	if (!initFeatureReports.empty() && hidDevice != NULL) {
 		for (size_t reportIndex = 0; reportIndex < initFeatureReports.size(); reportIndex++) {
 			vector<BYTE> &report = initFeatureReports[reportIndex];
+
+			vector<BYTE> paddedReport;
+			BYTE *writePtr = report.data();
+			int writeLen = (int)report.size();
+			if (hidDevice->featureReportLength > 0 &&
+				hidDevice->featureReportLength > writeLen) {
+				paddedReport.assign(report.begin(), report.end());
+				paddedReport.resize(hidDevice->featureReportLength, 0);
+				writePtr = paddedReport.data();
+				writeLen = hidDevice->featureReportLength;
+			}
+
 			bool sent = false;
 			for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
-				if (hidDevice->SetFeature(report.data(), (int)report.size())) {
-					LOG_INFO("Tablet init feature report %d/%d sent successfully.\n",
-						(int)reportIndex + 1, (int)initFeatureReports.size());
+				if (hidDevice->SetFeature(writePtr, writeLen)) {
+					LOG_INFO("Tablet init feature report %d/%d sent successfully (%d bytes, padded to FeatureReportLength=%d).\n",
+						(int)reportIndex + 1, (int)initFeatureReports.size(),
+						(int)report.size(), hidDevice->featureReportLength);
 					sent = true;
 					break;
 				}
-				DWORD err = GetLastError();
-				LOG_WARNING("Init feature report %d/%d attempt %d/%d failed (error 0x%08X).\n",
-					(int)reportIndex + 1, (int)initFeatureReports.size(), attempt + 1, MAX_RETRIES, err);
-				if (err == ERROR_DEVICE_NOT_CONNECTED) {
+				uint32_t err = platform::LastErrorCode();
+				LOG_WARNING("Init feature report %d/%d attempt %d/%d failed (error 0x%08X, wrote %d bytes, FeatureReportLength=%d).\n",
+					(int)reportIndex + 1, (int)initFeatureReports.size(), attempt + 1, MAX_RETRIES,
+					err, writeLen, hidDevice->featureReportLength);
+				if (err == platform::ErrorDeviceNotConnected()) {
 					LOG_ERROR("Device disconnected during init.\n");
 					return false;
 				}
 				if (attempt < MAX_RETRIES - 1) {
 					LOG_INFO("Retrying in %d ms...\n", RETRY_DELAY_MS);
-					Sleep(RETRY_DELAY_MS);
+					platform::SleepMs(RETRY_DELAY_MS);
 				}
 			}
 			if (!sent) {
@@ -255,28 +311,41 @@ bool Tablet::Init() {
 		return true;
 	}
 
-	
 	if (!initOutputReports.empty() && hidDevice != NULL) {
 		for (size_t reportIndex = 0; reportIndex < initOutputReports.size(); reportIndex++) {
 			vector<BYTE> &report = initOutputReports[reportIndex];
+
+			vector<BYTE> paddedReport;
+			BYTE *writePtr = report.data();
+			int writeLen = (int)report.size();
+			if (hidDevice->outputReportLength > 0 &&
+				hidDevice->outputReportLength > writeLen) {
+				paddedReport.assign(report.begin(), report.end());
+				paddedReport.resize(hidDevice->outputReportLength, 0);
+				writePtr = paddedReport.data();
+				writeLen = hidDevice->outputReportLength;
+			}
+
 			bool sent = false;
 			for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
-				if (hidDevice->Write(report.data(), (int)report.size())) {
-					LOG_INFO("Tablet init report %d/%d sent successfully.\n",
-						(int)reportIndex + 1, (int)initOutputReports.size());
+				if (hidDevice->Write(writePtr, writeLen)) {
+					LOG_INFO("Tablet init report %d/%d sent successfully (%d bytes, padded to OutputReportLength=%d).\n",
+						(int)reportIndex + 1, (int)initOutputReports.size(),
+						(int)report.size(), hidDevice->outputReportLength);
 					sent = true;
 					break;
 				}
-				DWORD err = GetLastError();
-				LOG_WARNING("Init report %d/%d attempt %d/%d failed (error 0x%08X).\n",
-					(int)reportIndex + 1, (int)initOutputReports.size(), attempt + 1, MAX_RETRIES, err);
-				if (err == ERROR_DEVICE_NOT_CONNECTED) {
+				uint32_t err = platform::LastErrorCode();
+				LOG_WARNING("Init report %d/%d attempt %d/%d failed (error 0x%08X, wrote %d bytes, OutputReportLength=%d).\n",
+					(int)reportIndex + 1, (int)initOutputReports.size(), attempt + 1, MAX_RETRIES,
+					err, writeLen, hidDevice->outputReportLength);
+				if (err == platform::ErrorDeviceNotConnected()) {
 					LOG_ERROR("Device disconnected during init.\n");
 					return false;
 				}
 				if (attempt < MAX_RETRIES - 1) {
 					LOG_INFO("Retrying in %d ms...\n", RETRY_DELAY_MS);
-					Sleep(RETRY_DELAY_MS);
+					platform::SleepMs(RETRY_DELAY_MS);
 				}
 			}
 			if (!sent) {
@@ -288,15 +357,12 @@ bool Tablet::Init() {
 		return true;
 	}
 
-	
 	if (usbDevice != NULL) {
 		BYTE buffer[64];
 		int status;
 
-		
 		status = usbDevice->ControlTransfer(0x80, 0x06, (0x03 << 8) | 200, 0x0409, buffer, 64);
 
-		
 		status += usbDevice->ControlTransfer(0x80, 0x06, (0x03 << 8) | 100, 0x0409, buffer, 64);
 
 		if (status > 0) {
@@ -306,13 +372,8 @@ bool Tablet::Init() {
 		return false;
 	}
 
-	
 	return true;
 }
-
-
-
-
 
 bool Tablet::IsConfigured() {
 	if (
@@ -325,29 +386,21 @@ bool Tablet::IsConfigured() {
 	return false;
 }
 
-
-
-
 int Tablet::ReadPosition() {
 	UCHAR buffer[1024];
 	UCHAR *data;
 	int buttonIndex;
 
-
-	
 	memset(buffer, 0, sizeof(buffer));
 	if (!this->Read(buffer, settings.reportLength)) {
 		return -1;
 	}
 
-	
 	if (skipPackets > 0) {
 		skipPackets--;
 		return Tablet::PacketInvalid;
 	}
 
-
-	
 	memset(&reportData, 0, sizeof(reportData));
 	int reportOffset = settings.reportOffset;
 	if (settings.type == TabletSettings::TypeWacomDrivers && reportOffset == 0) {
@@ -355,9 +408,6 @@ int Tablet::ReadPosition() {
 	}
 	data = buffer + reportOffset;
 
-	
-	
-	
 	if (settings.type == TabletSettings::TypeWacomIntuos) {
 		if (settings.reportLength == 11 && settings.reportOffset == 0) {
 			data = buffer + 1;
@@ -367,15 +417,10 @@ int Tablet::ReadPosition() {
 		reportData.x = ((data[2] * 0x100 + data[3]) << 1) | ((data[9] >> 1) & 1);
 		reportData.y = ((data[4] * 0x100 + data[5]) << 1) | (data[9] & 1);
 		reportData.pressure = (data[6] << 3) | ((data[7] & 0xC0) >> 5) | (data[1] & 1);
-		
 
-	
-	
-	
 	}
 	else if (settings.type == TabletSettings::TypeWacom4100) {
 
-		
 		if (settings.reportLength == 193) {
 			data = buffer + 1;
 		}
@@ -386,9 +431,6 @@ int Tablet::ReadPosition() {
 		reportData.y = (data[5] | (data[6] << 8) | (data[7] << 16));
 		reportData.pressure = (data[8] | (data[9] << 8));
 
-		
-		
-		
 	}
 	else if (settings.type == TabletSettings::TypeWacomIntuosV2) {
 		if (data[0] == 0x10) {
@@ -799,41 +841,30 @@ int Tablet::ReadPosition() {
 		reportData.z = data[8] | (data[9] << 8);
 	}
 
-
-	
 	if (settings.reportId > 0 && reportData.reportId != settings.reportId) {
 		return Tablet::PacketInvalid;
 	}
 
-
-
-	
 	if (settings.detectMask > 0 && (reportData.buttons & settings.detectMask) != settings.detectMask) {
 		return Tablet::PacketPositionInvalid;
 	}
 
-	
 	if (settings.ignoreMask > 0 && (reportData.buttons & settings.ignoreMask) == settings.ignoreMask) {
 		return Tablet::PacketPositionInvalid;
 	}
 
-	
-	
-	
 	if (settings.clickPressure > 0) {
 		reportData.buttons &= ~1;
 		if ((int)reportData.pressure > settings.clickPressure) {
 			reportData.buttons |= 1;
 		}
 
-		
 	}
 	else if (reportData.pressure > 1) {
-		
+
 		reportData.buttons |= 1;
 	}
 
-	
 	if (settings.keepTipDown > 0) {
 		if (reportData.buttons & 0x01) {
 			tipDownCounter = settings.keepTipDown;
@@ -843,26 +874,20 @@ int Tablet::ReadPosition() {
 		}
 	}
 
-
-	
 	state.isValid = true;
 
-	
 	reportData.buttons = reportData.buttons & 0x0F;
 	state.buttons = 0;
 	for (buttonIndex = 0; buttonIndex < sizeof(buttonMap); buttonIndex++) {
 
-		
 		if (buttonMap[buttonIndex] > 0) {
 
-			
 			if ((reportData.buttons & (1 << buttonIndex)) > 0) {
 				state.buttons |= (1 << (buttonMap[buttonIndex] - 1));
 			}
 		}
 	}
 
-	
 	state.position.x = (double)reportData.x * settings.invMaxX * settings.width;
 	state.position.y = (double)reportData.y * settings.invMaxY * settings.height;
 	state.z = (double)reportData.z;
@@ -870,16 +895,10 @@ int Tablet::ReadPosition() {
 		state.position.x += state.position.y * settings.skew;
 	state.pressure = ((double)reportData.pressure / (double)settings.maxPressure);
 
-	
 	benchmark.Update(state.position);
 
-	
 	return Tablet::PacketValid;
 }
-
-
-
-
 
 bool Tablet::Read(void *buffer, int length) {
 	if (!isOpen) return false;
@@ -900,9 +919,6 @@ bool Tablet::Read(void *buffer, int length) {
 	return status;
 }
 
-
-
-
 bool Tablet::Write(void *buffer, int length) {
 	if (!isOpen) return false;
 	if (usbDevice != NULL) {
@@ -913,9 +929,6 @@ bool Tablet::Write(void *buffer, int length) {
 	}
 	return false;
 }
-
-
-
 
 void Tablet::CloseDevice() {
 	if (isOpen) {

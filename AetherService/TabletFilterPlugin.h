@@ -5,6 +5,7 @@
 #include <string>
 
 #include "AetherPluginApi.h"
+#include "Platform.h"
 #include "TabletFilter.h"
 #include "Vector2D.h"
 
@@ -31,7 +32,8 @@ public:
 	std::mutex pluginMutex;
 
 private:
-	HMODULE module;
+
+	platform::DynLib module;
 	void* instance;
 	AetherPluginDestroyFn destroyFn;
 	AetherPluginResetFn resetFn;

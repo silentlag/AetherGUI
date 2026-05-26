@@ -23,9 +23,9 @@
 </p>
 
 <p>
-  <strong>Latest update:</strong> safer screen-area bounds for resolution changes, fixed edge-clamped sliders,
-  a simplified Aether-only plugin manager, improved update notifications, a richer tray menu,
-  and automatic service start when <code>AetherService.exe</code> is launched directly.
+  <strong>Latest update:</strong> fixed area scaling on the tablet preview, fixed XP-Pen device
+  detection, added pre-launch diagnostic logging before <code>AetherService.exe</code> starts,
+  lowered end-to-end input latency, and shipped a broad pass of hot-path optimizations.
 </p>
 
 <p>
@@ -59,6 +59,77 @@
     <td align="center"><strong>Modern Quality-of-Life</strong><br/>Safe area bounds · themed updater · tray controls · DPI scaling · undo · autosave</td>
   </tr>
 </table>
+
+<br/>
+
+<h2>· How AetherGUI Compares ·</h2>
+
+<p>
+  There are already great open-source tablet drivers — most notably <a href="https://opentabletdriver.net">OpenTabletDriver</a> — and AetherGUI is not a replacement for them. The two projects make different engineering tradeoffs, and which one fits better depends on your setup. This section is here so you can make an informed choice instead of guessing from screenshots.
+</p>
+
+<table align="center">
+  <tr>
+    <th align="center"></th>
+    <th align="center">AetherGUI</th>
+    <th align="center">OpenTabletDriver</th>
+  </tr>
+  <tr>
+    <td align="center"><strong>Language / runtime</strong></td>
+    <td align="center">Native C++17, no managed runtime</td>
+    <td align="center">C# / .NET</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>GUI</strong></td>
+    <td align="center">Native Direct2D + DirectWrite, no Electron / no GTK / no .NET UI stack</td>
+    <td align="center">Eto.Forms (WPF on Windows, GTK on Linux, AppKit on macOS)</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Process model</strong></td>
+    <td align="center">Two native processes: <code>AetherGUI.exe</code> (control panel) and <code>AetherService.exe</code> (driver), connected through a stdin/stdout pipe</td>
+    <td align="center">Daemon + UX over IPC</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Hot path</strong></td>
+    <td align="center">Report thread runs at <code>THREAD_PRIORITY_TIME_CRITICAL</code> registered with MMCSS <em>Pro Audio</em>, packet filters share a lock-free <code>IsTimedOutputEnabled</code> snapshot, status output is written without CRT flushes</td>
+    <td align="center">.NET-managed input pipeline; quality is excellent, but the language imposes a GC and a JIT</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Output backends</strong></td>
+    <td align="center">Absolute / Relative / Windows Ink / SendInput, with optional VMulti for digitizer reports. Up to 2000 Hz overclock timer with high-resolution waitable timers</td>
+    <td align="center">Absolute / Relative / Artist mode through native platform pointers and OTD's own filter pipeline</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Tablet database</strong></td>
+    <td align="center">Embedded fallback database compiled into the service — the driver works even without external config files</td>
+    <td align="center">External JSON configurations shipped alongside the daemon</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Platform support</strong></td>
+    <td align="center">Windows 10 / 11 today. Uses Win32 / HID / SetupAPI directly. Linux and macOS support is planned</td>
+    <td align="center">Cross-platform: Windows, Linux, macOS</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Footprint</strong></td>
+    <td align="center">Small native binaries, no .NET runtime install required</td>
+    <td align="center">Requires the .NET runtime</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Diagnostics</strong></td>
+    <td align="center">Persistent <code>AetherGUI.log</code> next to the exe with bridge / service / status tags, including <code>CreateProcess</code> errors and exit codes</td>
+    <td align="center">OTD daemon and console logs through its own pipeline</td>
+  </tr>
+</table>
+
+<p>
+  In short: <strong>AetherGUI focuses on low-level, native code paths.</strong> The whole input chain — HID read, filtering, screen mapping, VMulti write — stays inside one C++ binary, with thread priorities and MMCSS scheduling tuned for low-latency games like osu!. There is no managed runtime in the hot path, no JIT warmup, and no garbage collector to time around.
+ </p>
+
+<p>
+  <strong>Today AetherGUI is Windows-only.</strong> Linux and macOS ports are on the roadmap and will reuse the same C++ core, with the platform-specific HID / output backends swapped per OS.
+  <strong>If you need cross-platform support right now</strong>, OTD is the right tool.
+  <strong>If you want a single drop-in <code>AetherGUI.exe</code> + <code>AetherService.exe</code></strong> on Windows with no extra runtime to install, native rendering, and a focus on minimum-latency output, that is exactly what AetherGUI is built for.
+</p>
 
 <br/>
 
@@ -406,6 +477,42 @@
 
 <br/>
 
+<h2>· Diagnostic Log ·</h2>
+
+<p>
+  AetherGUI writes a persistent diagnostic log to <code>AetherGUI.log</code> in the same folder as <code>AetherGUI.exe</code>. If that folder is read-only (e.g. <code>Program Files</code>), the log falls back to <code>%TEMP%\AetherGUI.log</code>.
+  Each session is appended with a header so multiple runs stay in one file.
+</p>
+
+<table align="center">
+  <tr>
+    <th align="center">Tag</th>
+    <th align="center">Source</th>
+  </tr>
+  <tr>
+    <td align="center"><code>[APP]</code></td>
+    <td align="center">GUI events: resolved service path, VMulti detection, every <code>StartDriverService</code> attempt and result.</td>
+  </tr>
+  <tr>
+    <td align="center"><code>[BRIDGE]</code></td>
+    <td align="center">Process bridge: <code>CreateProcess</code> errors with <code>FormatMessage</code> text, PID on success, pipe state, service exit code.</td>
+  </tr>
+  <tr>
+    <td align="center"><code>[SVC]</code></td>
+    <td align="center">Mirror of every non-position log line from <code>AetherService.exe</code> (HID diagnostics, init reports, warnings, errors).</td>
+  </tr>
+</table>
+
+<p>
+  When reporting an issue, attach <code>AetherGUI.log</code> from the session that reproduces the problem. The combination of <code>[BRIDGE]</code> and <code>[SVC]</code> lines is enough to tell whether the service never started, started but didn't find the tablet, or found it but couldn't initialize it.
+</p>
+
+<p>
+  Open an issue on <a href="https://github.com/silentlag/AetherGUI/issues">GitHub</a> or reach out on Discord <strong>silentlag</strong>. Include <code>AetherGUI.log</code>, your tablet model, and a short description of what you tried.
+</p>
+
+<br/>
+
 <h2>· Troubleshooting ·</h2>
 
 <table align="center">
@@ -416,6 +523,31 @@
   <tr>
     <td align="center"><strong>Tablet is not detected</strong></td>
     <td align="center">Open Console, run HID diagnostics, and check whether another vendor driver is blocking the HID interface.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Driver service exits right after start (tablet stops working)</strong></td>
+    <td align="center">Almost always caused by another vendor driver/service holding the HID interface. Stop the conflicting service and uninstall its tablet driver, then restart AetherGUI:<br/>
+    Wacom: <code>net stop TabletInputService</code> and <code>taskkill /F /IM WTabletServicePro.exe /IM Wacom_TabletUser.exe</code><br/>
+    XP-Pen: stop <code>PentabletService</code> and quit <code>Pentablet.exe</code> from the system tray<br/>
+    Huion: stop <code>HuionTabletService</code> and quit <code>TabletDriverCore.exe</code><br/>
+    Gaomon / VEIKK / UGEE / UC-Logic: quit their tray app and stop their service<br/>
+    Also disable Windows Ink in the pen settings if a Wacom driver was previously installed.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Console tab is empty / log says <code>No output</code></strong></td>
+    <td align="center">Means <code>AetherService.exe</code> never produced any stdout. Check <code>AetherGUI.log</code> next to <code>AetherGUI.exe</code> (or in <code>%TEMP%</code> if the install folder is read-only). The bridge writes the resolved service path, <code>CreateProcess</code> error code, and the service exit code so you can tell whether the service is missing, blocked by AV/SmartScreen, or crashing during init.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong><code>AetherGUI.log</code> shows <code>Service exe NOT FOUND ... error 0x00000002</code></strong></td>
+    <td align="center"><code>AetherService.exe</code> is not next to <code>AetherGUI.exe</code>. Build the <code>AetherService</code> project in Release|x64 and copy <code>AetherService.exe</code> into the same folder as <code>AetherGUI.exe</code> (Visual Studio also drops both into <code>bin/Release/</code> automatically when both projects build).</td>
+  </tr>
+  <tr>
+    <td align="center"><strong><code>AetherGUI.log</code> shows <code>error 0x0000007B</code> (invalid name) on older builds</strong></td>
+    <td align="center">Fixed in this release. Earlier versions used ANSI WinAPI to launch the service, which mangled non-ANSI path components (for example <code>OneDrive\Рабочий стол</code>) into <code>?</code> and made <code>CreateProcess</code> reject the path. Update to this build, which uses wide-char APIs end-to-end.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Service exits with a non-zero exit code</strong></td>
+    <td align="center">Look at the <code>[BRIDGE] Service process exited with code ...</code> line in <code>AetherGUI.log</code> and the surrounding <code>[SVC]</code> lines. <code>Tablet init failed after retries</code> almost always means another driver is blocking the HID interface (see the row above).</td>
   </tr>
   <tr>
     <td align="center"><strong>Windows Ink does not work</strong></td>

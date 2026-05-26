@@ -3,9 +3,7 @@
 #include <vector>
 #include <sstream>
 
-
 namespace EmbeddedConfig {
-
 
 inline std::vector<std::string> GetAllCommands() {
 	const char* configData = R"CFG(
@@ -2173,8 +2171,6 @@ InitReport 0x02 0xB0 0x04
 Type XPPen
 
 )CFG";
-	
-
 
 	const char* configDataCompatibleExtended1 = R"CFG(
 Tablet 0x28BD 0x0910 0x0000 0x0000 10
@@ -5488,10 +5484,10 @@ Type Veikk
 		std::istringstream stream(data);
 		std::string line;
 		while (std::getline(stream, line)) {
-			
+
 			if (line.empty() || line[0] == '#' || line[0] == '\r' || line[0] == '\n')
 				continue;
-			
+
 			while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
 				line.pop_back();
 			if (!line.empty())
@@ -5514,9 +5510,5 @@ appendCommands(configDataGaomonExtended);
 	return commands;
 }
 
-} 
-
-
-
-
+}
 

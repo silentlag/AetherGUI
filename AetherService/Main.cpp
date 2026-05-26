@@ -13,10 +13,21 @@
 #include "AetherPluginManager.h"
 
 #include <atomic>
+#include <algorithm>
+#ifdef _WIN32
+  #include <io.h>
+  #include <fcntl.h>
+#else
+  #include <unistd.h>
+
+  #define _write  ::write
+  #define _fileno ::fileno
+#endif
+
+#include "Platform.h"
 
 #define LOG_MODULE ""
 #include "Logger.h"
-
 
 #ifndef PROCESS_POWER_THROTTLING_EXECUTION_SPEED
 #define PROCESS_POWER_THROTTLING_EXECUTION_SPEED 0x1
@@ -25,9 +36,6 @@
 #pragma comment(lib, "hid.lib")
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "winusb.lib")
-#pragma comment(lib, "winmm.lib")
-
-
 
 Tablet *tablet;
 VMulti *vmulti;
@@ -37,13 +45,68 @@ chrono::high_resolution_clock::time_point timeBegin = chrono::high_resolution_cl
 chrono::high_resolution_clock::time_point lastMovement = chrono::high_resolution_clock::now();
 Vector2D prevPos;
 
+static atomic<bool> timedOutputEnabledCache{false};
+
+static atomic<int> activeOutputMode{0};
+
+struct TabletStateSnapshot {
+	double posX;
+	double posY;
+	double pressure;
+	double z;
+	unsigned long long sequence;
+	BYTE buttons;
+	bool isValid;
+};
+
+static atomic<uint64_t> stateSeq{0};
+static TabletStateSnapshot stateSnapshot{};
+
+static inline void PublishTabletState(double px, double py,
+									  double pressure, double z,
+									  BYTE buttons, bool isValid,
+									  unsigned long long sequence) {
+	uint64_t seq = stateSeq.load(memory_order_relaxed);
+
+	stateSeq.store(seq + 1, memory_order_relaxed);
+	atomic_thread_fence(memory_order_release);
+
+	stateSnapshot.posX = px;
+	stateSnapshot.posY = py;
+	stateSnapshot.pressure = pressure;
+	stateSnapshot.z = z;
+	stateSnapshot.buttons = buttons;
+	stateSnapshot.isValid = isValid;
+	stateSnapshot.sequence = sequence;
+
+	atomic_thread_fence(memory_order_release);
+
+	stateSeq.store(seq + 2, memory_order_relaxed);
+}
+
+static inline TabletStateSnapshot ReadTabletState() {
+	TabletStateSnapshot snap;
+	for (;;) {
+		uint64_t s1 = stateSeq.load(memory_order_acquire);
+		if (s1 & 1) {
+
+			platform::CpuPause();
+			continue;
+		}
+		snap = stateSnapshot;
+		atomic_thread_fence(memory_order_acquire);
+		uint64_t s2 = stateSeq.load(memory_order_relaxed);
+		if (s1 == s2) {
+			return snap;
+		}
+		platform::CpuPause();
+	}
+}
 
 chrono::high_resolution_clock::time_point lastPosReport = chrono::high_resolution_clock::now();
 bool livePosEnabled = true;
 
-
 mutex tabletStateMutex;
-
 
 bool overclockActive = false;
 double overclockTargetHz = 1000.0;
@@ -60,38 +123,24 @@ static double measuredOutputRate = 0;
 static atomic<bool> penRateTimerRunning(false);
 static thread *penRateTimerThread = NULL;
 
-
-
-unsigned long long tabletReportSequence = 0;
-
+atomic<unsigned long long> tabletReportSequence{0};
 
 double hzAccumulator = 0;
 int hzPacketCount = 0;
 chrono::high_resolution_clock::time_point hzWindowStart = chrono::high_resolution_clock::now();
 double measuredReportRate = 0;
 
-
-
-
-
-
-
-
-
-
 struct OverclockInterp {
-	double prevX, prevY, prevP;     
-	double currX, currY, currP;     
+	double prevX, prevY, prevP;
+	double currX, currY, currP;
 	chrono::high_resolution_clock::time_point lastReportTime;
-	double reportMsAvg;             
+	double reportMsAvg;
 	bool initialized;
 
 	OverclockInterp() : prevX(0), prevY(0), prevP(0),
 		currX(0), currY(0), currP(0),
 		reportMsAvg(5.0), initialized(false) {}
 
-	
-	
 	void OnNewReport(double x, double y, double pressure) {
 		auto now = chrono::high_resolution_clock::now();
 		if (initialized) {
@@ -101,7 +150,6 @@ struct OverclockInterp {
 		}
 		lastReportTime = now;
 
-		
 		prevX = currX;  prevY = currY;  prevP = currP;
 		currX = x;      currY = y;      currP = pressure;
 
@@ -111,23 +159,15 @@ struct OverclockInterp {
 		}
 	}
 
-	
-	
-	
 	void Evaluate(double *outX, double *outY, double *outP) {
 		auto now = chrono::high_resolution_clock::now();
 		double elapsedMs = (now - lastReportTime).count() / 1000000.0;
 
-		
 		double alpha = (reportMsAvg > 0.1) ? (elapsedMs / reportMsAvg) : 0.0;
-		
+
 		if (alpha < 0.0) alpha = 0.0;
 		if (alpha > 1.0) alpha = 1.0;
 
-		
-		
-		
-		
 		double nextX = currX + (currX - prevX);
 		double nextY = currY + (currY - prevY);
 		double nextP = currP + (currP - prevP);
@@ -153,62 +193,96 @@ struct OverclockInterp {
 	}
 } overclockInterp;
 
+static atomic<long long> g_packetReadTimeNs{0};
+static atomic<bool>      g_packetTimingArmed{false};
+
+static constexpr int     kLatencyBufSize = 4096;
+static atomic<uint32_t>  g_latencyHead{0};
+static uint32_t          g_latencyBuf[kLatencyBufSize] = {0};
+static chrono::steady_clock::time_point g_lastLatencyReport = chrono::steady_clock::now();
+
+static inline long long NowNs() {
+	return chrono::duration_cast<chrono::nanoseconds>(
+		chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+static void RecordLatencyUs(uint32_t us) {
+	uint32_t idx = g_latencyHead.fetch_add(1, memory_order_relaxed) & (kLatencyBufSize - 1);
+	g_latencyBuf[idx] = us;
+}
+
+static void MaybePublishLatency() {
+	auto now = chrono::steady_clock::now();
+	double dtMs = chrono::duration<double, milli>(now - g_lastLatencyReport).count();
+	if (dtMs < 500.0) return;
+	g_lastLatencyReport = now;
+
+	uint32_t head = g_latencyHead.load(memory_order_relaxed);
+	uint32_t available = head < kLatencyBufSize ? head : kLatencyBufSize;
+	uint32_t window = available < (kLatencyBufSize / 2) ? available : (kLatencyBufSize / 2);
+	if (window < 16) return;
+
+	static uint32_t scratch[kLatencyBufSize / 2];
+	double sumUs = 0.0;
+	uint32_t maxUs = 0;
+	for (uint32_t i = 0; i < window; i++) {
+		uint32_t idx = (head - 1 - i) & (kLatencyBufSize - 1);
+		uint32_t v = g_latencyBuf[idx];
+		scratch[i] = v;
+		sumUs += v;
+		if (v > maxUs) maxUs = v;
+	}
+	std::sort(scratch, scratch + window);
+	uint32_t p99 = scratch[(uint32_t)((double)window * 0.99)];
+
+	double avgMs = (sumUs / (double)window) / 1000.0;
+	double p99Ms = (double)p99 / 1000.0;
+	double maxMs = (double)maxUs / 1000.0;
+
+	char buf[160];
+	int n = snprintf(buf, sizeof(buf),
+		"[STATUS] LATENCY %0.3f %0.3f %0.3f %u\n",
+		avgMs, p99Ms, maxMs, window);
+	if (n > 0) {
+		_write(_fileno(stdout), buf, n);
+	}
+}
+
+#if defined(_WIN32)
 static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
+#else
+static void FilterTimerCallback(unsigned int wTimerID, unsigned int msg,
+                                unsigned long dwUser, unsigned long dw1, unsigned long dw2);
+#endif
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 
 static void OverclockTimerLoop() {
-	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+	platform::ThreadBoostHandle boost = platform::BoostCurrentThread(platform::ThreadBoostTier::Timer);
 
-	typedef chrono::steady_clock Clock;
-	Clock::duration interval = chrono::duration_cast<Clock::duration>(
-		chrono::duration<double, milli>(1000.0 / overclockTargetHz));
-	if (interval.count() < 1) {
-		interval = Clock::duration(1);
-	}
+	int64_t intervalNs = (int64_t)(1000000000.0 / overclockTargetHz);
+	if (intervalNs < 1) intervalNs = 1;
 
-	HANDLE waitTimer = CreateWaitableTimerExW(
-		NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-	if (waitTimer == NULL) {
-		waitTimer = CreateWaitableTimerW(NULL, FALSE, NULL);
-	}
+	int64_t spinThresholdNs = intervalNs / 4;
+	if (spinThresholdNs > 100000) spinThresholdNs = 100000;
+	if (spinThresholdNs < 5000)   spinThresholdNs = 5000;
 
-	Clock::time_point nextTick = Clock::now();
+	int64_t nextTickNs = platform::MonotonicNs();
 	while (overclockTimerRunning.load()) {
 		FilterTimerCallback(0, 0, 0, 0, 0);
-		nextTick += interval;
+		nextTickNs += intervalNs;
 
-		Clock::time_point now = Clock::now();
-		if (now > nextTick + interval * 4) {
-			nextTick = now + interval;
+		int64_t now = platform::MonotonicNs();
+		if (now > nextTickNs + intervalNs * 4) {
+			nextTickNs = now + intervalNs;
 		}
 
-		now = Clock::now();
-		if (now < nextTick) {
-			long long remaining100ns = chrono::duration_cast<chrono::nanoseconds>(nextTick - now).count() / 100;
-			if (remaining100ns < 1) remaining100ns = 1;
-
-			if (waitTimer != NULL) {
-				LARGE_INTEGER dueTime;
-				dueTime.QuadPart = -remaining100ns;
-				if (SetWaitableTimer(waitTimer, &dueTime, 0, NULL, NULL, FALSE)) {
-					WaitForSingleObject(waitTimer, INFINITE);
-				}
-				else {
-					Sleep(0);
-				}
-			}
-			else {
-				Sleep(0);
-			}
-		}
+		platform::SleepUntilNs(nextTickNs, spinThresholdNs);
 	}
 
-	if (waitTimer != NULL) {
-		CloseHandle(waitTimer);
-	}
+	platform::RestoreCurrentThread(boost);
 }
 
 void StopOverclockTimer() {
@@ -238,58 +312,33 @@ void StartOverclockTimer(double targetHz) {
 }
 
 static void PenRateTimerLoop() {
-	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+	platform::ThreadBoostHandle boost = platform::BoostCurrentThread(platform::ThreadBoostTier::Timer);
 
-	typedef chrono::steady_clock Clock;
 	double targetHz = penRateLimitHz;
-	if (targetHz < 30.0) targetHz = 30.0;
+	if (targetHz < 30.0)   targetHz = 30.0;
 	if (targetHz > 1000.0) targetHz = 1000.0;
-	Clock::duration interval = chrono::duration_cast<Clock::duration>(
-		chrono::duration<double, milli>(1000.0 / targetHz));
-	if (interval.count() < 1) {
-		interval = Clock::duration(1);
-	}
 
-	HANDLE waitTimer = CreateWaitableTimerExW(
-		NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-	if (waitTimer == NULL) {
-		waitTimer = CreateWaitableTimerW(NULL, FALSE, NULL);
-	}
+	int64_t intervalNs = (int64_t)(1000000000.0 / targetHz);
+	if (intervalNs < 1) intervalNs = 1;
 
-	Clock::time_point nextTick = Clock::now();
+	int64_t spinThresholdNs = intervalNs / 4;
+	if (spinThresholdNs > 100000) spinThresholdNs = 100000;
+	if (spinThresholdNs < 5000)   spinThresholdNs = 5000;
+
+	int64_t nextTickNs = platform::MonotonicNs();
 	while (penRateTimerRunning.load()) {
 		FilterTimerCallback(0, 0, 0, 0, 0);
-		nextTick += interval;
+		nextTickNs += intervalNs;
 
-		Clock::time_point now = Clock::now();
-		if (now > nextTick + interval * 4) {
-			nextTick = now + interval;
+		int64_t now = platform::MonotonicNs();
+		if (now > nextTickNs + intervalNs * 4) {
+			nextTickNs = now + intervalNs;
 		}
 
-		now = Clock::now();
-		if (now < nextTick) {
-			long long remaining100ns = chrono::duration_cast<chrono::nanoseconds>(nextTick - now).count() / 100;
-			if (remaining100ns < 1) remaining100ns = 1;
-
-			if (waitTimer != NULL) {
-				LARGE_INTEGER dueTime;
-				dueTime.QuadPart = -remaining100ns;
-				if (SetWaitableTimer(waitTimer, &dueTime, 0, NULL, NULL, FALSE)) {
-					WaitForSingleObject(waitTimer, INFINITE);
-				}
-				else {
-					Sleep(0);
-				}
-			}
-			else {
-				Sleep(0);
-			}
-		}
+		platform::SleepUntilNs(nextTickNs, spinThresholdNs);
 	}
 
-	if (waitTimer != NULL) {
-		CloseHandle(waitTimer);
-	}
+	platform::RestoreCurrentThread(boost);
 }
 
 static void StopPenRateTimer() {
@@ -356,6 +405,16 @@ int WritePenReport(bool force) {
 
 	int result = vmulti->WriteReport();
 	if (result > 0) {
+
+		if (g_packetTimingArmed.load(memory_order_relaxed)) {
+			long long readNs = g_packetReadTimeNs.load(memory_order_relaxed);
+			long long deltaNs = NowNs() - readNs;
+			if (deltaNs >= 0 && deltaNs < 500000000LL) {
+				RecordLatencyUs((uint32_t)(deltaNs / 1000));
+			}
+			g_packetTimingArmed.store(false, memory_order_relaxed);
+		}
+
 		lock_guard<mutex> lock(penRateLimitMutex);
 		outputHzPacketCount++;
 		double windowMs = chrono::duration<double, milli>(now - outputHzWindowStart).count();
@@ -381,7 +440,13 @@ bool IsTimedOutputEnabled() {
 	return false;
 }
 
+void InvalidateTimedOutputCache() {
+	timedOutputEnabledCache.store(IsTimedOutputEnabled(), memory_order_relaxed);
+}
+
 void RefreshTimedOutputTimer() {
+	InvalidateTimedOutputCache();
+
 	if (tablet == NULL || tablet->filterTimedCount <= 0 || tablet->filterTimed[0] == NULL)
 		return;
 	if (tablet->filterTimed[0]->callback == NULL)
@@ -419,10 +484,9 @@ void RefreshTimedOutputTimer() {
 	}
 }
 
-
-
-
 void InitConsole() {
+#if defined(_WIN32)
+
 	HANDLE inputHandle;
 	DWORD consoleMode = 0;
 	inputHandle = GetStdHandle(STD_INPUT_HANDLE);
@@ -431,10 +495,10 @@ void InitConsole() {
 	consoleMode = (consoleMode & ~ENABLE_MOUSE_INPUT);
 	consoleMode = (consoleMode & ~ENABLE_WINDOW_INPUT);
 	SetConsoleMode(inputHandle, consoleMode);
+#else
+
+#endif
 }
-
-
-
 
 void RunTabletThread() {
 	int status;
@@ -444,33 +508,29 @@ void RunTabletThread() {
 	TabletFilter *filter;
 	bool filterTimedEnabled;
 
-	
-	chrono::high_resolution_clock::time_point timeNow = chrono::high_resolution_clock::now();
+	platform::ThreadBoostHandle readerBoost =
+		platform::BoostCurrentThread(platform::ThreadBoostTier::Producer);
 
-	
-	
-	
+	chrono::high_resolution_clock::time_point timeNow = chrono::high_resolution_clock::now();
 
 	while (true) {
 
-		
-		
-		
 		status = tablet->ReadPosition();
 
-		
+		if (status == Tablet::PacketValid) {
+			g_packetReadTimeNs.store(NowNs(), memory_order_relaxed);
+			g_packetTimingArmed.store(true, memory_order_relaxed);
+		}
+
 		if (status == Tablet::PacketValid) {
 			isResent = false;
 
-			
 			hzPacketCount++;
 
-			
 		}
 		else if (status == Tablet::PacketInvalid) {
 			continue;
 
-			
 		}
 		else if (status == Tablet::PacketPositionInvalid) {
 			if (!isResent && tablet->state.isValid) {
@@ -480,32 +540,21 @@ void RunTabletThread() {
 			else {
 				continue;
 			}
-			
+
 		}
 		else {
 			LOG_ERROR("Tablet Read Error!\n");
 			CleanupAndExit(1);
 		}
 
-		
-		
-		
 		if (isFirstReport) {
 			isFirstReport = false;
 			continue;
 		}
 
-		
 		if (tablet->debugEnabled) {
 			timeNow = chrono::high_resolution_clock::now();
 			double delta = (timeNow - timeBegin).count() / 1000000.0;
-			
-
-
-
-
-
-
 
 			LOG_DEBUG("RAW:%0.3f,%0.3f,%0.3f\n",
 				delta,
@@ -514,9 +563,6 @@ void RunTabletThread() {
 			);
 		}
 
-
-		
-		
 		{
 			lock_guard<mutex> lock(tabletStateMutex);
 
@@ -524,7 +570,6 @@ void RunTabletThread() {
 				tablet->state.buttons = 0;
 			}
 
-			
 			if (tablet->filterPacketCount > 0) {
 				for (int filterIndex = 0; filterIndex < tablet->filterPacketCount; filterIndex++) {
 					filter = tablet->filterPacket[filterIndex];
@@ -538,33 +583,42 @@ void RunTabletThread() {
 			}
 
 			if (status == Tablet::PacketValid) {
-				tabletReportSequence++;
+				tabletReportSequence.fetch_add(1, memory_order_relaxed);
 			}
-		} 
+		}
 
+		PublishTabletState(
+			tablet->state.position.x,
+			tablet->state.position.y,
+			tablet->state.pressure,
+			tablet->state.z,
+			tablet->state.buttons,
+			tablet->state.isValid,
+			tabletReportSequence.load(memory_order_relaxed));
 
-		
-		filterTimedEnabled = IsTimedOutputEnabled();
+		filterTimedEnabled = timedOutputEnabledCache.load(memory_order_relaxed);
 
 		static Vector2D last;
-		if ( 
-			
+
+		if (
 			(tablet->buttonMap[1] == 6 and tablet->state.buttons == 33)
 			or
 			(tablet->buttonMap[2] == 6 and tablet->state.buttons == 5)
 			) {
 			tablet->state.buttons &= ~(1 << 0);
-			mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (DWORD)(-(last.y - tablet->state.position.y) * tablet->settings.mouseWheelSpeed), 0);
+
+			double dy = last.y - tablet->state.position.y;
+			int delta = (int)(-dy * tablet->settings.mouseWheelSpeed);
+			if (delta != 0) {
+				vmulti->EmulateWheel(delta);
+			}
 		}
 		last = tablet->state.position;
 
-		
-		
 		if (livePosEnabled) {
 			auto posNow = chrono::high_resolution_clock::now();
 			double posDelta = (posNow - lastPosReport).count() / 1000000.0;
 
-			
 			double hzWindowMs = (posNow - hzWindowStart).count() / 1000000.0;
 			if (hzWindowMs >= 500.0) {
 				measuredReportRate = (double)hzPacketCount / (hzWindowMs / 1000.0);
@@ -572,71 +626,70 @@ void RunTabletThread() {
 				hzWindowStart = posNow;
 			}
 
-			if (posDelta >= 16.0) { 
+			MaybePublishLatency();
+
+			if (posDelta >= 16.0) {
 				double statusRate = penRateLimitActive ? measuredOutputRate : measuredReportRate;
-				printf("[STATUS] POS %0.4f %0.4f %0.4f %0.1f\n",
+
+				char statusBuf[128];
+				int statusLen = snprintf(statusBuf, sizeof(statusBuf),
+					"[STATUS] POS %0.4f %0.4f %0.4f %0.1f\n",
 					tablet->state.position.x,
 					tablet->state.position.y,
 					tablet->state.pressure,
 					statusRate);
-				fflush(stdout);
+				if (statusLen > 0) {
+					_write(_fileno(stdout), statusBuf, statusLen);
+				}
 				lastPosReport = posNow;
 			}
 		}
 
-		
 		if (tablet->filterTimedCount == 0 || !filterTimedEnabled) {
 
-			
 			if (vmulti->mode == VMulti::ModeRelativeMouse) {
 
 				x = tablet->state.position.x;
 				y = tablet->state.position.y;
 
-				
 				mapper->GetRotatedTabletPosition(&x, &y);
 
 				if (!tablet->state.isValid) {
 					vmulti->InvalidateRelativeData();
 				}
 
-				
 				vmulti->CreateReport(tablet->state.buttons, x, y, tablet->state.pressure);
 
-				
 				WritePenReport(false);
 
-
-
-				
 			}
 			else {
-				
+
 				x = tablet->state.position.x;
 				y = tablet->state.position.y;
 
-				
 				if (mapper->GetScreenPosition(&x, &y)) {
-					
+
 					vmulti->CreateReport(tablet->state.buttons, x, y, tablet->state.pressure);
 
-					
 					WritePenReport(vmulti->buttonsChanged || !tablet->state.isValid);
 				}
-				
+
 			}
 		}
 	}
 
 }
 
-
-
-
-
+#if defined(_WIN32)
 static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+#else
+static void FilterTimerCallback(unsigned int wTimerID, unsigned int msg,
+                                unsigned long dwUser, unsigned long dw1, unsigned long dw2)
+#endif
 {
-	if (!IsTimedOutputEnabled())
+	(void)wTimerID; (void)msg; (void)dwUser; (void)dw1; (void)dw2;
+	if (!timedOutputEnabledCache.load(memory_order_relaxed))
 		return;
 
 	Vector2D position, position_prev;
@@ -650,21 +703,19 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 
 	chrono::high_resolution_clock::time_point timeNow = chrono::high_resolution_clock::now();
 
-	
 	{
-		lock_guard<mutex> lock(tabletStateMutex);
-		position.Set(tablet->state.position);
-		z = tablet->state.z;
-		buttons = tablet->state.buttons;
-		stateValid = tablet->state.isValid;
-		pressure = tablet->state.pressure;
-		reportSequence = tabletReportSequence;
+		TabletStateSnapshot snap = ReadTabletState();
+		position.Set(snap.posX, snap.posY);
+		z = snap.z;
+		buttons = snap.buttons;
+		stateValid = snap.isValid;
+		pressure = snap.pressure;
+		reportSequence = snap.sequence;
 	}
 	buttonsChangedNow = (buttons != vmulti->pendingButtons);
-	
+
 	tablet->filterTimed[0]->GetPosition(&position_prev);
 
-	
 	double noMovement = 0.0;
 	double dxM = position.x - prevPos.x;
 	double dyM = position.y - prevPos.y;
@@ -678,44 +729,34 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 		noMovement = (timeNow - lastMovement).count() / 1000000.0;
 	}
 
-	
 	for (int filterIndex = 0; filterIndex < tablet->filterTimedCount; filterIndex++) {
 
-		
 		filter = tablet->filterTimed[filterIndex];
 
-		
 		bool filterActive = filter->isEnabled;
 		if (filter == &tablet->smoothing && tablet->smoothing.AntichatterEnabled) {
 			filterActive = true;
 		}
-		if (!filterActive) continue; 
-
+		if (!filterActive) continue;
 
 		if (noMovement > 35)
 		{
 			filter->Reset(position);
-			
+
 			if (!buttonsChangedNow && !vmulti->buttonsChanged) continue;
 		}
 
-		
 		filter->SetReportState(tablet->state.buttons, tablet->state.pressure, z);
 		filter->SetTarget(position, z);
 
-		
 		filter->Update();
 
-		
 		filter->GetPosition(&position);
 
 	}
 
-	
 	if (noMovement > 35 && !buttonsChangedNow && !vmulti->buttonsChanged) return;
 
-
-	
 	if (tablet->debugEnabled) {
 		timeNow = chrono::high_resolution_clock::now();
 		double delta = (timeNow - timeBegin).count() / 1000000.0;
@@ -730,11 +771,6 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 
 	}
 
-	
-	
-	
-	
-	
 	static unsigned long long lastOverclockSequence = 0;
 	static bool hasOverclockSequence = false;
 	static bool wasOverclockActive = false;
@@ -751,8 +787,6 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 			wasOverclockActive = true;
 		}
 
-		
-		
 		if (stateValid && (!hasOverclockSequence || reportSequence != lastOverclockSequence)) {
 			overclockInterp.OnNewReport(position.x, position.y, pressure);
 			lastOverclockSequence = reportSequence;
@@ -760,20 +794,14 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 		}
 	}
 
-
-	
-	
-	
 	if (vmulti->mode == VMulti::ModeRelativeMouse) {
 
-		
 		mapper->GetRotatedTabletPosition(&position.x, &position.y);
 
 		if (!stateValid) {
 			vmulti->InvalidateRelativeData();
 		}
 
-		
 		vmulti->CreateReport(
 			buttons,
 			position.x,
@@ -781,8 +809,6 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 			pressure
 		);
 
-		
-		
 		if (!stateValid) {
 			if (vmulti->buttonsChanged) {
 				WritePenReport(true);
@@ -799,28 +825,16 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 			WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 		}
 
-
 	}
 
-	
-	
-	
 	else {
 
-		
-		
-		
-		
-		
-		
-		
 		if (overclockActive && stateValid && overclockInterp.HasSample()) {
 			double interpX, interpY, interpPressure;
 			overclockInterp.Evaluate(&interpX, &interpY, &interpPressure);
 
-			
 			if (!mapper->GetScreenPosition(&interpX, &interpY)) {
-				return; 
+				return;
 			}
 
 			vmulti->CreateReport(buttons, interpX, interpY, interpPressure);
@@ -829,15 +843,14 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 			}
 		}
-		
+
 		else {
-			
+
 			if (!mapper->GetScreenPosition(&position.x, &position.y)) {
-				
+
 				return;
 			}
 
-			
 			vmulti->CreateReport(
 				buttons,
 				position.x,
@@ -851,11 +864,6 @@ static VOID CALLBACK FilterTimerCallback(UINT wTimerID, UINT msg, DWORD_PTR dwUs
 		}
 	}
 }
-
-
-
-
-
 
 static bool StartServiceRuntime(bool *running) {
 	if (running != NULL && *running) {
@@ -904,17 +912,36 @@ static bool StartServiceRuntime(bool *running) {
 	}
 
 	tabletThread = new thread(RunTabletThread);
+#if defined(_WIN32)
 	if (GetPriorityClass(GetCurrentProcess()) == HIGH_PRIORITY_CLASS) {
 		SetThreadPriority(tabletThread->native_handle(), THREAD_PRIORITY_HIGHEST);
 	}
+#endif
 
 	LOG_INFO("AetherGUI service started!\n");
 	LogStatus();
+
+	if (mapper != NULL) {
+		LOG_STATUS("AREA_TABLET %0.4f %0.4f %0.4f %0.4f\n",
+			mapper->areaTablet.width, mapper->areaTablet.height,
+			mapper->areaTablet.x, mapper->areaTablet.y);
+		LOG_STATUS("AREA_SCREEN %0.0f %0.0f %0.0f %0.0f\n",
+			mapper->areaScreen.width, mapper->areaScreen.height,
+			mapper->areaScreen.x, mapper->areaScreen.y);
+	}
+	if (vmulti != NULL) {
+		const char* mn = "unknown";
+		switch (vmulti->mode) {
+			case VMulti::ModeAbsoluteMouse:  mn = "Absolute"; break;
+			case VMulti::ModeRelativeMouse:  mn = "Relative"; break;
+			case VMulti::ModeDigitizer:      mn = "Digitizer"; break;
+			case VMulti::ModeSendInput:      mn = "SendInput"; break;
+			case VMulti::ModeAbsoluteVMulti: mn = "RawAbsolute"; break;
+		}
+		LOG_STATUS("OUTPUT_MODE %s\n", mn);
+	}
 	return true;
 }
-
-
-
 
 int main(int argc, char**argv) {
 	string line;
@@ -922,39 +949,31 @@ int main(int argc, char**argv) {
 	CommandLine *cmd;
 	bool running = false;
 
-	
 	vmulti = NULL;
 	tablet = NULL;
 	tabletThread = NULL;
 
-	
 	InitConsole();
 
-	
 	mapper = new ScreenMapper(tablet);
 	mapper->SetRotation(0);
 
-	
-	timeBeginPeriod(1);
+	platform::GlobalInit();
 
-	
+#if defined(_WIN32)
 	SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
-	
-	
 	{
 		struct { ULONG Version; ULONG ControlMask; ULONG StateMask; } throttling = {};
 		throttling.Version = 1;
 		throttling.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
-		throttling.StateMask = 0; 
+		throttling.StateMask = 0;
 		SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &throttling, sizeof(throttling));
 	}
+#endif
 
-	
-	
 	LOGGER_START();
 
-	
 	vmulti = new VMulti();
 	if (vmulti->hidDevice == NULL) {
 		LOG_WARNING("VMulti HID device not found.\n");
@@ -965,7 +984,6 @@ int main(int argc, char**argv) {
 		LOG_INFO("VMulti device opened.\n");
 	}
 
-	
 	filename = "init.cfg";
 
 	if (argc > 1) {
@@ -974,12 +992,11 @@ int main(int argc, char**argv) {
 	if (!ReadCommandFile(filename)) {
 		LOG_WARNING("Can't open '%s' — using embedded tablet database\n", filename.c_str());
 
-		
 		auto embeddedCmds = EmbeddedConfig::GetAllCommands();
 		LOG_INFO("\\ Loading embedded config (%d commands)\n", (int)embeddedCmds.size());
 		for (const auto& cmdLine : embeddedCmds) {
 			CommandLine* ecmd = new CommandLine(cmdLine);
-			
+
 			if (ecmd->is("Tablet") && tablet != NULL && tablet->IsConfigured()) {
 				LOG_INFO(">> %s\n", ecmd->line.c_str());
 				LOG_INFO("Tablet is already defined!\n");
@@ -997,16 +1014,10 @@ int main(int argc, char**argv) {
 		StartServiceRuntime(&running);
 	}
 
-
-	
-	
-	
 	while (true) {
 
-		
 		if (!cin) break;
 
-		
 		try {
 			getline(cin, line);
 		}
@@ -1014,14 +1025,9 @@ int main(int argc, char**argv) {
 			break;
 		}
 
-		
 		if (line.length() > 0) {
 			cmd = new CommandLine(line);
 
-
-			
-			
-			
 			if (cmd->is("start")) {
 				LOG_INFO(">> %s\n", cmd->line.c_str());
 				StartServiceRuntime(&running);
@@ -1034,10 +1040,6 @@ int main(int argc, char**argv) {
 					LOG_INFO("\n");
 				}
 
-
-				
-				
-				
 			}
 			else {
 				ProcessCommand(cmd);
@@ -1051,21 +1053,9 @@ int main(int argc, char**argv) {
 	return 0;
 }
 
-
-
-
-
-
 void CleanupAndExit(int code) {
 	StopOverclockTimer();
-	
 
-
-
-
-
-
-		
 	if (tablet != NULL) {
 		if (tablet->filterTimedCount != 0) {
 			tablet->filterTimed[0]->StopTimer();
@@ -1076,10 +1066,9 @@ void CleanupAndExit(int code) {
 		vmulti->ResetReport();
 	}
 	LOGGER_STOP();
-	Sleep(500);
+	platform::GlobalShutdown();
+	platform::SleepMs(500);
 
-	
-	
 	exit(code);
 }
 

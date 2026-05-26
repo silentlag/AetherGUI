@@ -15,7 +15,7 @@ public:
 	Area areaScreen;
 	Area areaVirtualScreen;
 	bool areaClipping;
-	bool areaLimiting;   
+	bool areaLimiting;
 	double rotationMatrix[4];
 
 	ScreenMapper(Tablet *t);

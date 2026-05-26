@@ -1,17 +1,25 @@
 #pragma once
 
-#include <windows.h>
-#include <stdio.h>
-#include <tchar.h>
-#include <strsafe.h>
-#include <string>
+#if defined(_WIN32)
+	#include <windows.h>
+	#include <stdio.h>
+	#include <tchar.h>
+	#include <strsafe.h>
+	#include <math.h>
+	#include <winusb.h>
+	#include <Usb100.h>
+	#include <SetupAPI.h>
+	#include <hidsdi.h>
+	#include <psapi.h>
+#else
+	#include <cstdint>
+	using UCHAR = uint8_t;
+	using USHORT = uint16_t;
+	using HANDLE = void*;
+	using WINUSB_INTERFACE_HANDLE = void*;
+#endif
 
-#include <math.h>
-#include <winusb.h>
-#include <Usb100.h>
-#include <SetupAPI.h>
-#include <hidsdi.h>
-#include <psapi.h>
+#include <string>
 
 using namespace std;
 

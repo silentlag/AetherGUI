@@ -4,13 +4,21 @@
 #define LOG_MODULE "Plugin"
 #include "Logger.h"
 
+#if defined(_WIN32)
+	#define AETHER_TRY        __try
+	#define AETHER_CATCH_FAIL __except (EXCEPTION_EXECUTE_HANDLER)
+#else
+	#define AETHER_TRY        try
+	#define AETHER_CATCH_FAIL catch (...)
+#endif
+
 static void* SafePluginCreate(AetherPluginCreateFn fn) {
 	if (fn == NULL)
 		return NULL;
-	__try {
+	AETHER_TRY {
 		return fn();
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
+	AETHER_CATCH_FAIL {
 		return NULL;
 	}
 }
@@ -19,10 +27,10 @@ static void SafePluginDestroy(AetherPluginDestroyFn fn, void* instance, bool* cr
 	if (crashed) *crashed = false;
 	if (fn == NULL || instance == NULL)
 		return;
-	__try {
+	AETHER_TRY {
 		fn(instance);
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
+	AETHER_CATCH_FAIL {
 		if (crashed) *crashed = true;
 	}
 }
@@ -30,11 +38,11 @@ static void SafePluginDestroy(AetherPluginDestroyFn fn, void* instance, bool* cr
 static bool SafePluginReset(AetherPluginResetFn fn, void* instance, const AetherPluginPoint* point) {
 	if (fn == NULL)
 		return true;
-	__try {
+	AETHER_TRY {
 		fn(instance, point);
 		return true;
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
+	AETHER_CATCH_FAIL {
 		return false;
 	}
 }
@@ -43,11 +51,11 @@ static bool SafePluginSetDouble(AetherPluginSetDoubleFn fn, void* instance, cons
 	if (result) *result = 0;
 	if (fn == NULL)
 		return true;
-	__try {
+	AETHER_TRY {
 		if (result) *result = fn(instance, key, value);
 		return true;
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
+	AETHER_CATCH_FAIL {
 		return false;
 	}
 }
@@ -56,11 +64,11 @@ static bool SafePluginSetString(AetherPluginSetStringFn fn, void* instance, cons
 	if (result) *result = 0;
 	if (fn == NULL)
 		return true;
-	__try {
+	AETHER_TRY {
 		if (result) *result = fn(instance, key, value);
 		return true;
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
+	AETHER_CATCH_FAIL {
 		return false;
 	}
 }
@@ -68,17 +76,17 @@ static bool SafePluginSetString(AetherPluginSetStringFn fn, void* instance, cons
 static bool SafePluginProcess(AetherPluginProcessFn fn, void* instance, AetherPluginPoint* point) {
 	if (fn == NULL)
 		return true;
-	__try {
+	AETHER_TRY {
 		fn(instance, point);
 		return true;
 	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
+	AETHER_CATCH_FAIL {
 		return false;
 	}
 }
 
 TabletFilterPlugin::TabletFilterPlugin() {
-	module = NULL;
+	module = platform::DynLib{};
 	instance = NULL;
 	destroyFn = NULL;
 	resetFn = NULL;
@@ -100,19 +108,20 @@ TabletFilterPlugin::~TabletFilterPlugin() {
 bool TabletFilterPlugin::Load(const std::wstring& dllPath) {
 	Unload();
 
-	module = LoadLibraryW(dllPath.c_str());
-	if (module == NULL) {
-		LOG_ERROR("Failed to load plugin DLL: %ls (error %lu)\n", dllPath.c_str(), GetLastError());
+	module = platform::DynLibLoad(dllPath.c_str());
+	if (!platform::DynLibValid(module)) {
+		LOG_ERROR("Failed to load plugin: %ls (%s)\n",
+			dllPath.c_str(), platform::DynLibLastError().c_str());
 		return false;
 	}
 
-	AetherPluginGetInfoFn getInfoFn = (AetherPluginGetInfoFn)GetProcAddress(module, "AetherPluginGetInfo");
-	AetherPluginCreateFn createFn = (AetherPluginCreateFn)GetProcAddress(module, "AetherPluginCreate");
-	destroyFn = (AetherPluginDestroyFn)GetProcAddress(module, "AetherPluginDestroy");
-	resetFn = (AetherPluginResetFn)GetProcAddress(module, "AetherPluginReset");
-	processFn = (AetherPluginProcessFn)GetProcAddress(module, "AetherPluginProcess");
-	setDoubleFn = (AetherPluginSetDoubleFn)GetProcAddress(module, "AetherPluginSetDouble");
-	setStringFn = (AetherPluginSetStringFn)GetProcAddress(module, "AetherPluginSetString");
+	AetherPluginGetInfoFn getInfoFn = (AetherPluginGetInfoFn)platform::DynLibSymbol(module, "AetherPluginGetInfo");
+	AetherPluginCreateFn createFn = (AetherPluginCreateFn)platform::DynLibSymbol(module, "AetherPluginCreate");
+	destroyFn = (AetherPluginDestroyFn)platform::DynLibSymbol(module, "AetherPluginDestroy");
+	resetFn = (AetherPluginResetFn)platform::DynLibSymbol(module, "AetherPluginReset");
+	processFn = (AetherPluginProcessFn)platform::DynLibSymbol(module, "AetherPluginProcess");
+	setDoubleFn = (AetherPluginSetDoubleFn)platform::DynLibSymbol(module, "AetherPluginSetDouble");
+	setStringFn = (AetherPluginSetStringFn)platform::DynLibSymbol(module, "AetherPluginSetString");
 
 	if (getInfoFn == NULL || processFn == NULL) {
 		LOG_ERROR("Plugin missing required exports: %ls\n", dllPath.c_str());
@@ -148,16 +157,15 @@ bool TabletFilterPlugin::Load(const std::wstring& dllPath) {
 }
 
 void TabletFilterPlugin::Unload() {
-	if (module != NULL) {
+	if (platform::DynLibValid(module)) {
 		bool destroyCrashed = false;
 		SafePluginDestroy(destroyFn, instance, &destroyCrashed);
 		if (destroyCrashed)
 			LOG_ERROR("Plugin destroy crashed: %ls\n", path.c_str());
 
-		FreeLibrary(module);
+		platform::DynLibUnload(module);
 	}
 
-	module = NULL;
 	instance = NULL;
 	destroyFn = NULL;
 	resetFn = NULL;

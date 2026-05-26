@@ -6,27 +6,20 @@
 class TabletFilterAdaptive : public TabletFilter {
 public:
 
-	
 	double state[4];
 
-	
 	double P[4][4];
 
-	
-	double processNoise;        
-	double processNoiseVelocity; 
+	double processNoise;
+	double processNoiseVelocity;
 
-	
-	double measurementNoise;    
+	double measurementNoise;
 
-	
 	double velocityWeight;
 
-	
 	double lastTimestamp;
 	bool hasInitialized;
 
-	
 	Vector2D position;
 	Vector2D target;
 

@@ -1,8 +1,5 @@
 #pragma once
 
-
-
-
-
-
-#include <SDKDDKVer.h>
+#if defined(_WIN32)
+	#include <SDKDDKVer.h>
+#endif

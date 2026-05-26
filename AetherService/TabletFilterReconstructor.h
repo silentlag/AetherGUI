@@ -6,7 +6,6 @@
 class TabletFilterReconstructor : public TabletFilter {
 public:
 
-	
 	static const int HISTORY_SIZE = 16;
 	struct HistoryEntry {
 		Vector2D position;
@@ -16,22 +15,18 @@ public:
 	int historyIndex;
 	int historyCount;
 
-	
 	Vector2D velocity;
 	Vector2D acceleration;
 	Vector2D smoothedVelocity;
 
-	
 	Vector2D position;
 	Vector2D target;
 
-	
-	double reconstructionStrength;   
-	double velocitySmoothing;        
-	double accelerationCap;          
-	double predictionTimeMs;         
+	double reconstructionStrength;
+	double velocitySmoothing;
+	double accelerationCap;
+	double predictionTimeMs;
 
-	
 	double lastTimestamp;
 
 	TabletFilterReconstructor();

@@ -1,15 +1,33 @@
 #pragma once
 
-#include <windows.h>
-#include <stdio.h>
-#include <tchar.h>
-#include <strsafe.h>
-#include <math.h>
-#include <SetupAPI.h>
-#include <hidsdi.h>
-#include <psapi.h>
-#include <iostream>
+#if defined(_WIN32)
+	#include <windows.h>
+	#include <stdio.h>
+	#include <tchar.h>
+	#include <strsafe.h>
+	#include <math.h>
+	#include <SetupAPI.h>
+	#include <hidsdi.h>
+	#include <psapi.h>
+#else
+	#include <cstdint>
+	#include <cstdio>
+	using HANDLE = void*;
+	using BYTE   = uint8_t;
+	using UCHAR  = uint8_t;
+	using WORD   = uint16_t;
+	using USHORT = uint16_t;
+	using UINT   = uint32_t;
+	using UINT16 = uint16_t;
+	using UINT32 = uint32_t;
+	using DWORD  = uint32_t;
+	using LONG   = int32_t;
+	using ULONG  = uint32_t;
+	using WCHAR  = wchar_t;
+#endif
 
+#include <iostream>
+#include <string>
 
 using namespace std;
 
@@ -24,6 +42,8 @@ public:
 	USHORT usagePage;
 	USHORT usage;
 	int inputReportLength;
+	int outputReportLength;
+	int featureReportLength;
 	int stringId;
 	string stringMatch;
 	int stringId2;

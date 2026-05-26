@@ -289,7 +289,7 @@ public:
 	int commandHistoryIdx = 0;
 
 	Button startStopBtn;
-	std::string servicePath;
+	std::wstring servicePath;
 	bool autoStartAttempted = false;
 	bool vmultiInstalled = false;
 	bool vmultiCheckDone = false;

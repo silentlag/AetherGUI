@@ -26,24 +26,17 @@ public:
 	HIDDevice * hidDevice2;
 	int usbPipeId;
 
-	
-	
-	
 	enum TabletButtons {
 		Button1, Button2, Button3, Button4,
 		Button5, Button6, Button7, Button8
 	};
 
-	
 	enum TabletPacketState {
 		PacketPositionInvalid = 0,
 		PacketValid = 1,
 		PacketInvalid = 2
 	};
 
-	
-	
-	
 #pragma pack(1)
 	struct {
 		BYTE reportId;
@@ -54,9 +47,6 @@ public:
 		UINT z;
 	} reportData;
 
-	
-	
-	
 	struct {
 		bool isValid;
 		BYTE buttons;
@@ -65,52 +55,39 @@ public:
 		double z;
 	} state;
 
-	
 	TabletSettings settings;
 
-	
 	TabletFilterSmoothing smoothing;
 
-	
 	TabletFilterNoiseReduction noise;
 
-	
 	TabletFilterPeak peak;
 
-	
 	TabletFilterReconstructor reconstructor;
 
-	
 	TabletFilterAdaptive adaptive;
 
-	
 	TabletFilterAetherSmooth aetherSmooth;
 
 	std::vector<TabletFilterPlugin*> pluginFilters;
-	
+
 	TabletFilter *filterTimed[10];
 	int filterTimedCount;
 
-	
 	TabletFilter *filterPacket[32];
 	int filterPacketCount;
 
-	
 	TabletBenchmark benchmark;
 
-	
 	BYTE buttonMap[16];
 
-	
 	string name = "Unknown";
 	bool isOpen;
 	bool debugEnabled;
 	int skipPackets;
 
-	
 	int tipDownCounter;
 
-	
 	vector<vector<BYTE>> initFeatureReports;
 	vector<vector<BYTE>> initOutputReports;
 	BYTE *initFeature;

@@ -11,12 +11,10 @@
 class TabletFilterPleasant : public TabletFilter {
 public:
 
-	
 	Vector2D xPrev;
 	Vector2D dxPrev;
 	bool oneFilterFirstTime;
 
-	
 	Vector2D lastPos;
 	Vector2D lastAntismoothPos;
 	Vector2D lastSmoothedPos;
@@ -25,35 +23,26 @@ public:
 	bool isFirstReport;
 	double velocity;
 
-	
 	std::chrono::high_resolution_clock::time_point lastTime;
 	std::chrono::high_resolution_clock::time_point debounceTime;
 
-	
-
-	
 	bool enableAntismoothing;
 	double antismoothing;
 
-	
 	bool enableSmoothing;
-	double stability;       
-	double speedSensitivity; 
+	double stability;
+	double speedSensitivity;
 
-	
 	bool enableRadialFollow;
 	double radialInner;
 	double radialOuter;
 
-	
 	bool enableDebounce;
 	double debounceMs;
 
-	
 	TabletFilterPleasant();
 	~TabletFilterPleasant();
 
-	
 	void SetTarget(Vector2D vector, double h);
 	void SetPosition(Vector2D vector, double h);
 	bool GetPosition(Vector2D *outputVector);
@@ -65,7 +54,6 @@ private:
 	Vector2D target;
 	double z;
 
-	
 	Vector2D OneEuroFilter(Vector2D x, double dt, double minCutoff, double beta, double dCutoff);
 	void OneEuroReset(Vector2D pos);
 	double CalculateAlpha(double dt, double fc);

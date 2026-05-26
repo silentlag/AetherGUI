@@ -4,22 +4,13 @@
 #define LOG_MODULE "CommandLine"
 #include "Logger.h"
 
-
-
-
 CommandLine::CommandLine(string text) {
 	this->line = text;
 	this->Parse(text);
 }
 
-
-
-
 CommandLine::~CommandLine() {
 }
-
-
-
 
 bool CommandLine::is(string command) {
 
@@ -32,10 +23,6 @@ bool CommandLine::is(string command) {
 	}
 	return false;
 }
-
-
-
-
 
 int CommandLine::Parse(string line) {
 
@@ -64,7 +51,6 @@ int CommandLine::Parse(string line) {
 	for (std::string::iterator it = line.begin(); it != line.end(); ++it) {
 		currentChar = *it;
 
-		
 		if (!isEnclosed && currentChar == commentChar) {
 			if (itemLength > 0) {
 				items.push_back(item);
@@ -72,7 +58,6 @@ int CommandLine::Parse(string line) {
 			break;
 		}
 
-		
 		isSplitChar = false;
 		for (int i = 0; i < (int)sizeof(splitChars); i++) {
 			if (splitChars[i] && currentChar == splitChars[i]) {
@@ -81,7 +66,6 @@ int CommandLine::Parse(string line) {
 			}
 		}
 
-		
 		isEndChar = false;
 		for (int i = 0; i < (int)sizeof(endChars); i++) {
 			if (currentChar == endChars[i]) {
@@ -90,21 +74,17 @@ int CommandLine::Parse(string line) {
 			}
 		}
 
-		
 		isLastChar = false;
 		if (index == lineLength - 1) {
 			isLastChar = true;
 		}
 
-
-		
 		isEnclosingChar = false;
 		if (currentChar == enclosingChar && previousChar != escapeChar) {
 			isEnclosed = !isEnclosed;
 			isEnclosingChar = true;
 		}
 
-		
 		if (
 			!isEnclosed &&
 			(
@@ -117,11 +97,6 @@ int CommandLine::Parse(string line) {
 				)
 			) {
 
-			
-			
-			
-
-			
 			if (isLastChar && !isEndChar && !isSplitChar) {
 				if (!isEnclosingChar) {
 					item.push_back(currentChar);
@@ -129,7 +104,6 @@ int CommandLine::Parse(string line) {
 				}
 			}
 
-			
 			if (itemLength > 0) {
 				items.push_back(item);
 				item = "";
@@ -141,12 +115,10 @@ int CommandLine::Parse(string line) {
 				itemLength = 0;
 			}
 
-			
 			if (isEndChar) {
 				break;
 			}
 
-			
 		}
 		else if (currentChar >= 32) {
 			if (itemCount == 0 && currentChar == '=') {
@@ -164,7 +136,6 @@ int CommandLine::Parse(string line) {
 		previousChar = currentChar;
 	}
 
-	
 	if (itemCount > 0) {
 		command = items[0];
 		isValid = true;
@@ -173,7 +144,6 @@ int CommandLine::Parse(string line) {
 		isValid = false;
 	}
 
-	
 	values.clear();
 	for (int i = 1; i < (int)items.size(); i++) {
 		values.push_back(items[i]);
@@ -182,10 +152,6 @@ int CommandLine::Parse(string line) {
 	valueCount = values.size();
 	return valueCount;
 }
-
-
-
-
 
 string CommandLine::ParseHex(string str) {
 	if (str.size() >= 3 && str[0] == '0' && str[1] == 'x') {
@@ -199,10 +165,6 @@ string CommandLine::ParseHex(string str) {
 	return str;
 }
 
-
-
-
-
 string CommandLine::GetString(int index, string defaultValue) {
 	if (index < valueCount) {
 		return values[index];
@@ -210,19 +172,11 @@ string CommandLine::GetString(int index, string defaultValue) {
 	return defaultValue;
 }
 
-
-
-
-
 string CommandLine::GetStringLower(int index, string defaultValue) {
 	string str = GetString(index, defaultValue);
 	transform(str.begin(), str.end(), str.begin(), ::tolower);
 	return str;
 }
-
-
-
-
 
 int CommandLine::GetInt(int index, int defaultValue) {
 	if (index < valueCount) {
@@ -235,10 +189,6 @@ int CommandLine::GetInt(int index, int defaultValue) {
 	return defaultValue;
 }
 
-
-
-
-
 long CommandLine::GetLong(int index, long defaultValue) {
 	if (index < valueCount) {
 		try {
@@ -249,10 +199,6 @@ long CommandLine::GetLong(int index, long defaultValue) {
 	}
 	return defaultValue;
 }
-
-
-
-
 
 double CommandLine::GetDouble(int index, double defaultValue) {
 	if (index < valueCount) {
@@ -265,10 +211,6 @@ double CommandLine::GetDouble(int index, double defaultValue) {
 	return defaultValue;
 }
 
-
-
-
-
 float CommandLine::GetFloat(int index, float defaultValue) {
 	if (index < valueCount) {
 		try {
@@ -279,10 +221,6 @@ float CommandLine::GetFloat(int index, float defaultValue) {
 	}
 	return defaultValue;
 }
-
-
-
-
 
 bool CommandLine::GetBoolean(int index, bool defaultValue) {
 	if (GetInt(index, 0) > 0) return true;

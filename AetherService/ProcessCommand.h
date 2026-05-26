@@ -7,3 +7,5 @@ void LogTabletArea(string text);
 void LogInformation();
 void LogStatus();
 bool CheckTablet();
+
+void InvalidateTimedOutputCache();

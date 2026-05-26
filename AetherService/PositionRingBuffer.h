@@ -18,7 +18,6 @@ public:
 
 	Vector2D *operator[](std::size_t index);
 
-
 	PositionRingBuffer();
 	~PositionRingBuffer();
 };

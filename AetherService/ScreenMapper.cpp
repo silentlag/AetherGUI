@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "ScreenMapper.h"
+#include "Platform.h"
 
 #define LOG_MODULE "ScreenMapper"
 #include "Logger.h"
@@ -13,17 +14,13 @@
 ScreenMapper::ScreenMapper(Tablet *t) {
 	this->tablet = t;
 
-	
 	RefreshVirtualScreen();
 
-	
 	areaTablet.width = 80;
 	areaTablet.height = 45;
 	areaTablet.x = 10;
 	areaTablet.y = 10;
 
-
-	
 	areaScreen.width = 1920;
 	areaScreen.height = 1080;
 	areaScreen.x = 0;
@@ -31,17 +28,12 @@ ScreenMapper::ScreenMapper(Tablet *t) {
 	areaClipping = true;
 	areaLimiting = false;
 
-	
 	rotationMatrix[0] = 1;
 	rotationMatrix[1] = 0;
 	rotationMatrix[2] = 0;
 	rotationMatrix[3] = 1;
 
-
 }
-
-
-
 
 void ScreenMapper::SetRotation(double angle) {
 	angle *= M_PI / 180;
@@ -51,26 +43,17 @@ void ScreenMapper::SetRotation(double angle) {
 	rotationMatrix[3] = cos(angle);
 }
 
-
-
-
 void ScreenMapper::RefreshVirtualScreen() {
-	int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-	int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-	int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-	int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+	platform::MonitorInfo m = platform::QueryMonitorInfo();
 
-	areaVirtualScreen.x = (double)left;
-	areaVirtualScreen.y = (double)top;
-	areaVirtualScreen.width = (double)(width > 0 ? width : GetSystemMetrics(SM_CXSCREEN));
-	areaVirtualScreen.height = (double)(height > 0 ? height : GetSystemMetrics(SM_CYSCREEN));
+	areaVirtualScreen.x = m.virtualX;
+	areaVirtualScreen.y = m.virtualY;
+	areaVirtualScreen.width  = m.virtualWidth  > 0 ? m.virtualWidth  : m.primaryWidth;
+	areaVirtualScreen.height = m.virtualHeight > 0 ? m.virtualHeight : m.primaryHeight;
 
-	if (areaVirtualScreen.width < 1) areaVirtualScreen.width = 1920;
+	if (areaVirtualScreen.width < 1)  areaVirtualScreen.width  = 1920;
 	if (areaVirtualScreen.height < 1) areaVirtualScreen.height = 1080;
 }
-
-
-
 
 void ScreenMapper::ClampScreenAreaToVirtualScreen(bool refreshVirtualScreen) {
 	if (refreshVirtualScreen) RefreshVirtualScreen();
@@ -91,9 +74,6 @@ void ScreenMapper::ClampScreenAreaToVirtualScreen(bool refreshVirtualScreen) {
 	if (areaScreen.y > maxY) areaScreen.y = maxY;
 }
 
-
-
-
 bool ScreenMapper::GetRotatedTabletPosition(double *x, double *y) {
 	double mapX, mapY;
 	double tmpX, tmpY;
@@ -101,29 +81,22 @@ bool ScreenMapper::GetRotatedTabletPosition(double *x, double *y) {
 	mapX = (*x);
 	mapY = (*y);
 
-	
 	mapX -= tablet->settings.width / 2.0;
 	mapY -= tablet->settings.height / 2.0;
 
-	
 	tmpX = mapX;
 	tmpY = mapY;
 	mapX = tmpX * rotationMatrix[0] + tmpY * rotationMatrix[1];
 	mapY = tmpX * rotationMatrix[2] + tmpY * rotationMatrix[3];
 
-	
 	mapX += tablet->settings.width / 2.0;
 	mapY += tablet->settings.height / 2.0;
 
-	
 	*x = mapX;
 	*y = mapY;
 
 	return true;
 }
-
-
-
 
 bool ScreenMapper::GetScreenPosition(double *x, double *y) {
 	double mapX, mapY;
@@ -132,28 +105,22 @@ bool ScreenMapper::GetScreenPosition(double *x, double *y) {
 	mapX = (*x);
 	mapY = (*y);
 
-	
 	double centerX = areaTablet.x;
 	double centerY = areaTablet.y;
 	mapX -= centerX;
 	mapY -= centerY;
 
-	
 	tmpX = mapX;
 	tmpY = mapY;
 	mapX = tmpX * rotationMatrix[0] + tmpY * rotationMatrix[1];
 	mapY = tmpX * rotationMatrix[2] + tmpY * rotationMatrix[3];
 
-	
 	mapX = mapX / areaTablet.width + 0.5;
 	mapY = mapY / areaTablet.height + 0.5;
 
-
-	
 	mapX *= (areaScreen.width);
 	mapY *= (areaScreen.height);
 
-	
 	mapX += areaScreen.x;
 	mapY += areaScreen.y;
 

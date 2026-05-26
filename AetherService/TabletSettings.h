@@ -57,7 +57,6 @@ public:
 	TabletType type;
 	int mouseWheelSpeed;
 
-	
 	double invMaxX;
 	double invMaxY;
 

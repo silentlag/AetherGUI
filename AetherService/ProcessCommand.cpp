@@ -1,11 +1,10 @@
 #include "stdafx.h"
 #include "ProcessCommand.h"
 #include "AetherPluginManager.h"
+#include "Platform.h"
 
 #define LOG_MODULE ""
 #include "Logger.h"
-
-
 
 static std::string LowerService(std::string text) {
 	transform(text.begin(), text.end(), text.begin(), ::tolower);
@@ -72,18 +71,12 @@ static int FindPluginFilterIndex(const std::string& selector) {
 	return -1;
 }
 
-
-
 bool ProcessCommand(CommandLine *cmd) {
 
 	LOG_INFO(">> %s\n", cmd->line.c_str());
 
-	
-	
-	
 	if (cmd->is("Tablet")) {
 
-		
 		if (cmd->valueCount == 3) {
 			string guid = cmd->GetString(0, "");
 			int stringId = cmd->GetInt(1, 0);
@@ -101,7 +94,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			}
 		}
 
-		
 		else if (cmd->valueCount >= 4 && cmd->valueCount <= 9) {
 			USHORT vendorID = cmd->GetInt(0, 0);
 			USHORT productID = cmd->GetInt(1, 0);
@@ -165,7 +157,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
 	else if (cmd->is("CheckTablet")) {
 		if (!CheckTablet()) {
 			LOG_ERROR("Tablet not found!\n");
@@ -175,8 +166,8 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
 	else if (cmd->is("HIDList")) {
+#if defined(_WIN32)
 		HANDLE hidHandle = 0;
 		HIDDevice *hid = new HIDDevice();
 		hid->debugEnabled = true;
@@ -185,10 +176,12 @@ bool ProcessCommand(CommandLine *cmd) {
 			CloseHandle(hidHandle);
 		}
 		delete hid;
+#else
+
+		LOG_INFO("HIDList: not yet implemented on Linux. Use 'lsusb' or browse /sys/class/hidraw/.\n");
+#endif
 	}
 
-
-	
 	else if (cmd->is("HID2")) {
 
 		if (cmd->valueCount == 4) {
@@ -210,28 +203,24 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
 	else if (cmd->is("Name")) {
 		if (tablet == NULL) return false;
 		tablet->name = cmd->GetString(0, tablet->name);
 		LOG_INFO("Tablet name = '%s'\n", tablet->name.c_str());
 	}
 
-	
 	else if (cmd->is("ReportId")) {
 		if (tablet == NULL) return false;
 		tablet->settings.reportId = cmd->GetInt(0, tablet->settings.reportId);
 		LOG_INFO("Tablet report id = %d\n", tablet->settings.reportId);
 	}
 
-	
 	else if (cmd->is("ReportLength")) {
 		if (tablet == NULL) return false;
 		tablet->settings.reportLength = cmd->GetInt(0, tablet->settings.reportLength);
 		LOG_INFO("Tablet report length = %d\n", tablet->settings.reportLength);
 	}
 
-	
 	else if (cmd->is("ReportOffset")) {
 		if (tablet == NULL) return false;
 		tablet->settings.reportOffset = cmd->GetInt(0, tablet->settings.reportOffset);
@@ -239,21 +228,18 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet report offset = %d\n", tablet->settings.reportOffset);
 	}
 
-	
 	else if (cmd->is("DetectMask")) {
 		if (tablet == NULL) return false;
 		tablet->settings.detectMask = cmd->GetInt(0, tablet->settings.detectMask);
 		LOG_INFO("Tablet detect mask = %02X\n", tablet->settings.detectMask);
 	}
 
-	
 	else if (cmd->is("IgnoreMask")) {
 		if (tablet == NULL) return false;
 		tablet->settings.ignoreMask = cmd->GetInt(0, tablet->settings.ignoreMask);
 		LOG_INFO("Tablet ignore mask = %02X\n", tablet->settings.ignoreMask);
 	}
 
-	
 	else if (cmd->is("MaxX")) {
 		if (tablet == NULL) return false;
 		tablet->settings.maxX = cmd->GetInt(0, tablet->settings.maxX);
@@ -261,7 +247,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet max X = %d\n", tablet->settings.maxX);
 	}
 
-	
 	else if (cmd->is("MaxY")) {
 		if (tablet == NULL) return false;
 		tablet->settings.maxY = cmd->GetInt(0, tablet->settings.maxY);
@@ -269,21 +254,18 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet max Y = %d\n", tablet->settings.maxY);
 	}
 
-	
 	else if (cmd->is("MaxPressure")) {
 		if (tablet == NULL) return false;
 		tablet->settings.maxPressure = cmd->GetInt(0, tablet->settings.maxPressure);
 		LOG_INFO("Tablet max pressure = %d\n", tablet->settings.maxPressure);
 	}
 
-	
 	else if (cmd->is("ClickPressure")) {
 		if (tablet == NULL) return false;
 		tablet->settings.clickPressure = cmd->GetInt(0, tablet->settings.clickPressure);
 		LOG_INFO("Tablet click pressure = %d\n", tablet->settings.clickPressure);
 	}
 
-	
 	else if (cmd->is("TipThreshold") || cmd->is("TipActivationThreshold")) {
 		if (tablet == NULL) return false;
 		double percent = cmd->GetDouble(0, 0.0);
@@ -305,211 +287,169 @@ bool ProcessCommand(CommandLine *cmd) {
 			percent, tablet->settings.clickPressure);
 	}
 
-
-	
 	else if (cmd->is("KeepTipDown")) {
 		if (tablet == NULL) return false;
 		tablet->settings.keepTipDown = cmd->GetInt(0, tablet->settings.keepTipDown);
 		LOG_INFO("Tablet pen tip keep down = %d packets\n", tablet->settings.keepTipDown);
 	}
 
-
-	
 	else if (cmd->is("Width")) {
 		if (tablet == NULL) return false;
 		tablet->settings.width = cmd->GetDouble(0, tablet->settings.width);
 		LOG_INFO("Tablet width = %0.2f mm\n", tablet->settings.width);
 	}
 
-	
 	else if (cmd->is("Height")) {
 		if (tablet == NULL) return false;
 		tablet->settings.height = cmd->GetDouble(0, tablet->settings.height);
 		LOG_INFO("Tablet height = %0.2f mm\n", tablet->settings.height);
 	}
 
-	
 	else if (cmd->is("Skew")) {
 		if (tablet == NULL) return false;
 		tablet->settings.skew = cmd->GetDouble(0, tablet->settings.skew);
 		LOG_INFO("Tablet skew = Shift X-axis %0.2f mm per Y-axis mm\n", tablet->settings.skew);
 	}
 
-	
 	else if (cmd->is("Type")) {
 		if (tablet == NULL) return false;
 
-		
 		if (cmd->GetStringLower(0, "") == "wacomintuos") {
 			tablet->settings.type = TabletSettings::TypeWacomIntuos;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacom4100") {
 			tablet->settings.type = TabletSettings::TypeWacom4100;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacombamboo") {
 			tablet->settings.type = TabletSettings::TypeWacomBamboo;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomintuos4") {
 			tablet->settings.type = TabletSettings::TypeWacomIntuos4;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomintuosv2") {
 			tablet->settings.type = TabletSettings::TypeWacomIntuosV2;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomintuosv3") {
 			tablet->settings.type = TabletSettings::TypeWacomIntuosV3;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "uclogic") {
 			tablet->settings.type = TabletSettings::TypeUCLogic;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "uclogicv1") {
 			tablet->settings.type = TabletSettings::TypeUCLogicV1;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "uclogicv2") {
 			tablet->settings.type = TabletSettings::TypeUCLogicV2;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "inspiroy") {
 			tablet->settings.type = TabletSettings::TypeInspiroy;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "giano" || cmd->GetStringLower(0, "") == "huiongiano") {
 			tablet->settings.type = TabletSettings::TypeGiano;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "xppen") {
 			tablet->settings.type = TabletSettings::TypeXPPen;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "xppenoffsetpressure") {
 			tablet->settings.type = TabletSettings::TypeXPPenOffsetPressure;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "xppengen2") {
 			tablet->settings.type = TabletSettings::TypeXPPenGen2;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "xppenoffsetaux") {
 			tablet->settings.type = TabletSettings::TypeXPPenOffsetAux;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomdrivers") {
 			tablet->settings.type = TabletSettings::TypeWacomDrivers;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "acepen") {
 			tablet->settings.type = TabletSettings::TypeAcepen;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "bosto") {
 			tablet->settings.type = TabletSettings::TypeBosto;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "floogoo" || cmd->GetStringLower(0, "") == "fma") {
 			tablet->settings.type = TabletSettings::TypeFlooGoo;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "genius") {
 			tablet->settings.type = TabletSettings::TypeGenius;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "geniusv2") {
 			tablet->settings.type = TabletSettings::TypeGeniusV2;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "lifetec") {
 			tablet->settings.type = TabletSettings::TypeLifetec;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "robotpen") {
 			tablet->settings.type = TabletSettings::TypeRobotPen;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "veikk") {
 			tablet->settings.type = TabletSettings::TypeVeikk;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "veikka15") {
 			tablet->settings.type = TabletSettings::TypeVeikkA15;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "veikkv1") {
 			tablet->settings.type = TabletSettings::TypeVeikkV1;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "veikktilt") {
 			tablet->settings.type = TabletSettings::TypeVeikkTilt;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "woodpad" || cmd->GetStringLower(0, "") == "viewsonicwoodpad") {
 			tablet->settings.type = TabletSettings::TypeWoodPad;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "xencelabs") {
 			tablet->settings.type = TabletSettings::TypeXenceLabs;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "xenx") {
 			tablet->settings.type = TabletSettings::TypeXENX;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomgraphire") {
 			tablet->settings.type = TabletSettings::TypeWacomGraphire;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacombamboopad") {
 			tablet->settings.type = TabletSettings::TypeWacomBambooPad;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomcintiqv1") {
 			tablet->settings.type = TabletSettings::TypeWacomCintiqV1;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacompl") {
 			tablet->settings.type = TabletSettings::TypeWacomPL;
 		}
 
-		
 		else if (cmd->GetStringLower(0, "") == "wacomptu") {
 			tablet->settings.type = TabletSettings::TypeWacomPTU;
 		}
@@ -517,8 +457,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet type = %d\n", tablet->settings.type);
 	}
 
-
-	
 	else if (cmd->is("InitFeature") && cmd->valueCount > 0) {
 		if (tablet == NULL) return false;
 		vector<BYTE> report;
@@ -530,7 +468,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFOBUFFER(report.data(), (int)report.size(), "Tablet init feature report: ");
 	}
 
-	
 	else if ((cmd->is("InitString") || cmd->is("InitializationString")) && cmd->valueCount > 0) {
 		if (tablet == NULL) return false;
 		for (int i = 0; i < (int)cmd->valueCount && tablet->initStringCount < 8; i++) {
@@ -539,7 +476,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Tablet init string count = %d\n", tablet->initStringCount);
 	}
 
-	
 	else if (cmd->is("InitReport") && cmd->valueCount > 0) {
 		if (tablet == NULL) return false;
 		vector<BYTE> report;
@@ -552,10 +488,6 @@ bool ProcessCommand(CommandLine *cmd) {
 
 	}
 
-
-	
-	
-	
 	else if ((cmd->is("SetFeature") || cmd->is("Feature")) && cmd->valueCount > 1) {
 		if (tablet == NULL) return false;
 		if (tablet->hidDevice == NULL) return false;
@@ -570,9 +502,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		delete[] buffer;
 	}
 
-	
-	
-	
 	else if (cmd->is("GetFeature") && cmd->valueCount > 1) {
 		if (tablet == NULL) return false;
 		if (tablet->hidDevice == NULL) return false;
@@ -587,10 +516,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		delete[] buffer;
 	}
 
-
-	
-	
-	
 	else if ((cmd->is("OutputReport") || cmd->is("Report")) && cmd->valueCount > 1) {
 		if (tablet == NULL) return false;
 		if (tablet->hidDevice == NULL) return false;
@@ -605,9 +530,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		delete[] buffer;
 	}
 
-	
-	
-	
 	else if (cmd->is("TabletArea") || cmd->is("Area")) {
 		if (!CheckTablet()) return true;
 		mapper->areaTablet.width = cmd->GetDouble(0, mapper->areaTablet.width);
@@ -616,9 +538,12 @@ bool ProcessCommand(CommandLine *cmd) {
 		mapper->areaTablet.y = cmd->GetDouble(3, mapper->areaTablet.y);
 
 		LogTabletArea("Tablet area");
+
+		LOG_STATUS("AREA_TABLET %0.4f %0.4f %0.4f %0.4f\n",
+			mapper->areaTablet.width, mapper->areaTablet.height,
+			mapper->areaTablet.x, mapper->areaTablet.y);
 	}
 
-	
 	else if (cmd->is("ButtonMap") || cmd->is("Buttons")) {
 		if (!CheckTablet()) return true;
 		char buttonMapBuffer[32];
@@ -630,7 +555,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Button Map = %s\n", buttonMapBuffer);
 	}
 
-	
 	else if (cmd->is("MouseWheelSpeed")) {
 		if (!CheckTablet()) return true;
 		int MouseWheelSpeed = (int)cmd->GetInt(0, tablet->settings.mouseWheelSpeed);
@@ -638,32 +562,31 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Mouse Wheel Speed = %d\n", MouseWheelSpeed);
 	}
 
-	
 	else if (cmd->is("Overclock") || cmd->is("TabletOverclock")) {
 		if (!CheckTablet()) return true;
 
 		bool enabled = cmd->GetBoolean(0, true);
 		int targetHz = cmd->GetInt(1, 1000);
-		if (targetHz < 125) targetHz = 125;
+		if (targetHz < 100) targetHz = 100;
 		if (targetHz > 2000) targetHz = 2000;
 
 		if (enabled) {
+#if defined(_WIN32)
+
 			timeBeginPeriod(1);
 			SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 			if (tabletThread != NULL) {
 				SetThreadPriority(tabletThread->native_handle(), THREAD_PRIORITY_HIGHEST);
 			}
+#endif
 
 			double interval = 1000.0 / (double)targetHz;
 			if (interval < 0.5) interval = 0.5;
 
-			
-			
 			tablet->smoothing.timerInterval = interval;
 			tablet->smoothing.SetLatency(tablet->smoothing.latency);
 
-			
 			for (int fi = 0; fi < tablet->filterTimedCount; fi++) {
 				tablet->filterTimed[fi]->timerInterval = interval;
 			}
@@ -671,8 +594,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			overclockActive = true;
 			overclockTargetHz = (double)targetHz;
 
-			
-			
 			tablet->smoothing.StopTimer();
 			if (tablet->filterTimedCount > 0 && tablet->filterTimed[0]->callback != NULL) {
 				StartOverclockTimer((double)targetHz);
@@ -692,17 +613,18 @@ bool ProcessCommand(CommandLine *cmd) {
 				tablet->smoothing.StartTimer();
 			}
 			RefreshTimedOutputTimer();
+#if defined(_WIN32)
 			timeEndPeriod(1);
 			SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
 			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
 			if (tabletThread != NULL) {
 				SetThreadPriority(tabletThread->native_handle(), THREAD_PRIORITY_NORMAL);
 			}
+#endif
 			LOG_INFO("Overclock = off\n");
 		}
 	}
 
-	
 	else if (cmd->is("PenRateLimit") || cmd->is("PenRate") || cmd->is("ReportRateLimit")) {
 		string first = cmd->GetStringLower(0, "");
 		bool hasExplicitState = (first == "on" || first == "off" || first == "true" || first == "false" || first == "0" || first == "1");
@@ -725,8 +647,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-
-	
 	else if (cmd->is("ScreenArea") || cmd->is("Screen")) {
 		if (!CheckTablet()) return true;
 		mapper->areaScreen.width = cmd->GetDouble(0, mapper->areaScreen.width);
@@ -752,24 +672,24 @@ bool ProcessCommand(CommandLine *cmd) {
 				mapper->areaVirtualScreen.width, mapper->areaVirtualScreen.height,
 				mapper->areaVirtualScreen.x, mapper->areaVirtualScreen.y);
 		}
+		LOG_STATUS("AREA_SCREEN %0.0f %0.0f %0.0f %0.0f\n",
+			mapper->areaScreen.width, mapper->areaScreen.height,
+			mapper->areaScreen.x, mapper->areaScreen.y);
 	}
 
-	
 	else if (cmd->is("AreaClipping") || cmd->is("Clipping")) {
 		if (!CheckTablet()) return true;
 		mapper->areaClipping = cmd->GetBoolean(0, mapper->areaClipping);
 		LOG_INFO("Area clipping = %s\n", mapper->areaClipping ? "on" : "off");
 	}
 
-	
 	else if (cmd->is("AreaLimiting") || cmd->is("Limiting")) {
 		if (!CheckTablet()) return true;
 		mapper->areaLimiting = cmd->GetBoolean(0, mapper->areaLimiting);
-		if (mapper->areaLimiting) mapper->areaClipping = true; 
+		if (mapper->areaLimiting) mapper->areaClipping = true;
 		LOG_INFO("Area limiting = %s\n", mapper->areaLimiting ? "on" : "off");
 	}
 
-	
 	else if (cmd->is("DesktopSize") || cmd->is("Desktop")) {
 		if (!CheckTablet()) return true;
 		mapper->areaVirtualScreen.width = cmd->GetDouble(0, mapper->areaVirtualScreen.width);
@@ -806,7 +726,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
 	else if (cmd->is("TabletMove") || cmd->is("Move") && cmd->valueCount > 0) {
 		if (!CheckTablet()) return true;
 		string border;
@@ -841,9 +760,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
-	
-	
 	else if (cmd->is("Rotate")) {
 		if (!CheckTablet()) return true;
 		double value = cmd->GetDouble(0, 0);
@@ -856,33 +772,21 @@ bool ProcessCommand(CommandLine *cmd) {
 		);
 	}
 
-
-	
-	
-	
 	else if (cmd->is("Sensitivity")) {
 		if (!CheckTablet()) return true;
 		vmulti->relativeData.sensitivity = cmd->GetDouble(0, vmulti->relativeData.sensitivity);
 		LOG_INFO("Relative mode sensitivity = %0.2f px/mm\n", vmulti->relativeData.sensitivity);
 	}
 
-	
-	
-	
 	else if (cmd->is("ResetDistance")) {
 		if (!CheckTablet()) return true;
 		vmulti->relativeData.resetDistance = cmd->GetDouble(0, vmulti->relativeData.resetDistance);
 		LOG_INFO("Relative mode reset distance = %0.2f mm\n", vmulti->relativeData.resetDistance);
 	}
 
-
-	
-	
-	
 	else if (cmd->is("Mode")) {
 		string mode = cmd->GetStringLower(0, "");
 
-		
 		if (mode.compare(0, 3, "abs") == 0) {
 			if (vmulti->mode != VMulti::ModeAbsoluteMouse)
 				vmulti->ResetReport();
@@ -890,7 +794,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Absolute\n");
 		}
 
-		
 		else if (mode.compare(0, 3, "rel") == 0) {
 			if (vmulti->mode != VMulti::ModeRelativeMouse)
 				vmulti->ResetReport();
@@ -898,7 +801,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Relative\n");
 		}
 
-		
 		else if (mode.compare(0, 3, "dig") == 0 || mode.compare(0, 3, "pen") == 0) {
 			if (vmulti->mode != VMulti::ModeDigitizer)
 				vmulti->ResetReport();
@@ -906,7 +808,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = Digitizer\n");
 		}
 
-		
 		else if (mode.compare(0, 4, "send") == 0) {
 			if (vmulti->mode != VMulti::ModeSendInput)
 				vmulti->ResetReport();
@@ -915,16 +816,30 @@ bool ProcessCommand(CommandLine *cmd) {
 			LOG_INFO("Output Mode = SendInput\n");
 		}
 
+		else if (mode.compare(0, 3, "raw") == 0 || mode.compare(0, 6, "vabs") == 0
+			|| mode.compare(0, 12, "absolutevmul") == 0
+			|| mode.compare(0, 11, "rawabsolute") == 0) {
+			if (vmulti->hidDevice == NULL || !vmulti->hidDevice->isOpen) {
+				LOG_ERROR("RawAbsolute requires the VMulti driver to be installed.\n");
+				LOG_ERROR("Falling back to standard Absolute mode.\n");
+				if (vmulti->mode != VMulti::ModeAbsoluteMouse)
+					vmulti->ResetReport();
+				vmulti->mode = VMulti::ModeAbsoluteMouse;
+			}
+			else {
+				if (vmulti->mode != VMulti::ModeAbsoluteVMulti)
+					vmulti->ResetReport();
+				vmulti->mode = VMulti::ModeAbsoluteVMulti;
+				LOG_INFO("Output Mode = RawAbsolute (direct VMulti, bypasses SendInput)\n");
+			}
+		}
+
 		else {
 			LOG_ERROR("Unknown output mode '%s'\n", mode.c_str());
 		}
 
 	}
 
-
-	
-	
-	
 	else if (cmd->is("Smoothing")) {
 		if (!CheckTablet()) return true;
 		double latency = cmd->GetDouble(0, tablet->smoothing.GetLatency());
@@ -932,24 +847,19 @@ bool ProcessCommand(CommandLine *cmd) {
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		
 		if (stringValue == "off" || stringValue == "false") {
 			latency = 0;
 		}
 
-		
 		if (latency < 0) latency = 1;
 		if (latency > 1000) latency = 1000;
 		if (threshold < 0.001) threshold = 0.001;
 		if (threshold > 0.999) threshold = 0.999;
 
-		
 		tablet->smoothing.threshold = threshold;
 
-		
 		tablet->smoothing.SetLatency(latency);
 
-		
 		if (tablet->smoothing.weight < 1.0) {
 			tablet->smoothing.isEnabled = true;
 			LOG_INFO("Smoothing = %0.2f ms to reach %0.0f%% (weight = %f)\n", latency, tablet->smoothing.threshold * 100, tablet->smoothing.weight);
@@ -961,10 +871,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		RefreshTimedOutputTimer();
 	}
 
-
-	
-	
-	
 	else if (cmd->is("AntichatterEnabled")) {
 		bool AntichatterEnabled = (bool)cmd->GetInt(0, tablet->smoothing.AntichatterEnabled);
 		tablet->smoothing.AntichatterEnabled = AntichatterEnabled;
@@ -992,9 +898,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Filter Antichatter Offset Y = %0.2f cm\n", tablet->smoothing.antichatterOffsetY);
 	}
 
-	
-	
-	
 	else if (cmd->is("PredictionEnabled")) {
 		bool PredictionEnabled = (bool)cmd->GetInt(0, tablet->smoothing.PredictionEnabled);
 		tablet->smoothing.PredictionEnabled = PredictionEnabled;
@@ -1021,18 +924,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Filter Prediction Offset Y = %0.2f cm\n", tablet->smoothing.PredictionOffsetY);
 	}
 
-
-
-	
-	
-	
 	else if (cmd->is("SmoothingInterval")) {
 		int interval = cmd->GetInt(0, (int)round(tablet->smoothing.timerInterval));
 
-		
 		if (interval > 100) interval = 100;
 
-		
 		if (interval < 1) interval = 1;
 
 		if (overclockActive) {
@@ -1041,7 +937,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			return true;
 		}
 
-		
 		if (interval != (int)round(tablet->smoothing.timerInterval)) {
 			tablet->smoothing.timerInterval = interval;
 			tablet->smoothing.SetLatency(tablet->smoothing.latency);
@@ -1052,20 +947,14 @@ bool ProcessCommand(CommandLine *cmd) {
 
 	}
 
-
-	
-	
-	
 	else if (cmd->is("Noise")) {
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->noise.isEnabled = false;
 			LOG_INFO("Noise Reduction = off\n");
 
-			
 		}
 		else {
 
@@ -1073,7 +962,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			double distanceThreshold = cmd->GetDouble(1, tablet->noise.distanceThreshold);
 			int iterations = cmd->GetInt(2, tablet->noise.iterations);
 
-			
 			if (length < 0) length = 0;
 			else if (length > 50) length = 50;
 
@@ -1083,12 +971,10 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (iterations < 1) iterations = 1;
 			else if (iterations > 100) iterations = 100;
 
-			
 			tablet->noise.buffer.SetLength(length);
 			tablet->noise.distanceThreshold = distanceThreshold;
 			tablet->noise.iterations = iterations;
 
-			
 			if (tablet->noise.buffer.length > 0) {
 				tablet->noise.isEnabled = true;
 				LOG_INFO("Noise Reduction = %d packets, %0.3f mm threshold, %d iterations\n", length, distanceThreshold, iterations);
@@ -1100,20 +986,13 @@ bool ProcessCommand(CommandLine *cmd) {
 
 		}
 
-
-
-
 	}
 
-	
-	
-	
 	else if (cmd->is("Reconstructor") || cmd->is("Recon")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->reconstructor.isEnabled = false;
 			LOG_INFO("Reconstructor = off\n");
@@ -1124,7 +1003,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			double accelCap = cmd->GetDouble(2, tablet->reconstructor.accelerationCap);
 			double predTime = cmd->GetDouble(3, tablet->reconstructor.predictionTimeMs);
 
-			
 			if (strength < 0) strength = 0;
 			else if (strength > 2.0) strength = 2.0;
 
@@ -1137,7 +1015,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (predTime < 0.1) predTime = 0.1;
 			else if (predTime > 50) predTime = 50;
 
-			
 			tablet->reconstructor.reconstructionStrength = strength;
 			tablet->reconstructor.velocitySmoothing = velSmooth;
 			tablet->reconstructor.accelerationCap = accelCap;
@@ -1155,15 +1032,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
-	
-	
 	else if (cmd->is("Adaptive")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->adaptive.isEnabled = false;
 			LOG_INFO("Adaptive = off\n");
@@ -1173,7 +1046,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			double measNoise = cmd->GetDouble(1, tablet->adaptive.measurementNoise);
 			double velWeight = cmd->GetDouble(2, tablet->adaptive.velocityWeight);
 
-			
 			if (procNoise < 0.001) procNoise = 0.001;
 			else if (procNoise > 10.0) procNoise = 10.0;
 
@@ -1183,7 +1055,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (velWeight < 0) velWeight = 0;
 			else if (velWeight > 5.0) velWeight = 5.0;
 
-			
 			tablet->adaptive.processNoise = procNoise;
 			tablet->adaptive.measurementNoise = measNoise;
 			tablet->adaptive.velocityWeight = velWeight;
@@ -1194,16 +1065,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-
-	
-	
-	
 	else if (cmd->is("AetherSmooth") || cmd->is("Aether")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
-		
 		if (stringValue == "off" || stringValue == "false") {
 			tablet->aetherSmooth.isEnabled = false;
 			LOG_INFO("Aether Smooth = off\n");
@@ -1214,7 +1080,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	
 	else if (cmd->is("AetherLagRemoval") || cmd->is("AS_LagRemoval")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableAntismoothing = cmd->GetBoolean(0, tablet->aetherSmooth.enableAntismoothing);
@@ -1224,7 +1089,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.antismoothing);
 	}
 
-	
 	else if (cmd->is("AetherStabilizer") || cmd->is("AS_Stabilizer")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableSmoothing = cmd->GetBoolean(0, tablet->aetherSmooth.enableSmoothing);
@@ -1236,7 +1100,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.speedSensitivity);
 	}
 
-	
 	else if (cmd->is("AetherSnapping") || cmd->is("AS_Snapping")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableRadialFollow = cmd->GetBoolean(0, tablet->aetherSmooth.enableRadialFollow);
@@ -1248,7 +1111,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.radialOuter);
 	}
 
-	
 	else if (cmd->is("AetherRhythmFlow") || cmd->is("AS_RhythmFlow")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableRhythmFlow = cmd->GetBoolean(0, tablet->aetherSmooth.enableRhythmFlow);
@@ -1270,7 +1132,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.rhythmJitter);
 	}
 
-	
 	else if (cmd->is("AetherSuppression") || cmd->is("AS_Suppress")) {
 		if (!CheckTablet()) return true;
 		tablet->aetherSmooth.enableDebounce = cmd->GetBoolean(0, tablet->aetherSmooth.enableDebounce);
@@ -1381,7 +1242,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Plugin directory: %ls\n", GetAetherPluginDirectory().c_str());
 	}
 
-
 	else if (cmd->is("UpdateMonitorInfo")) {
 		if (vmulti != NULL) {
 			vmulti->UpdateMonitorInfo();
@@ -1395,12 +1255,10 @@ bool ProcessCommand(CommandLine *cmd) {
 	else if (cmd->is("Debug")) {
 		if (!CheckTablet()) return true;
 		tablet->debugEnabled = cmd->GetBoolean(0, tablet->debugEnabled);
-		
+
 		LOG_INFO("Tablet debug = %s\n", tablet->debugEnabled ? "True" : "False");
 	}
 
-
-	
 	else if (cmd->is("Log") && cmd->valueCount > 0) {
 		string logPath = cmd->GetString(0, "log.txt");
 		if (!cmd->GetBoolean(0, true)) {
@@ -1415,14 +1273,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-
-	
 	else if (cmd->is("Wait")) {
 		int waitTime = cmd->GetInt(0, 0);
-		Sleep(waitTime);
+		platform::SleepMs((unsigned)waitTime);
 	}
 
-	
 	else if (cmd->is("LogDirect")) {
 		logger.ProcessMessages();
 		logger.directPrint = cmd->GetBoolean(0, logger.directPrint);
@@ -1431,54 +1286,43 @@ bool ProcessCommand(CommandLine *cmd) {
 		LOG_INFO("Log direct print = %s\n", logger.directPrint ? "True" : "False");
 	}
 
-
-	
 	else if (cmd->is("Output")) {
 		vmulti->outputEnabled = cmd->GetBoolean(0, vmulti->outputEnabled);
 		LOG_INFO("Output enabled = %s\n", vmulti->outputEnabled ? "True" : "False");
 	}
 
-	
 	else if (cmd->is("Info")) {
 		if (!CheckTablet()) return true;
 		LogInformation();
 	}
 
-	
 	else if (cmd->is("Status")) {
 		if (!CheckTablet()) return true;
 		LogStatus();
 	}
 
-	
 	else if (cmd->is("Benchmark") || cmd->is("Bench")) {
 		if (!CheckTablet()) return true;
 
 		int timeLimit;
 		int packetCount = cmd->GetInt(0, 200);
 
-		
 		if (packetCount < 10) packetCount = 10;
 		if (packetCount > 1000) packetCount = 1000;
 
-		
 		timeLimit = packetCount * 10;
 		if (timeLimit < 1000) timeLimit = 1000;
 
-		
 		LOG_DEBUG("Tablet benchmark starting in 3 seconds!\n");
 		LOG_DEBUG("Keep the pen stationary on top of the tablet!\n");
-		Sleep(3000);
+		platform::SleepMs(3000);
 		LOG_DEBUG("Benchmark started!\n");
 
-		
 		tablet->benchmark.Start(packetCount);
 
-		
 		for (int i = 0; i < timeLimit / 100; i++) {
-			Sleep(100);
+			platform::SleepMs(100);
 
-			
 			if (tablet->benchmark.packetCounter <= 0) {
 
 				double width = tablet->benchmark.maxX - tablet->benchmark.minX;
@@ -1508,7 +1352,6 @@ bool ProcessCommand(CommandLine *cmd) {
 			}
 		}
 
-		
 		if (tablet->benchmark.packetCounter > 0) {
 			LOG_ERROR("Benchmark failed!\n");
 			LOG_ERROR("Not enough packets captured in %0.2f seconds!\n",
@@ -1516,11 +1359,8 @@ bool ProcessCommand(CommandLine *cmd) {
 			);
 		}
 
-
 	}
 
-
-	
 	else if (cmd->is("Include")) {
 		string filename = cmd->GetString(0, "");
 		if (filename == "") {
@@ -1535,15 +1375,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-
-	
 	else if (cmd->is("Exit") || cmd->is("Quit")) {
 		LOG_INFO("Bye!\n");
 		CleanupAndExit(0);
 	}
 
-
-	
 	else if (cmd->isValid) {
 		LOG_WARNING("Unknown command: %s\n", cmd->line.c_str());
 	}
@@ -1551,34 +1387,23 @@ bool ProcessCommand(CommandLine *cmd) {
 	return true;
 }
 
-
-
-
-
-
 bool ReadCommandFile(string filename) {
 	CommandLine *cmd;
 	ifstream file;
 	string line = "";
 
-	
 	file.open(filename);
 	if (!file.is_open()) {
 		return false;
 	}
 
-
 	LOG_INFO("\\ Reading '%s'\n", filename.c_str());
 
-	
 	while (!file.eof()) {
 		getline(file, line);
 		if (line.length() == 0) continue;
 		cmd = new CommandLine(line);
 
-		
-		
-		
 		if (cmd->is("Tablet") && tablet != NULL && tablet->IsConfigured()) {
 			LOG_INFO(">> %s\n", cmd->line.c_str());
 			LOG_INFO("Tablet is already defined!\n");
@@ -1594,11 +1419,6 @@ bool ReadCommandFile(string filename) {
 
 	return true;
 }
-
-
-
-
-
 
 void LogInformation() {
 	char stringBuffer[64];
@@ -1623,7 +1443,6 @@ void LogInformation() {
 		stringIndex += sprintf_s(stringBuffer + stringIndex, maxLength - stringIndex, "%d ", tablet->buttonMap[i]);
 	}
 	LOG_INFO("  Button Map = %s\n", stringBuffer);
-
 
 	if (tablet->initFeatureLength > 0) {
 		LOG_INFOBUFFER(tablet->initFeature, tablet->initFeatureLength, "  Tablet init feature report: ");
@@ -1655,9 +1474,6 @@ void LogInformation() {
 	LOG_INFO("\n");
 }
 
-
-
-
 void LogStatus() {
 	LOG_STATUS("TABLET %s\n", tablet->name.c_str());
 
@@ -1683,9 +1499,6 @@ void LogStatus() {
 	LOG_STATUS("PEN_RATE_LIMIT %s %0.0f\n", penRateLimitActive ? "on" : "off", penRateLimitHz);
 }
 
-
-
-
 void LogTabletArea(string text) {
 	LOG_INFO("%s: (%0.2f mm x %0.2f mm X+%0.2f mm Y+%0.2f mm)\n",
 		text.c_str(),
@@ -1695,7 +1508,6 @@ void LogTabletArea(string text) {
 		mapper->areaTablet.y
 	);
 }
-
 
 bool CheckTablet() {
 	if (tablet == NULL) {

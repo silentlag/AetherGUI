@@ -1,8 +1,4 @@
 
 
-
-
 #include "stdafx.h"
-
-
 

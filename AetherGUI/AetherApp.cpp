@@ -962,7 +962,20 @@ static BOOL CALLBACK EnumDisplayTargetProc(HMONITOR monitor, HDC, LPRECT, LPARAM
 
 bool AetherApp::Initialize(HWND hwnd) {
 	hWnd = hwnd;
-	if (!renderer.Initialize(hwnd)) return false;
+	OutputDebugStringW(L"[Aether] AetherApp::Initialize() entered\n");
+	if (!renderer.Initialize(hwnd)) {
+		OutputDebugStringW(L"[Aether] renderer.Initialize() FAILED\n");
+		return false;
+	}
+
+	// Open diagnostic log right at startup so we capture pre-service events too.
+	try {
+		driver.OpenDebugLog();
+		driver.DebugLog("APP", "AetherGUI Initialize() begin");
+	}
+	catch (...) {
+		OutputDebugStringW(L"[Aether] OpenDebugLog threw, ignored\n");
+	}
 
 	RECT rc;
 	GetClientRect(hwnd, &rc);
@@ -978,27 +991,39 @@ bool AetherApp::Initialize(HWND hwnd) {
 	sidebar.AddTab(L"Console", L"\xE756");
 	sidebar.AddTab(L"About", L"\xE946");
 
-	char exePath[MAX_PATH];
-	GetModuleFileNameA(NULL, exePath, MAX_PATH);
-	std::string exeDir(exePath);
-	size_t lastSlash = exeDir.find_last_of('\\');
-	if (lastSlash != std::string::npos) {
-		exeDir = exeDir.substr(0, lastSlash + 1);
+	// Service exe path (wide). Critical: previous code used GetModuleFileNameA +
+	// std::string which silently destroyed non-ANSI path components like
+	// OneDrive\Рабочий стол, then CreateProcessA returned ERROR_INVALID_NAME.
+	wchar_t exePathW[MAX_PATH] = {};
+	GetModuleFileNameW(NULL, exePathW, MAX_PATH);
+	std::wstring exeDirW(exePathW);
+	size_t lastSlashW = exeDirW.find_last_of(L'\\');
+	if (lastSlashW != std::wstring::npos) {
+		exeDirW = exeDirW.substr(0, lastSlashW + 1);
 	}
-	servicePath = exeDir + "AetherService.exe";
-	std::string serviceCandidates[] = {
+	servicePath = exeDirW + L"AetherService.exe";
+	std::wstring serviceCandidates[] = {
 		servicePath,
-		exeDir + "..\\..\\x64\\Release\\AetherService.exe",
-		exeDir + "..\\..\\AetherService\\x64\\Release\\AetherService.exe",
-		exeDir + "..\\..\\..\\x64\\Release\\AetherService.exe",
-		exeDir + "..\\..\\..\\AetherService\\x64\\Release\\AetherService.exe",
-		exeDir + "..\\x64\\Release\\AetherService.exe"
+		exeDirW + L"..\\..\\x64\\Release\\AetherService.exe",
+		exeDirW + L"..\\..\\AetherService\\x64\\Release\\AetherService.exe",
+		exeDirW + L"..\\..\\..\\x64\\Release\\AetherService.exe",
+		exeDirW + L"..\\..\\..\\AetherService\\x64\\Release\\AetherService.exe",
+		exeDirW + L"..\\x64\\Release\\AetherService.exe"
 	};
 	for (const auto& candidate : serviceCandidates) {
-		if (FileExists(candidate)) {
+		if (FileExistsWide(candidate)) {
 			servicePath = candidate;
 			break;
 		}
+	}
+	// Log as UTF-8 so non-ANSI paths show up correctly in AetherGUI.log.
+	{
+		int cb = WideCharToMultiByte(CP_UTF8, 0, servicePath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		std::string utf8(cb > 0 ? cb - 1 : 0, '\0');
+		if (cb > 0)
+			WideCharToMultiByte(CP_UTF8, 0, servicePath.c_str(), -1, utf8.data(), cb, nullptr, nullptr);
+		driver.DebugLog("APP", "Resolved AetherService path: '%s' (exists=%d)",
+			utf8.c_str(), FileExistsWide(servicePath) ? 1 : 0);
 	}
 
 	startStopBtn.Layout(0, 0, 100, 30, L"Start", true);
@@ -1054,6 +1079,9 @@ bool AetherApp::Initialize(HWND hwnd) {
 	}
 
 	autoStartAttempted = true;
+	driver.DebugLog("APP", "VMulti installed: %d (autoStart will %s)",
+		vmultiInstalled ? 1 : 0,
+		vmultiInstalled ? "run" : "be skipped - install VMulti or use a non-Ink output mode");
 	if (vmultiInstalled) {
 		StartDriverService();
 	}
@@ -1125,9 +1153,19 @@ void AetherApp::InitControls() {
 	filters.adaptiveMeasNoise.Layout(cx + hw + 16, 0, hw, L"Meas. Noise (R)", 0.001f, 50, 0.5f, L"Expected sensor noise. Higher = trusts prediction more (smoother)");
 	filters.adaptiveVelWeight.Layout(cx, 0, hw, L"Velocity Weight", 0, 5, 1, L"How much velocity influences the prediction model");
 
-	outputMode.AddOption(L"Absolute");
-	outputMode.AddOption(L"Relative");
-	outputMode.AddOption(L"Windows Ink");
+	outputMode.AddOption(L"Absolute",
+		L"Standard absolute mapping through Windows SendInput. Compatible with "
+		L"everything; small SendInput coalescing window adds ~0.1-0.3 ms.");
+	outputMode.AddOption(L"Relative",
+		L"Mouse-style relative movement. Tablet area is ignored, only rotation "
+		L"and sensitivity apply. Useful for desktop work, not for osu!.");
+	outputMode.AddOption(L"Windows Ink",
+		L"Pen digitizer report through VMulti. Pressure and tilt go to apps that "
+		L"support Windows Ink (drawing software, OneNote). Requires VMulti.");
+	outputMode.AddOption(L"Raw Absolute",
+		L"Direct VMulti absolute report. Bypasses SendInput; lowest latency for "
+		L"games using Raw Input. In osu!: enable Raw Input + Map absolute raw "
+		L"input to the osu! window, set Sensitivity 1.00x. Requires VMulti.");
 	outputMode.selected = 0;
 
 	dpiScale.Layout(cx, 0, cw, L"DPI Scale (%)", 75.0f, 200.0f, Clamp(GetSystemDpiScale() * 100.0f, 75.0f, 200.0f), L"Scale the interface for high-DPI and custom resolution setups");
@@ -1156,7 +1194,7 @@ void AetherApp::InitControls() {
 	tipThreshold.format = L"%.0f";
 
 	overclockEnabled.Layout(cx, 0, L"Overclock", L"Boost driver timer rate for smoother cursor movement");
-	overclockHz.Layout(cx, 0, hw, L"Target Rate (Hz)", 125, 2000, 1000, L"Target timer frequency. Higher = smoother. Actual rate depends on USB polling");
+	overclockHz.Layout(cx, 0, hw, L"Target Rate (Hz)", 100, 2000, 1000, L"Target timer frequency. Higher = smoother, more CPU. Capped at 2000 Hz (0.5 ms tick) \u2014 real tablets rarely poll faster, and higher rates can starve the game thread.");
 	overclockHz.format = L"%.0f";
 	penRateLimitEnabled.Layout(cx, 0, L"Pen Rate Limit", L"Cap outgoing pen reports for tablets that feel too smooth at high Hz");
 	penRateLimitHz.Layout(cx, 0, hw, L"Limit Rate (Hz)", 30, 1000, 133, L"Output report cap. Example: 133 Hz gives Gaomon a Wacom-like cadence");
@@ -1800,7 +1838,7 @@ void AetherApp::SendStartupSettingsToDriver() {
 	sprintf_s(cmd, "Rotate %.1f", area.rotation.value);
 	driver.SendCommand(cmd);
 
-	const char* modes[] = { "Mode Absolute", "Mode Relative", "Mode Digitizer" };
+	const char* modes[] = { "Mode Absolute", "Mode Relative", "Mode Digitizer", "Mode RawAbsolute" };
 	driver.SendCommand(modes[outputMode.selected]);
 
 	sprintf_s(cmd, "Sensitivity %.4f", area.screenWidth.value / area.tabletWidth.value);
@@ -1835,8 +1873,18 @@ bool AetherApp::StartDriverService() {
 
 	ClampScreenArea();
 	ApplyAspectLock(false);
-	if (!driver.Start(servicePath))
+
+	int cb = WideCharToMultiByte(CP_UTF8, 0, servicePath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+	std::string utf8(cb > 0 ? cb - 1 : 0, '\0');
+	if (cb > 0)
+		WideCharToMultiByte(CP_UTF8, 0, servicePath.c_str(), -1, utf8.data(), cb, nullptr, nullptr);
+	driver.DebugLog("APP", "StartDriverService(): launching '%s' (retry %d)",
+		utf8.c_str(), autoStartRetryCount);
+
+	if (!driver.Start(servicePath)) {
+		driver.DebugLog("APP", "StartDriverService(): driver.Start returned false");
 		return false;
+	}
 
 	Sleep(800);
 	SendStartupSettingsToDriver();
@@ -2519,7 +2567,7 @@ void AetherApp::ApplyAllSettings() {
 	sprintf_s(cmd, "Rotate %.1f", area.rotation.value);
 	driver.SendCommand(cmd);
 
-	const char* modes[] = { "Mode Absolute", "Mode Relative", "Mode Digitizer" };
+	const char* modes[] = { "Mode Absolute", "Mode Relative", "Mode Digitizer", "Mode RawAbsolute" };
 	driver.SendCommand(modes[outputMode.selected]);
 
 	sprintf_s(cmd, "Sensitivity %.4f", area.screenWidth.value / area.tabletWidth.value);
@@ -3793,19 +3841,28 @@ void AetherApp::DrawHeader() {
 }
 
 void AetherApp::DrawOverclockInfo(float x, float y, float w) {
-	float h = 60.0f;
-	float hz = Clamp(overclockHz.value, 125.0f, 2000.0f);
+	float h = 88.0f;
+	float hz = Clamp(overclockHz.value, 100.0f, 2000.0f);
 	float intervalMs = 1000.0f / hz;
-	float norm = (hz - 125.0f) / (2000.0f - 125.0f);
+	float norm = (hz - 100.0f) / (2000.0f - 100.0f);
 	norm = Clamp(norm, 0.0f, 1.0f);
 
 	renderer.FillRoundedRect(x, y, w, h, 6, Theme::BgElevated());
 	renderer.DrawRoundedRect(x, y, w, h, 6, Theme::BorderSubtle());
 
-	wchar_t line1[64];
-	wchar_t line2[80];
-	swprintf_s(line1, L"%s target: %.0f Hz", overclockEnabled.value ? L"Enabled" : L"Disabled", hz);
-	swprintf_s(line2, L"Timer %.2f ms   USB/tablet polling can still cap actual rate", intervalMs);
+	float actualHz = driver.penHz.load();
+	float latAvg  = driver.latencyAvgMs.load();
+	float latP99  = driver.latencyP99Ms.load();
+	float latMax  = driver.latencyMaxMs.load();
+	int   latN    = driver.latencySamples.load();
+
+	wchar_t line1[96];
+	wchar_t line2[96];
+	swprintf_s(line1, L"%s target: %.0f Hz   |   Actual: %.0f Hz",
+		overclockEnabled.value ? L"Enabled" : L"Disabled",
+		hz, actualHz);
+	swprintf_s(line2, L"Timer %.2f ms   USB/tablet polling can still cap actual rate",
+		intervalMs);
 
 	renderer.DrawText(line1, x + 12, y + 8, w - 24, 16,
 		overclockEnabled.value ? Theme::AccentPrimary() : Theme::TextMuted(), renderer.pFontSmall);
@@ -3820,6 +3877,18 @@ void AetherApp::DrawOverclockInfo(float x, float y, float w) {
 		renderer.FillRoundedRect(meterX, meterY, meterW * norm, meterH, 2, Theme::AccentPrimary());
 		renderer.FillRectGradientH(meterX, meterY, meterW * norm, meterH, Theme::AccentPrimary(), Theme::AccentSecondary());
 	}
+
+	wchar_t latLine[160];
+	if (latN > 0) {
+		swprintf_s(latLine,
+			L"Internal latency  avg %.2f ms   worst 1%% %.2f ms   peak %.2f ms   over %d samples",
+			latAvg, latP99, latMax, latN);
+	}
+	else {
+		wcscpy_s(latLine, L"Internal latency  measuring\u2026");
+	}
+	renderer.DrawText(latLine, x + 12, y + 60, w - 24, 18,
+		Theme::TextSecondary(), renderer.pFontSmall);
 }
 
 void AetherApp::DrawAreaPanel() {
@@ -3983,6 +4052,29 @@ void AetherApp::DrawAreaPanel() {
 		renderer.FillRectGradientH(mappedX, mappedY, mappedW, mappedH, screenHot, screenCold);
 		renderer.DrawRoundedRect(mappedX, mappedY, mappedW, mappedH, 2, Theme::BrandHot(), 1.2f);
 		renderer.DrawRoundedRect(mappedX + 1, mappedY + 1, mappedW - 2, mappedH - 2, 2, Theme::BorderAccent(), 0.9f);
+
+		// Live cursor dot. The service publishes the post-mapping screen-space
+		// position as [STATUS] POS x y pressure hz; we project that into preview
+		// coordinates so users can sanity-check that pen movement actually maps
+		// where they expect, in real time.
+		if (driver.isConnected && driver.penActive.load()) {
+			float px = driver.penX.load();
+			float py = driver.penY.load();
+			// Clamp to the visible mapped rect so a stray sample never paints
+			// outside the preview.
+			float dotX = previewX + Clamp(px, 0.0f, totalScreenW) * scale;
+			float dotY = previewY + Clamp(py, 0.0f, detectedScreenH) * scale;
+
+			float pressure = Clamp(driver.penPressure.load(), 0.0f, 1.0f);
+			float radius = 3.5f + pressure * 4.0f;
+
+			// Halo for visibility against any background.
+			D2D1_COLOR_F halo = Theme::BrandHot();
+			halo.a = 0.35f;
+			renderer.FillCircle(dotX, dotY, radius + 4.0f, halo);
+			renderer.FillCircle(dotX, dotY, radius, Theme::BrandHot());
+			renderer.DrawCircle(dotX, dotY, radius, D2D1::ColorF(0xFFFFFF), 1.0f);
+		}
 
 		float ratio = area.screenWidth.value / area.screenHeight.value;
 		wchar_t ratioBuf[32];
@@ -4298,19 +4390,28 @@ void AetherApp::DrawAreaPanel() {
 	y += sec.Draw(renderer);
 
 	outputMode.x = cx; outputMode.y = y;
-	float modeBtnW = (cw - 8) / 3.0f;
+	// Width per button must account for the actual number of options and the
+	// gaps between them (RadioGroup uses gap=6 between buttons).
+	int modeOptionCount = outputMode.optionCount > 0 ? outputMode.optionCount : 1;
+	float modeBtnW = (cw - 6.0f * (modeOptionCount - 1)) / (float)modeOptionCount;
+	if (modeBtnW < 60.0f) modeBtnW = 60.0f;
 	if (outputMode.Update(mouseX, mouseY, mouseClicked, deltaTime, modeBtnW) >= 0) {
 		ApplyAllSettings();
 	}
 	outputMode.Draw(renderer, modeBtnW);
 
 	
-	if (outputMode.selected == 2 && vmultiCheckDone && !vmultiInstalled) {
+	// Modes 2 (Windows Ink) and 3 (Raw Absolute) both require the VMulti virtual
+	// HID device. Show the same install hint for either.
+	if ((outputMode.selected == 2 || outputMode.selected == 3) && vmultiCheckDone && !vmultiInstalled) {
 		y += 32;
 		renderer.FillRoundedRect(cx, y, cw, 28, 6, D2D1::ColorF(0.9f, 0.35f, 0.2f, 0.12f));
 		renderer.DrawRoundedRect(cx, y, cw, 28, 6, D2D1::ColorF(0.9f, 0.35f, 0.2f, 0.3f));
 		renderer.DrawText(L"\xE7BA", cx + 10, y, 18, 28, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
-		renderer.DrawText(L"Windows Ink requires VMulti driver. Install VMulti to use this mode.",
+		const wchar_t* warning = (outputMode.selected == 3)
+			? L"Raw Absolute requires the VMulti driver. Install VMulti to use this mode."
+			: L"Windows Ink requires VMulti driver. Install VMulti to use this mode.";
+		renderer.DrawText(warning,
 			cx + 32, y, cw - 44, 28, Theme::Warning(), renderer.pFontSmall);
 	}
 	y += 36;
@@ -5440,7 +5541,7 @@ void AetherApp::DrawFilterPanel() {
 		y += 42;
 
 		DrawOverclockInfo(cx, y, cw);
-		y += 76;
+		y += 96;
 	}
 
 	penRateLimitEnabled.y = y; penRateLimitEnabled.x = cx;
@@ -5581,10 +5682,11 @@ void AetherApp::DrawStatusBar() {
 	}
 
 	if (w > 560.0f) {
-		const wchar_t* modes[] = { L"Absolute", L"Relative", L"Windows Ink" };
-		const wchar_t* mode = modes[(outputMode.selected >= 0 && outputMode.selected < 3) ? outputMode.selected : 0];
+		const wchar_t* modes[] = { L"Absolute", L"Relative", L"Windows Ink", L"Raw Absolute" };
+		const int modeCount = (int)(sizeof(modes) / sizeof(modes[0]));
+		const wchar_t* mode = modes[(outputMode.selected >= 0 && outputMode.selected < modeCount) ? outputMode.selected : 0];
 		renderer.DrawText(L"Mode", w - 330, y, 44, h, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
-		renderer.DrawText(mode, w - 280, y, 86, h, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignLeft);
+		renderer.DrawText(mode, w - 280, y, 100, h, Theme::TextSecondary(), renderer.pFontSmall, Renderer::AlignLeft);
 	}
 
 	if (w > 720.0f) {

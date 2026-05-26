@@ -4,29 +4,15 @@
 #define LOG_MODULE "Peak"
 #include "Logger.h"
 
-
-
-
 TabletFilterPeak::TabletFilterPeak() {
 
-	
 	buffer.SetLength(3);
 
-	
 	distanceThreshold = 10;
 }
 
-
-
-
-
 TabletFilterPeak::~TabletFilterPeak() {
 }
-
-
-
-
-
 
 void TabletFilterPeak::Reset(Vector2D targetVector) {
 	buffer.Reset();
@@ -51,29 +37,18 @@ void TabletFilterPeak::Update() {
 	Vector2D oldPosition;
 	double distance;
 
-	
 	if (
 		buffer.GetLatest(&oldPosition, -1)
 		&&
 		buffer.GetLatest(&position, 0)
 		) {
 
-		
 		distance = oldPosition.Distance(position);
 		if (distance > distanceThreshold) {
-
-			
-
-
-
-
-
-
 
 			position.x = oldPosition.x;
 			position.y = oldPosition.y;
 
-			
 			buffer.Reset();
 
 		}

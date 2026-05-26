@@ -1,12 +1,8 @@
 #include "stdafx.h"
 #include "TabletSettings.h"
 
-
-
-
-
 TabletSettings::TabletSettings() {
-	
+
 	reportId = 0;
 	reportLength = 8;
 	reportOffset = 0;
@@ -24,9 +20,6 @@ TabletSettings::TabletSettings() {
 	invMaxX = 1.0;
 	invMaxY = 1.0;
 }
-
-
-
 
 TabletSettings::~TabletSettings() {
 }

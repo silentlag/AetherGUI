@@ -5,6 +5,8 @@
 #define LOG_MODULE "Plugin"
 #include "Logger.h"
 
+#if defined(_WIN32)
+
 std::wstring Utf8ToWideService(const std::string& text) {
 	if (text.empty())
 		return std::wstring();
@@ -275,3 +277,5 @@ bool InstallAetherPluginDll(const std::wstring& sourcePath, std::wstring* instal
 	LOG_INFO("Installed plugin DLL: %ls\n", destination.c_str());
 	return true;
 }
+
+#endif

@@ -3,6 +3,12 @@
 #include "HIDDevice.h"
 #include "Vector2D.h"
 
+#if !defined(_WIN32)
+	#include <cstdint>
+	using BYTE = uint8_t;
+
+#endif
+
 class VMulti {
 public:
 	HIDDevice * hidDevice;
@@ -14,7 +20,8 @@ public:
 		ModeAbsoluteMouse,
 		ModeRelativeMouse,
 		ModeDigitizer,
-		ModeSendInput
+		ModeSendInput,
+		ModeAbsoluteVMulti
 	};
 
 	struct {
@@ -47,33 +54,29 @@ public:
 		USHORT pressure;
 	} reportDigitizer;
 
-
-	
 	typedef struct {
 		int x;
 		int y;
 	} PositionInt;
 
-	
 	struct {
 		PositionInt currentPosition;
 		Vector2D lastPosition;
 		Vector2D targetPosition;
 		double sensitivity;
 		double resetDistance;
-		double accumX;        
-		double accumY;        
-		bool firstReport;     
+		double accumX;
+		double accumY;
+		bool firstReport;
 	} relativeData;
 
-
 	struct {
-		double primaryWidth = GetSystemMetrics(SM_CXSCREEN);
-		double primaryHeight = GetSystemMetrics(SM_CYSCREEN);
-		double virtualWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-		double virtualHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-		double virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-		double virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+		double primaryWidth  = 0;
+		double primaryHeight = 0;
+		double virtualWidth  = 0;
+		double virtualHeight = 0;
+		double virtualX      = 0;
+		double virtualY      = 0;
 	} monitorInfo;
 
 	VMultiMode mode;
@@ -95,6 +98,6 @@ public:
 	void CreateReport(BYTE buttons, double x, double y, double pressure);
 	int ResetReport();
 	int WriteReport();
+
+	void EmulateWheel(int delta);
 };
-
-

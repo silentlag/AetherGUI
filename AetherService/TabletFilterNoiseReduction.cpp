@@ -1,43 +1,28 @@
 #include "stdafx.h"
 #include "TabletFilterNoiseReduction.h"
 
-
-
-
-
 TabletFilterNoiseReduction::TabletFilterNoiseReduction() {
 	distanceThreshold = 0;
 	iterations = 10;
 }
 
-
-
-
 TabletFilterNoiseReduction::~TabletFilterNoiseReduction() {
 }
-
-
-
-
-
 
 void TabletFilterNoiseReduction::Reset(Vector2D position) {
 	lastTarget.Set(position);
 	buffer.Reset();
 }
 
-
 void TabletFilterNoiseReduction::SetTarget(Vector2D targetVector, double h) {
 	lastTarget.Set(targetVector);
 	buffer.Add(targetVector);
 }
 
-
 void TabletFilterNoiseReduction::SetPosition(Vector2D vector, double h) {
 	position.x = vector.x;
 	position.y = vector.y;
 }
-
 
 bool TabletFilterNoiseReduction::GetPosition(Vector2D *outputVector) {
 	outputVector->x = position.x;
@@ -45,20 +30,16 @@ bool TabletFilterNoiseReduction::GetPosition(Vector2D *outputVector) {
 	return true;
 }
 
-
 void TabletFilterNoiseReduction::Update() {
 
-	
 	if (buffer.count == 1) {
 		position.x = buffer[0]->x;
 		position.y = buffer[0]->y;
 		return;
 	}
 
-	
 	GetGeometricMedianVector(&position, iterations);
 
-	
 	if (buffer.isValid) {
 		double distance = lastTarget.Distance(position);
 		if (distance > distanceThreshold) {
@@ -67,9 +48,6 @@ void TabletFilterNoiseReduction::Update() {
 		}
 	}
 }
-
-
-
 
 bool TabletFilterNoiseReduction::GetAverageVector(Vector2D *output) {
 	double x, y;
@@ -85,9 +63,6 @@ bool TabletFilterNoiseReduction::GetAverageVector(Vector2D *output) {
 	return true;
 }
 
-
-
-
 bool TabletFilterNoiseReduction::GetGeometricMedianVector(Vector2D *output, int iterations) {
 
 	Vector2D candidate, next;
@@ -96,19 +71,16 @@ bool TabletFilterNoiseReduction::GetGeometricMedianVector(Vector2D *output, int 
 	double denominator, dx, dy, distance, weight;
 	int i;
 
-	
 	if (GetAverageVector(&candidate)) {
 	}
 	else {
 		return false;
 	}
 
-	
 	for (int iteration = 0; iteration < iterations; iteration++) {
 
 		denominator = 0;
 
-		
 		for (i = 0; i < buffer.count; i++) {
 			dx = candidate.x - buffer[i]->x;
 			dy = candidate.y - buffer[i]->y;
@@ -121,11 +93,9 @@ bool TabletFilterNoiseReduction::GetGeometricMedianVector(Vector2D *output, int 
 			}
 		}
 
-		
 		next.x = 0;
 		next.y = 0;
 
-		
 		for (i = 0; i < buffer.count; i++) {
 			dx = candidate.x - buffer[i]->x;
 			dy = candidate.y - buffer[i]->y;
@@ -141,12 +111,10 @@ bool TabletFilterNoiseReduction::GetGeometricMedianVector(Vector2D *output, int 
 			next.y += buffer[i]->y * weight / denominator;
 		}
 
-		
 		candidate.x = next.x;
 		candidate.y = next.y;
 	}
 
-	
 	output->x = candidate.x;
 	output->y = candidate.y;
 
