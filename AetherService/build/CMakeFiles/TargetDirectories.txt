@@ -1,0 +1,7 @@
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/AetherService.dir
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/edit_cache.dir
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/rebuild_cache.dir
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/list_install_components.dir
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/install.dir
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/install/local.dir
+/home/tazik/Downloads/Aethergui/AetherService/build/CMakeFiles/install/strip.dir

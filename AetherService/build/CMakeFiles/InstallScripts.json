@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/tazik/Downloads/Aethergui/AetherService/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

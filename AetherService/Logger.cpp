@@ -19,7 +19,15 @@ static inline void LoggerSleepMs(unsigned ms) {
 Logger::Logger() {
 	verbosity = LogLevelDebug;
 	newMessage = false;
-	directPrint = false;
+	// Default to synchronous output. The async logger thread + mutex
+	// path hits a sporadic "futex facility returned an unexpected error
+	// code" crash on this toolchain (mutex in a bad state). Sync output
+	// is simple and reliable; the perf cost is negligible for our log
+	// rates.
+	directPrint = true;
+	logFile = nullptr;
+	logToFile = false;
+	isRunning = false;
 }
 
 void Logger::OutputMessage(LogItem *message) {
@@ -38,8 +46,8 @@ void Logger::OutputMessage(LogItem *message) {
 	} catch(exception) {
 		exit(1);
 	}
-	if(logFile && logFile.is_open()) {
-		logFile << timeBuffer << moduleBuffer << " [" << levelNames[message->level] << "] " << message->text << flush;
+	if(logFile && logFile->is_open()) {
+		*logFile << timeBuffer << moduleBuffer << " [" << levelNames[message->level] << "] " << message->text << flush;
 	}
 }
 
@@ -160,6 +168,11 @@ void Logger::AddMessage(LogItem *message) {
 
 	if(directPrint) {
 		OutputMessage(message);
+		// In sync mode there is no consumer thread; pushing into the
+		// queue would just leak memory and risks touching a corrupt
+		// std::mutex on toolchains where the global Logger's mutex
+		// member is in a bad state.
+		return;
 	}
 
 	lockMessages.lock();
@@ -188,11 +201,14 @@ void Logger::run() {
 }
 
 bool Logger::OpenLogFile(string filename) {
-	if(logFile && logFile.is_open()) {
-		logFile.close();
+	if(logFile && logFile->is_open()) {
+		logFile->close();
 	}
-	logFile = ofstream(filename, ofstream::out);
-	if(!logFile) {
+	if(logFile == nullptr) {
+		logFile = new ofstream();
+	}
+	logFile->open(filename, ofstream::out);
+	if(!*logFile) {
 		return false;
 	}
 	logFilename = filename;
@@ -200,8 +216,8 @@ bool Logger::OpenLogFile(string filename) {
 }
 
 bool Logger::CloseLogFile() {
-	if(logFile && logFile.is_open()) {
-		logFile.close();
+	if(logFile && logFile->is_open()) {
+		logFile->close();
 		return true;
 	}
 	return false;
@@ -219,8 +235,8 @@ void Logger::Stop() {
 		isRunning = false;
 		newMessage = true;
 		threadLog.join();
-		if(logFile && logFile.is_open()) {
-			logFile.close();
+		if(logFile && logFile->is_open()) {
+			logFile->close();
 		}
 	}
 }

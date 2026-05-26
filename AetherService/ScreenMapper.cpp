@@ -21,10 +21,14 @@ ScreenMapper::ScreenMapper(Tablet *t) {
 	areaTablet.x = 10;
 	areaTablet.y = 10;
 
-	areaScreen.width = 1920;
-	areaScreen.height = 1080;
-	areaScreen.x = 0;
-	areaScreen.y = 0;
+	// Default target screen area to the actual virtual screen instead of
+	// hard-coded 1920x1080. On Linux the previous default mapped pen
+	// motion into a 1920x1080 sub-rectangle of larger displays, leaving
+	// the rest of the screen unreachable.
+	areaScreen.width  = areaVirtualScreen.width  > 0 ? areaVirtualScreen.width  : 1920;
+	areaScreen.height = areaVirtualScreen.height > 0 ? areaVirtualScreen.height : 1080;
+	areaScreen.x = areaVirtualScreen.x;
+	areaScreen.y = areaVirtualScreen.y;
 	areaClipping = true;
 	areaLimiting = false;
 

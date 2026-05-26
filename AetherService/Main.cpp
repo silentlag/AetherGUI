@@ -1,6 +1,9 @@
 #include "stdafx.h"
 
 #include <csignal>
+#include <iostream>
+#include <fstream>
+#include <locale>
 
 #include "HIDDevice.h"
 #include "USBDevice.h"
@@ -937,6 +940,7 @@ static bool StartServiceRuntime(bool *running) {
 			case VMulti::ModeDigitizer:      mn = "Digitizer"; break;
 			case VMulti::ModeSendInput:      mn = "SendInput"; break;
 			case VMulti::ModeAbsoluteVMulti: mn = "RawAbsolute"; break;
+			case VMulti::ModeArtist:         mn = "Artist"; break;
 		}
 		LOG_STATUS("OUTPUT_MODE %s\n", mn);
 	}
@@ -944,6 +948,13 @@ static bool StartServiceRuntime(bool *running) {
 }
 
 int main(int argc, char**argv) {
+	// Force libstdc++ stream / global-locale init early. On some
+	// toolchains the implicit init that <iostream> would normally do
+	// hasn't run by the time later code constructs ifstream/ofstream
+	// objects, which then crashes in std::locale::operator=.
+	static std::ios_base::Init s_ios_init;
+	std::locale::global(std::locale::classic());
+
 	string line;
 	string filename;
 	CommandLine *cmd;
@@ -973,7 +984,6 @@ int main(int argc, char**argv) {
 #endif
 
 	LOGGER_START();
-
 	vmulti = new VMulti();
 	if (vmulti->hidDevice == NULL) {
 		LOG_WARNING("VMulti HID device not found.\n");
