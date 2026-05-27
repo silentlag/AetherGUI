@@ -1,4 +1,4 @@
-
+<center>
 
 <img src="AetherGUI/assets/aether_logo.png" width="13%" alt="AetherGUI logo"/>
 
