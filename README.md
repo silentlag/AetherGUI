@@ -1,4 +1,4 @@
-<center>
+<div align="center">
 
 <img src="AetherGUI/assets/aether_logo.png" width="13%" alt="AetherGUI logo"/>
 
@@ -624,4 +624,3 @@ AetherGUI and AetherService are unsigned and do two things antivirus heuristics 
 - The source is open &mdash; anything an AV report claims the binary does can be verified directly in the tree.
 
 Long-term the only real fix is signing the binaries with an Authenticode certificate. That is on the roadmap.
-
