@@ -10,6 +10,12 @@
 #include "CommandLine.h"
 #include "ProcessCommand.h"
 #include "EmbeddedConfig.h"
+#include "StatusSharedWriter.h"
+
+// Shared-memory writer for high-rate pen-status updates. Initialized in
+// main() if the OS lets us; if creation fails the service falls back to
+// emitting only the rate-limited [STATUS] POS text lines.
+StatusSharedWriter g_statusShmem;
 #include "AetherPluginManager.h"
 
 #include <atomic>
@@ -243,6 +249,9 @@ static void MaybePublishLatency() {
 	int n = snprintf(buf, sizeof(buf),
 		"[STATUS] LATENCY %0.3f %0.3f %0.3f %u\n",
 		avgMs, p99Ms, maxMs, window);
+	// Mirror to shmem so the GUI sees fresh latency without having to wait
+	// for the text line through the pipe.
+	g_statusShmem.PushLatency((float)avgMs, (float)p99Ms, (float)maxMs, (int)window);
 	if (n > 0) {
 		_write(_fileno(stdout), buf, n);
 	}
@@ -628,6 +637,22 @@ void RunTabletThread() {
 
 			MaybePublishLatency();
 
+			// Push every packet into the shared-memory ring (zero syscalls).
+			// The text [STATUS] POS line below is still emitted but rate-limited
+			// to ~60 Hz, kept for backwards compatibility with older GUIs that
+			// don't know about shmem.
+			{
+				double shmemRate = penRateLimitActive ? measuredOutputRate : measuredReportRate;
+				uint64_t tsNs = (uint64_t)(posNow - timeBegin).count();
+				g_statusShmem.PushPos(
+					tsNs,
+					(float)tablet->state.position.x,
+					(float)tablet->state.position.y,
+					(float)tablet->state.pressure,
+					(float)shmemRate,
+					(tablet->state.buttons & 1) != 0);
+			}
+
 			if (posDelta >= 16.0) {
 				double statusRate = penRateLimitActive ? measuredOutputRate : measuredReportRate;
 
@@ -960,8 +985,31 @@ int main(int argc, char**argv) {
 
 	platform::GlobalInit();
 
+	// Bring up the shared-memory transport. Best-effort: on failure (no
+	// permissions, exotic sandbox) we just don't have the fast path and the
+	// GUI falls back to text [STATUS] POS lines.
+	if (!g_statusShmem.Initialize()) {
+		LOG_INFO("shmem: CreateFileMapping failed, GUI will use text status only\n");
+	}
+
 #if defined(_WIN32)
 	SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
+	// Match the GUI's DPI awareness. Without this the service reads desktop
+	// metrics in logical pixels (e.g. 1152 instead of 1440 on a 125% monitor)
+	// and SendInput/SetCursorPos work in logical coordinates while the GUI
+	// sends area rectangles in physical pixels. The two sides disagreed by
+	// exactly the DPI factor, which is what "cursor stops at 80%" looked like.
+	{
+		HMODULE user32 = GetModuleHandleW(L"user32.dll");
+		typedef BOOL (WINAPI *PFN_SPDAC)(DPI_AWARENESS_CONTEXT);
+		PFN_SPDAC pSetCtx = user32 ? reinterpret_cast<PFN_SPDAC>(
+			GetProcAddress(user32, "SetProcessDpiAwarenessContext")) : nullptr;
+		bool ok = pSetCtx && pSetCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+		if (!ok) {
+			SetProcessDPIAware();
+		}
+	}
 
 	{
 		struct { ULONG Version; ULONG ControlMask; ULONG StateMask; } throttling = {};
@@ -1066,6 +1114,7 @@ void CleanupAndExit(int code) {
 		vmulti->ResetReport();
 	}
 	LOGGER_STOP();
+	g_statusShmem.Shutdown();
 	platform::GlobalShutdown();
 	platform::SleepMs(500);
 

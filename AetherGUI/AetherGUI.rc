@@ -1,5 +1,12 @@
 
 #include "resource.h"
 
+// Version info block (CompanyName/FileDescription/ProductName/etc).
+// Including it knocks out a chunk of low-effort AV heuristics that flag
+// unsigned exes with empty version resources.
+#define AETHER_RC_INTERNAL_NAME     "AetherGUI"
+#define AETHER_RC_ORIGINAL_FILENAME "AetherGUI.exe"
+#define AETHER_RC_FILE_DESCRIPTION  "Aether tablet driver - GUI"
+#include "AetherVersionInfo.rc.h"
 
 IDI_AETHER_ICON ICON "assets\\aether_logo.ico"

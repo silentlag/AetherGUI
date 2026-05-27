@@ -283,6 +283,28 @@ public:
 	std::wstring activeConfigPath;
 	int selectedConfigIndex = -1;
 
+	// Set while LoadConfig is reading from disk so the area panel doesn't
+	// reapply Auto Center / aspect logic to the freshly loaded numbers. Auto
+	// Center should only kick in when the user is actively editing screen
+	// width/height, not when we're restoring a saved layout verbatim.
+	bool loadingFromFile = false;
+
+	// Set right after a Load to keep AutoSaveConfig from immediately
+	// overwriting the named config with the just-loaded values. Cleared by
+	// the first real user-driven mutation (slider commit, toggle, etc) so
+	// editing after a Load behaves normally.
+	bool suppressNamedAutosave = false;
+
+	// After StartDriverService() we mark this true, then watch for the
+	// service's [STATUS] WIDTH/HEIGHT broadcast and re-clamp+re-send the
+	// tablet area exactly once with the real tablet dimensions. Without this
+	// the GUI ships startup settings before the tablet enumerates, the
+	// service sees a 152x95 fallback, and the loaded config gets quietly
+	// rewritten with the default area.
+	bool pendingTabletInfoResync = false;
+	float lastSeenTabletWidth  = -1.0f;
+	float lastSeenTabletHeight = -1.0f;
+
 	float consoleScrollY = 0;
 	TextInput consoleInput;
 	std::vector<std::string> commandHistory;
@@ -337,6 +359,13 @@ public:
 		Toggle suppressionEnabled;
 		Slider suppressionTime;
 	} aether;
+
+	// Click stabilizer is its own little filter (not part of AetherSmooth's
+	// internal pipeline) so users can toggle it independently of the rest.
+	struct {
+		Toggle enabled;
+		Slider holdMs;
+	} clickStabilize;
 
 	
 	static const int MAX_THEMES = 14;
@@ -449,6 +478,12 @@ private:
 	
 	void AutoLoadConfig();
 
+	// Tracks which named config the user last had open so AutoLoadConfig can
+	// restore it on next launch instead of dropping back to _autosave.cfg.
+	std::wstring GetLastLoadedMarkerPath();
+	void SaveLastLoadedMarker();
+	std::wstring ReadLastLoadedMarker();
+
 	void PrepareModalDialog();
 
 	void SyncLoadedControlVisuals();
@@ -464,6 +499,74 @@ private:
 	bool SaveConfigWithDialog();
 	
 	bool LoadConfigWithDialog();
+
+public:
+	// Load the N-th config (1-based) from configEntries, if it exists.
+	// Returns true if a load actually happened. Used by the Ctrl+Shift+1..9
+	// global hotkeys to flip profiles without touching the UI. Public so
+	// WndProc (which only holds an AetherApp&) can call it from WM_HOTKEY.
+	bool LoadConfigByHotkey(int oneBasedIndex);
+
+	// Per-slot global hotkeys. Each of the 9 config slots can be bound to any
+	// Windows virtual-key plus modifier combo. The user rebinds them by
+	// clicking the badge next to a profile and pressing a combo. Storage is
+	// a flat array; index N (zero-based) maps to config slot N+1.
+	struct HotkeyBinding {
+		UINT mods; // MOD_CONTROL | MOD_SHIFT | MOD_ALT | MOD_WIN (0 = disabled)
+		UINT vk;   // VK_* code; 0 = no binding
+	};
+	static const int kConfigHotkeyCount = 9;
+	HotkeyBinding configHotkeys[kConfigHotkeyCount];
+
+	// >= 0 while the user is recording a new combo for that slot. The next
+	// non-modifier key press in OnKeyDown writes the binding and clears this.
+	int capturingHotkeySlot = -1;
+
+	void RegisterConfigHotkeys();
+	void UnregisterConfigHotkeys();
+	std::wstring HotkeyLabelForSlot(int oneBasedIndex) const;
+	void ResetHotkeyDefaults();
+
+	// Per-app profile switching: when the foreground process matches an entry
+	// in `appProfiles`, we load the named config automatically. Toggling this
+	// off stops the watcher but keeps the list intact so the user doesn't lose
+	// their mappings.
+	struct AppProfileEntry {
+		std::wstring processName; // lowercase basename, e.g. L"osu!.exe"
+		std::wstring configPath;  // absolute path to the .cfg file
+	};
+	std::vector<AppProfileEntry> appProfiles;
+	bool   appProfilesEnabled = false;
+	std::wstring lastForegroundProcess; // tracks last seen process so we don't reload every poll
+	std::wstring lastForeignForeground; // last foreground that was NOT us; used by "Add" button
+	DWORD  lastForegroundPollTick = 0;
+
+	void PollForegroundProcess();             // called from Tick at ~2 Hz
+	std::wstring GetForegroundProcessName();  // basename of foreground process, lowercased
+	void AddAppProfileFromForeground();       // "Add current" button handler
+	void SaveAppProfiles();                   // writes config/_app_profiles.txt
+	void LoadAppProfiles();                   // reads config/_app_profiles.txt
+	std::wstring GetAppProfilesPath();
+
+	// Corner calibration: walk the user through tapping the four corners of
+	// the active tablet area with the pen, then derive tabletX/Y/W/H from the
+	// captured points. Lives in AetherApp because it needs both pen events
+	// (via DriverBridge) and access to the area sliders.
+	bool   calibrationOpen = false;
+	int    calibrationStep = 0;         // 0..3 = TL, TR, BR, BL
+	bool   calibrationWaitingForLift = false;
+	float  calibrationCapturedX[4]{};
+	float  calibrationCapturedY[4]{};
+	float  calibrationLastSeenX = 0;
+	float  calibrationLastSeenY = 0;
+	bool   calibrationLastSeenValid = false;
+
+	void StartCalibration();
+	void TickCalibration();
+	void DrawCalibrationModal();
+	void ApplyCalibrationResult();
+
+private:
 
 	bool InstallPluginWithDialog();
 

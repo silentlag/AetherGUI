@@ -272,9 +272,22 @@ namespace Theme {
 		inline float WindowWidth = Size::WindowWidth;
 		inline float WindowHeight = Size::WindowHeight;
 
+		// Single source of truth for "how many physical pixels is one design pixel".
+		// = systemDpi/96 * userExtraScale. The whole UI is laid out in design pixels
+		// (96 DPI) and the renderer pushes a Scale(UiScale, UiScale) transform when
+		// drawing, so layout, fonts, and hit-test all live in the same coordinate
+		// space and the OS DPI just stretches the result.
+		inline float UiScale = 1.0f;
+
 		inline void SetWindowSize(float width, float height) {
 			WindowWidth = (width < 320.0f) ? 320.0f : ((width > 8192.0f) ? 8192.0f : width);
 			WindowHeight = (height < 240.0f) ? 240.0f : ((height > 8192.0f) ? 8192.0f : height);
+		}
+
+		inline void SetUiScale(float scale) {
+			if (scale < 0.5f) scale = 0.5f;
+			if (scale > 4.0f) scale = 4.0f;
+			UiScale = scale;
 		}
 	}
 

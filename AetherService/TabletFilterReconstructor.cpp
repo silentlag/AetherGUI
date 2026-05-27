@@ -121,26 +121,42 @@ void TabletFilterReconstructor::Update() {
 		return;
 	}
 
-	double dt = predictionTimeMs * reconstructionStrength;
-
-	double correctedX = target.x + smoothedVelocity.x * dt + 0.5 * acceleration.x * dt * dt * reconstructionStrength;
-	double correctedY = target.y + smoothedVelocity.y * dt + 0.5 * acceleration.y * dt * dt * reconstructionStrength;
-
 	double velMag = smoothedVelocity.Length();
+
+	// Dead-zone: when the pen is essentially stationary, velocity/acceleration
+	// estimates are pure HID noise. Predicting from them just walks the
+	// cursor around. Below the threshold pass through unchanged so resting
+	// pen stays put.
+	const double kVelocityDeadZone = 0.5; // mm/s
+	if (velMag < kVelocityDeadZone) {
+		position.Set(target);
+		return;
+	}
+
+	// Separate the prediction window from how aggressively we apply it.
+	// dt is a fixed look-ahead, strength scales the *result* at the end.
+	// Previously the strength was multiplied into dt before integration,
+	// which made the acceleration term scale with strength^3 and made the
+	// slider feel non-linear.
+	double dt = predictionTimeMs;
+
+	double correctedX = target.x + smoothedVelocity.x * dt + 0.5 * acceleration.x * dt * dt;
+	double correctedY = target.y + smoothedVelocity.y * dt + 0.5 * acceleration.y * dt * dt;
+
+	double dx = (correctedX - target.x) * reconstructionStrength;
+	double dy = (correctedY - target.y) * reconstructionStrength;
+
 	double maxCorrection = velMag * predictionTimeMs * 2.0;
 	if (maxCorrection < 0.01) maxCorrection = 0.01;
 	if (maxCorrection > 5.0) maxCorrection = 5.0;
 
-	double dx = correctedX - target.x;
-	double dy = correctedY - target.y;
 	double correctionDist = sqrt(dx * dx + dy * dy);
-
 	if (correctionDist > maxCorrection) {
 		double scale = maxCorrection / correctionDist;
-		correctedX = target.x + dx * scale;
-		correctedY = target.y + dy * scale;
+		dx *= scale;
+		dy *= scale;
 	}
 
-	position.x = correctedX;
-	position.y = correctedY;
+	position.x = target.x + dx;
+	position.y = target.y + dy;
 }

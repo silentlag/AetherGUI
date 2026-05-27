@@ -1,11 +1,14 @@
 #include "DriverBridge.h"
+#include "StatusSharedReader.h"
 #include <ctime>
+#include <cstring>
 
 DriverBridge::DriverBridge() {}
 
 DriverBridge::~DriverBridge() {
 	try { Stop(); } catch (...) {}
 	try { CloseDebugLog(); } catch (...) {}
+	if (shmem) { delete shmem; shmem = nullptr; }
 }
 
 // ---------------------------------------------------------------------------
@@ -389,33 +392,42 @@ void DriverBridge::ReadLoop() {
 }
 
 void DriverBridge::ParseStatusLine(const std::string& line) {
-	if (line.find("[STATUS]") == std::string::npos) return;
+	// Hot path: this runs for every line the service emits, including [STATUS]
+	// POS lines at the full overclock rate (up to 2000 Hz). Avoid substr/find
+	// chains, work directly on the underlying buffer.
+	const char* s   = line.c_str();
+	const char* end = s + line.size();
 
-	size_t pos = line.find("[STATUS]");
-	std::string status = line.substr(pos + 9);
+	const char* tag = strstr(s, "[STATUS]");
+	if (!tag) return;
+	const char* p = tag + 8;            // skip "[STATUS]"
+	while (p < end && *p == ' ') ++p;   // skip the single space
 
-	if (status.find("TABLET ") == 0) {
-		tabletName = status.substr(7);
+	// Match a prefix and advance p past it (and any trailing spaces).
+	auto match = [&](const char* prefix, size_t prefixLen) -> bool {
+		if ((size_t)(end - p) < prefixLen) return false;
+		if (memcmp(p, prefix, prefixLen) != 0) return false;
+		p += prefixLen;
+		while (p < end && *p == ' ') ++p;
+		return true;
+	};
+
+	if (match("TABLET", 6)) {
+		tabletName.assign(p, (size_t)(end - p));
+		return;
 	}
-	else if (status.find("WIDTH ") == 0) {
-		tabletWidth = (float)atof(status.substr(6).c_str());
-	}
-	else if (status.find("HEIGHT ") == 0) {
-		tabletHeight = (float)atof(status.substr(7).c_str());
-	}
-	else if (status.find("MAX_X ") == 0) {
-		maxX = atoi(status.substr(6).c_str());
-	}
-	else if (status.find("MAX_Y ") == 0) {
-		maxY = atoi(status.substr(6).c_str());
-	}
-	else if (status.find("MAX_PRESSURE ") == 0) {
-		maxPressure = atoi(status.substr(13).c_str());
-	}
-	else if (status.find("LATENCY ") == 0) {
+	if (match("WIDTH", 5))         { tabletWidth  = (float)atof(p); return; }
+	if (match("HEIGHT", 6))        { tabletHeight = (float)atof(p); return; }
+	if (match("MAX_X", 5))         { maxX         = atoi(p);        return; }
+	if (match("MAX_Y", 5))         { maxY         = atoi(p);        return; }
+	if (match("MAX_PRESSURE", 12)) { maxPressure  = atoi(p);        return; }
+
+	if (match("LATENCY", 7)) {
+		// Same as POS: shmem already has it.
+		if (shmemActive) return;
 		float avg = 0, p99 = 0, mx = 0;
 		int samples = 0;
-		if (sscanf_s(status.c_str() + 8, "%f %f %f %d", &avg, &p99, &mx, &samples) >= 3) {
+		if (sscanf_s(p, "%f %f %f %d", &avg, &p99, &mx, &samples) >= 3) {
 			latencyAvgMs.store(avg);
 			latencyP99Ms.store(p99);
 			latencyMaxMs.store(mx);
@@ -423,17 +435,20 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 		}
 		return;
 	}
-	else if (status.find("POS ") == 0) {
-		
+
+	if (match("POS", 3)) {
+		// When the shmem fast path is up we already pulled the latest sample
+		// into the atomics + trail. The service still emits text POS lines for
+		// older GUIs, but here they'd just duplicate the work. Skip.
+		if (shmemActive) return;
 		float px = 0, py = 0, pp = 0, phz = 0;
-		if (sscanf_s(status.c_str() + 4, "%f %f %f %f", &px, &py, &pp, &phz) >= 2) {
+		if (sscanf_s(p, "%f %f %f %f", &px, &py, &pp, &phz) >= 2) {
 			penX.store(px);
 			penY.store(py);
 			penPressure.store(pp);
 			if (phz > 0.1f) penHz.store(phz);
 			penActive.store(true);
 
-			
 			{
 				std::lock_guard<std::mutex> lock(trailMutex);
 				TrailPoint tp;
@@ -443,7 +458,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 					trail.erase(trail.begin());
 			}
 		}
-		return; 
+		return;
 	}
 }
 
@@ -455,4 +470,72 @@ std::vector<std::string> DriverBridge::GetLogLines() {
 void DriverBridge::ClearLog() {
 	std::lock_guard<std::mutex> lock(logMutex);
 	logLines.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Shared-memory fast path
+// ---------------------------------------------------------------------------
+//
+// The service writes one PosSlot per HID report into a memory-mapped ring.
+// PollShmem() is called every GUI frame; it drains everything new into the
+// public atomics and trail buffer with zero syscalls per sample. We lazily
+// try to open the mapping every few seconds until it appears, in case the
+// service comes up after the GUI does.
+
+void DriverBridge::PollShmem() {
+	if (!shmem) shmem = new StatusSharedReader();
+
+	if (!shmem->IsActive()) {
+		// Retry-open is cheap (a single OpenFileMappingW) so do it once per
+		// call. The OS quickly returns ERROR_FILE_NOT_FOUND when the mapping
+		// doesn't exist; no need to throttle harder than the frame rate.
+		if (!shmem->TryOpen()) {
+			shmemActive = false;
+			return;
+		}
+		shmemActive = true;
+		DebugLog("BRIDGE", "shmem: opened, switching pen status to fast path");
+	}
+
+	float lastX = 0, lastY = 0, lastP = 0, lastHz = 0;
+	bool anySample = false;
+
+	int n = shmem->Drain([&](const AetherShared::PosSlot& s) {
+		lastX = s.x;
+		lastY = s.y;
+		lastP = s.pressure;
+		lastHz = s.hz;
+		anySample = true;
+
+		// Push into the trail buffer just like ParseStatusLine does. We
+		// downsample the trail to avoid filling it with thousands of points
+		// per second; one in every four samples is enough for the preview
+		// (~250 Hz visualisation rate, plenty smooth).
+		static int trailDecimator = 0;
+		if ((trailDecimator++ & 3) == 0) {
+			std::lock_guard<std::mutex> lock(trailMutex);
+			TrailPoint tp;
+			tp.x = s.x; tp.y = s.y; tp.pressure = s.pressure; tp.age = 0;
+			trail.push_back(tp);
+			if ((int)trail.size() > MAX_TRAIL) trail.erase(trail.begin());
+		}
+	});
+
+	if (anySample) {
+		penX.store(lastX);
+		penY.store(lastY);
+		penPressure.store(lastP);
+		if (lastHz > 0.1f) penHz.store(lastHz);
+		penActive.store(true);
+	}
+	(void)n;
+
+	// Latency block too -- cheaper than waiting for the next text line.
+	AetherShared::LatencyBlock lb{};
+	if (shmem->ReadLatency(lb) && lb.samples > 0) {
+		latencyAvgMs.store(lb.avgMs);
+		latencyP99Ms.store(lb.p99Ms);
+		latencyMaxMs.store(lb.maxMs);
+		latencySamples.store(lb.samples);
+	}
 }

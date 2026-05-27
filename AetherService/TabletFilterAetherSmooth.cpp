@@ -201,6 +201,18 @@ void TabletFilterAetherSmooth::Update() {
 		return;
 	}
 
+	// Always estimate velocity from raw target deltas. The previous version
+	// only updated `velocity` inside AdaptiveFlow, so disabling smoothing
+	// silently locked velocity at 0 and broke the velocity-aware tweaks below
+	// (antismoothing scaling, debounce intent detection).
+	{
+		double vdx = (currentPos.x - lastPos.x) / dt;
+		double vdy = (currentPos.y - lastPos.y) / dt;
+		double vMagInstant = sqrt(vdx * vdx + vdy * vdy);
+		const double kAlpha = 0.4; // light EMA so we follow speed but ignore noise
+		velocity = velocity * (1.0 - kAlpha) + vMagInstant * kAlpha;
+	}
+
 	double velocityScale = velocity / 100.0;
 	if (velocityScale < 0) velocityScale = 0;
 	if (velocityScale > 1) velocityScale = 1;
@@ -246,16 +258,24 @@ void TabletFilterAetherSmooth::Update() {
 	}
 
 	if (enableDebounce) {
-		double debounceElapsed = (now - debounceTime).count() / 1000000.0;
-		bool isMovingIntentional = velocity > 0.05 || processedPos.DistanceSq(debouncePos) > 0.04;
-
-		if (isMovingIntentional) {
+		// Dead-band style debounce: hold the last reported position until the
+		// new processed point has drifted beyond `debounceMs` (mm). The old
+		// implementation froze the cursor for N milliseconds whenever motion
+		// was below threshold, which produced a stutter on slow strokes (the
+		// pen was moving, but the GUI treated each sample as "too small" and
+		// refused to advance until the timer expired). The new behavior is
+		// classic input dead-zone: ignore micro-jitter under the threshold
+		// without blocking real motion.
+		double drift = processedPos.Distance(debouncePos);
+		if (drift >= debounceMs) {
 			debouncePos.Set(processedPos);
-			debounceTime = now;
 		}
-		else if (debounceElapsed < debounceMs) {
+		else {
 			processedPos.Set(debouncePos);
 		}
+	}
+	else {
+		debouncePos.Set(processedPos);
 	}
 
 	prevProcessedPos.Set(processedPos);

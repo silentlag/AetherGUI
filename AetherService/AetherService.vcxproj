@@ -91,6 +91,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp14</LanguageStandard>
@@ -98,6 +99,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <CETCompat>true</CETCompat>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -106,12 +109,15 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <CETCompat>true</CETCompat>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -122,6 +128,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -130,6 +137,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <CETCompat>true</CETCompat>
     </Link>
     <CustomBuildStep>
       <Command>rem Copy AetherService.exe next to AetherGUI.exe
@@ -150,6 +159,7 @@ if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\Debug\"
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -158,6 +168,8 @@ if exist "$(TargetPath)" copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\Debug\"
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <CETCompat>true</CETCompat>
     </Link>
     <PostBuildEvent>
       <Command>if not exist "$(ProjectDir)..\bin\$(Configuration)" mkdir "$(ProjectDir)..\bin\$(Configuration)"
@@ -183,6 +195,11 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClInclude Include="TabletFilterReconstructor.h" />
     <ClInclude Include="TabletFilterAdaptive.h" />
     <ClInclude Include="TabletFilterAetherSmooth.h" />
+    <ClInclude Include="TabletFilterClickStabilizer.h" />
+    <ClInclude Include="AetherShared.h" />
+    <ClInclude Include="StatusSharedWriter.h" />
+    <ClInclude Include="Version.h" />
+    <ClInclude Include="AetherVersionInfo.rc.h" />
     <ClInclude Include="TabletFilterPlugin.h" />
     <ClInclude Include="TabletFilterSmoothing.h" />
     <ClInclude Include="TabletSettings.h" />
@@ -209,6 +226,8 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClCompile Include="TabletFilterReconstructor.cpp" />
     <ClCompile Include="TabletFilterAdaptive.cpp" />
     <ClCompile Include="TabletFilterAetherSmooth.cpp" />
+    <ClCompile Include="TabletFilterClickStabilizer.cpp" />
+    <ClCompile Include="StatusSharedWriter.cpp" />
     <ClCompile Include="TabletFilterPlugin.cpp" />
     <ClCompile Include="TabletFilterSmoothing.cpp" />
     <ClCompile Include="TabletSettings.cpp" />
@@ -223,6 +242,9 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClCompile Include="Vector2D.cpp" />
     <ClCompile Include="VMulti.cpp" />
     <ClCompile Include="Platform_Win32.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="AetherService.rc" />
   </ItemGroup>
   <ItemGroup>
     <None Include="config\init.cfg" />

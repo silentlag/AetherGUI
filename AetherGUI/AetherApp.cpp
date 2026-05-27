@@ -823,6 +823,14 @@ static bool IsVersionNewer(const std::string& latest, const std::string& current
 	if (latestNumbers.empty() || currentNumbers.empty())
 		return false;
 
+	// Reject tags that don't look like a semver dotted version. Custom names
+	// like "AetherUpdate5" parse to a single number that then "wins" the
+	// per-slot comparison against "1.0.2" and produces a false update prompt.
+	// We require at least major.minor on the remote side before treating it
+	// as comparable.
+	if (latestNumbers.size() < 2)
+		return false;
+
 	size_t count = std::max(latestNumbers.size(), currentNumbers.size());
 	for (size_t i = 0; i < count; i++) {
 		int a = i < latestNumbers.size() ? latestNumbers[i] : 0;
@@ -962,6 +970,7 @@ static BOOL CALLBACK EnumDisplayTargetProc(HMONITOR monitor, HDC, LPRECT, LPARAM
 
 bool AetherApp::Initialize(HWND hwnd) {
 	hWnd = hwnd;
+	ResetHotkeyDefaults();
 	OutputDebugStringW(L"[Aether] AetherApp::Initialize() entered\n");
 	if (!renderer.Initialize(hwnd)) {
 		OutputDebugStringW(L"[Aether] renderer.Initialize() FAILED\n");
@@ -1079,12 +1088,16 @@ bool AetherApp::Initialize(HWND hwnd) {
 	}
 
 	autoStartAttempted = true;
-	driver.DebugLog("APP", "VMulti installed: %d (autoStart will %s)",
+	driver.DebugLog("APP", "VMulti installed: %d (Windows Ink mode %s)",
 		vmultiInstalled ? 1 : 0,
-		vmultiInstalled ? "run" : "be skipped - install VMulti or use a non-Ink output mode");
-	if (vmultiInstalled) {
-		StartDriverService();
-	}
+		vmultiInstalled ? "available" : "unavailable - install VMulti or stay on Absolute/Relative/SendInput");
+	// Always launch the service on startup. VMulti is only required for Windows
+	// Ink output; Absolute, Relative, and SendInput modes work without it. The
+	// previous behavior gated autostart on VMulti and forced users on the other
+	// modes to press Retry every launch. The output-mode UI still warns when an
+	// Ink-dependent mode is selected and VMulti is missing, so nothing
+	// silently breaks.
+	StartDriverService();
 	return true;
 }
 
@@ -1254,6 +1267,10 @@ void AetherApp::InitControls() {
 	aether.suppressionEnabled.Layout(cx, 0, L"Suppression", L"Lock cursor when below threshold");
 	aether.suppressionTime.Layout(cx, 0, hw, L"Time (ms)", 0.0f, 50.0f, 5.0f, L"Jitter suppression window");
 
+	clickStabilize.enabled.Layout(cx, 0, L"Click Stabilizer", L"Lock cursor for a few ms after pen tap to fight tip jitter");
+	clickStabilize.holdMs.Layout(cx, 0, hw, L"Hold (ms)", 0.0f, 50.0f, 8.0f, L"How long the cursor is held still after a pen tap");
+	clickStabilize.holdMs.format = L"%.0f";
+
 	
 	uiThemeCount = 12;
 	uiThemeDefaults[0]  = &Theme::Themes::Midnight;
@@ -1318,6 +1335,7 @@ void AetherApp::CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const {
 	slider(filters.adaptiveProcessNoise); slider(filters.adaptiveMeasNoise); slider(filters.adaptiveVelWeight);
 	slider(aether.lagRemovalStrength); slider(aether.stabilizerStability); slider(aether.stabilizerSensitivity);
 	slider(aether.snappingInner); slider(aether.snappingOuter); slider(aether.suppressionTime);
+	slider(clickStabilize.holdMs);
 	slider(aether.rhythmFlowStrength); slider(aether.rhythmFlowRelease); slider(aether.rhythmFlowJitter);
 	snapshot.sliders.push_back(Theme::Custom::AccentR);
 	snapshot.sliders.push_back(Theme::Custom::AccentG);
@@ -1331,6 +1349,7 @@ void AetherApp::CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const {
 	toggle(filters.adaptiveEnabled);
 	toggle(aether.enabled); toggle(aether.lagRemovalEnabled); toggle(aether.stabilizerEnabled);
 	toggle(aether.snappingEnabled); toggle(aether.suppressionEnabled);
+	toggle(clickStabilize.enabled);
 	toggle(aether.rhythmFlowEnabled);
 	toggle(visualizerToggle);
 
@@ -1390,6 +1409,7 @@ void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
 	setSlider(filters.adaptiveProcessNoise); setSlider(filters.adaptiveMeasNoise); setSlider(filters.adaptiveVelWeight);
 	setSlider(aether.lagRemovalStrength); setSlider(aether.stabilizerStability); setSlider(aether.stabilizerSensitivity);
 	setSlider(aether.snappingInner); setSlider(aether.snappingOuter); setSlider(aether.suppressionTime);
+	setSlider(clickStabilize.holdMs);
 	setSlider(aether.rhythmFlowStrength); setSlider(aether.rhythmFlowRelease); setSlider(aether.rhythmFlowJitter);
 	if (s + 2 < snapshot.sliders.size()) {
 		snapshotAccentR = Clamp(snapshot.sliders[s++], 0.0f, 1.0f);
@@ -1405,6 +1425,7 @@ void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
 	setToggle(filters.adaptiveEnabled);
 	setToggle(aether.enabled); setToggle(aether.lagRemovalEnabled); setToggle(aether.stabilizerEnabled);
 	setToggle(aether.snappingEnabled); setToggle(aether.suppressionEnabled);
+	setToggle(clickStabilize.enabled);
 	setToggle(aether.rhythmFlowEnabled);
 	setToggle(visualizerToggle);
 
@@ -1506,7 +1527,7 @@ bool AetherApp::IsTextEditingActive() const {
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
 		&aether.lagRemovalStrength, &aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime,
-		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter
+		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter, &clickStabilize.holdMs
 	};
 	for (const Slider* slider : sliders) {
 		if (slider->editMode)
@@ -1587,6 +1608,8 @@ bool AetherApp::FocusNextEditableRow(bool reverse) {
 			if (aether.suppressionEnabled.value)
 				add(aether.suppressionTime);
 		}
+		if (clickStabilize.enabled.value)
+			add(clickStabilize.holdMs);
 		if (overclockEnabled.value)
 			add(overclockHz);
 		if (penRateLimitEnabled.value)
@@ -1668,10 +1691,27 @@ float AetherApp::GetSelectedDpiScale() const {
 void AetherApp::ApplyDpiScale() {
 	if (!renderer.pDWriteFactory)
 		return;
-	renderer.SetDpiScale(GetSelectedDpiScale());
+	// uiScale = monitor DPI factor * user multiplier from the slider.
+	// Layout, fonts, and mouse hit-test all live in design pixels (96 DPI),
+	// and the renderer's BeginFrame pushes a Scale(uiScale, uiScale) transform.
+	// That keeps the three coordinate spaces (input, layout, paint) in sync.
+	float uiScale = GetSystemDpiScale() * GetSelectedDpiScale();
+	Theme::Runtime::SetUiScale(uiScale);
+	renderer.SetDpiScale(uiScale);
+
+	// Re-derive design-space window size from the current physical client size
+	// so layout reflects the new uiScale immediately (resize would normally do
+	// this, but the user can also change the DPI slider without resizing).
+	if (clientWidth > 0.5f && clientHeight > 0.5f) {
+		Theme::Runtime::SetWindowSize(clientWidth / uiScale, clientHeight / uiScale);
+		ClampScrollOffsets();
+	}
 }
 
 void AetherApp::OnMouseMove(float x, float y) {
+	// SDL/Win mouse coords arrive in physical pixels; convert to design space.
+	float s = Theme::Runtime::UiScale;
+	if (s > 0.001f) { x /= s; y /= s; }
 	if (isPluginCatalogDragScrolling) {
 		pluginCatalogScrollY = pluginCatalogDragStartOffset + (pluginCatalogDragStartY - y);
 		ClampPluginCatalogScroll();
@@ -1871,8 +1911,11 @@ bool AetherApp::StartDriverService() {
 	if (driver.isConnected)
 		return true;
 
-	ClampScreenArea();
-	ApplyAspectLock(false);
+	// IMPORTANT: do NOT clamp the area here. ClampScreenArea / ApplyAspectLock
+	// run with driver.tabletWidth/Height == 0 at this point, fall back to a
+	// 152x95 default, and overwrite the values we just loaded from the config.
+	// We re-clamp later, in Tick(), once the service has reported the real
+	// tablet size via [STATUS] WIDTH/HEIGHT.
 
 	int cb = WideCharToMultiByte(CP_UTF8, 0, servicePath.c_str(), -1, nullptr, 0, nullptr, nullptr);
 	std::string utf8(cb > 0 ? cb - 1 : 0, '\0');
@@ -1888,6 +1931,12 @@ bool AetherApp::StartDriverService() {
 
 	Sleep(800);
 	SendStartupSettingsToDriver();
+	// Schedule one re-send once the tablet announces its real size, so the
+	// area we ship matches the config even if Sleep(800) wasn't enough for
+	// the device to enumerate.
+	pendingTabletInfoResync = true;
+	lastSeenTabletWidth = -1.0f;
+	lastSeenTabletHeight = -1.0f;
 	autoStartRetryCount = 0;
 	autoStartRetryTimer = 0.0f;
 	return true;
@@ -2036,8 +2085,14 @@ void AetherApp::OnResize(UINT width, UINT height) {
 
 	clientWidth = (float)width;
 	clientHeight = (float)height;
-	Theme::Runtime::SetWindowSize(clientWidth, clientHeight);
+
+	// Layout lives in design pixels. Recompute uiScale FIRST (the OS may have
+	// just told us about a DPI change via WM_DPICHANGED + WM_SIZE in one go),
+	// then convert physical client size into design space for layout.
 	ApplyDpiScale();
+	float s = Theme::Runtime::UiScale;
+	if (s < 0.001f) s = 1.0f;
+	Theme::Runtime::SetWindowSize(clientWidth / s, clientHeight / s);
 	renderer.Resize(width, height);
 	ClampScrollOffsets();
 }
@@ -2115,6 +2170,7 @@ void AetherApp::OnChar(wchar_t ch) {
 	filterCommitted |= filters.adaptiveProcessNoise.OnChar(ch); filterCommitted |= filters.adaptiveMeasNoise.OnChar(ch); filterCommitted |= filters.adaptiveVelWeight.OnChar(ch);
 	filterCommitted |= aether.lagRemovalStrength.OnChar(ch); filterCommitted |= aether.stabilizerStability.OnChar(ch); filterCommitted |= aether.stabilizerSensitivity.OnChar(ch);
 	filterCommitted |= aether.snappingInner.OnChar(ch); filterCommitted |= aether.snappingOuter.OnChar(ch); filterCommitted |= aether.suppressionTime.OnChar(ch);
+	filterCommitted |= clickStabilize.holdMs.OnChar(ch);
 	filterCommitted |= aether.rhythmFlowStrength.OnChar(ch); filterCommitted |= aether.rhythmFlowRelease.OnChar(ch); filterCommitted |= aether.rhythmFlowJitter.OnChar(ch);
 	for (size_t pluginIndex = 0; pluginIndex < pluginEntries.size(); ++pluginIndex) {
 		for (auto& option : pluginEntries[pluginIndex].options) {
@@ -2210,6 +2266,34 @@ void AetherApp::OnChar(wchar_t ch) {
 void AetherApp::OnKeyDown(int vk) {
 	bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
 	bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+
+	// Hotkey capture: the user clicked a slot's badge and we're waiting for
+	// the next key press. Modifier-only presses don't commit -- we want the
+	// trigger key, plus whatever modifiers are held at that moment.
+	if (capturingHotkeySlot >= 0 && capturingHotkeySlot < kConfigHotkeyCount) {
+		if (vk == VK_ESCAPE) { capturingHotkeySlot = -1; return; }
+		// Ignore lone modifier presses (and Win/Menu) so the user can chord.
+		if (vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL ||
+			vk == VK_SHIFT   || vk == VK_LSHIFT   || vk == VK_RSHIFT   ||
+			vk == VK_MENU    || vk == VK_LMENU    || vk == VK_RMENU    ||
+			vk == VK_LWIN    || vk == VK_RWIN) {
+			return;
+		}
+		bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+		bool win = (GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000);
+		UINT mods = 0;
+		if (ctrl)  mods |= MOD_CONTROL;
+		if (shift) mods |= MOD_SHIFT;
+		if (alt)   mods |= MOD_ALT;
+		if (win)   mods |= MOD_WIN;
+		configHotkeys[capturingHotkeySlot].mods = mods;
+		configHotkeys[capturingHotkeySlot].vk   = (UINT)vk;
+		capturingHotkeySlot = -1;
+		RegisterConfigHotkeys();
+		AutoSaveConfig();
+		return;
+	}
+
 	if (pluginSourceEditorOpen) {
 		if (vk == VK_ESCAPE) {
 			pluginSourceEditorOpen = false;
@@ -2221,6 +2305,10 @@ void AetherApp::OnKeyDown(int vk) {
 	}
 	if (updateModalOpen && vk == VK_ESCAPE) {
 		updateModalOpen = false;
+		return;
+	}
+	if (calibrationOpen && vk == VK_ESCAPE) {
+		calibrationOpen = false;
 		return;
 	}
 	if (pluginManagerOpen && vk == VK_ESCAPE) {
@@ -2255,7 +2343,8 @@ void AetherApp::OnKeyDown(int vk) {
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
 		&aether.lagRemovalStrength, &aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime,
-		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter
+		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter,
+		&clickStabilize.holdMs
 	};
 	for (Slider* slider : editableSliders) {
 		if (slider->OnKeyDown(vk, ctrl, shift)) return;
@@ -2321,14 +2410,40 @@ void AetherApp::Tick() {
 	if (deltaTime > 0.1f) deltaTime = 0.016f;
 	lastFrameTime = now;
 
+	PollForegroundProcess();
+	TickCalibration();
+	// Drain the shared-memory ring into pen status. No-op when the service
+	// is older or shmem creation failed -- the text status lines still work.
+	driver.PollShmem();
+
 	Tooltip::Reset();
 
-	if (vmultiInstalled && autoStartEnabled && !driver.isConnected) {
+	// Service auto-restart loop. Independent of VMulti -- the service is what
+	// drives the tablet under every output mode, not just Ink.
+	if (autoStartEnabled && !driver.isConnected) {
 		autoStartRetryTimer -= deltaTime;
 		if (autoStartRetryTimer <= 0.0f) {
 			autoStartRetryCount++;
 			autoStartRetryTimer = autoStartRetryCount < 8 ? 1.5f : 5.0f;
 			StartDriverService();
+		}
+	}
+
+	// Once the freshly started service tells us the real tablet size, snap
+	// the loaded area to those bounds and re-send it. We only do this once
+	// per service launch (pendingTabletInfoResync clears here) so user edits
+	// after the first sync aren't undone.
+	if (pendingTabletInfoResync && driver.isConnected &&
+	    driver.tabletWidth > 1.0f && driver.tabletHeight > 1.0f) {
+		bool changed = (fabsf(driver.tabletWidth  - lastSeenTabletWidth)  > 0.01f) ||
+		               (fabsf(driver.tabletHeight - lastSeenTabletHeight) > 0.01f);
+		lastSeenTabletWidth  = driver.tabletWidth;
+		lastSeenTabletHeight = driver.tabletHeight;
+		if (changed) {
+			ClampScreenArea();
+			ApplyAspectLock(false);
+			ApplyAllSettings();
+			pendingTabletInfoResync = false;
 		}
 	}
 
@@ -2346,7 +2461,7 @@ void AetherApp::Tick() {
 	DrawHeader();
 
 	int oldTab = sidebar.activeIndex;
-	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen;
+	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen || calibrationOpen;
 	bool frameClick = mouseClicked;
 	if (modalOpen)
 		mouseClicked = false;
@@ -2430,6 +2545,8 @@ void AetherApp::Tick() {
 		DrawPluginSourceModal();
 	if (updateModalOpen)
 		DrawUpdateModal();
+	if (calibrationOpen)
+		DrawCalibrationModal();
 	Tooltip::Draw(renderer);
 	renderer.EndFrame();
 
@@ -2534,6 +2651,17 @@ void AetherApp::SendFilterSettings() {
 		driver.SendCommand(cmd);
 	} else {
 		driver.SendCommand("AetherSmooth off");
+	}
+
+	// Click stabilizer lives outside the AetherSmooth block: it's a separate
+	// filter and the user toggles it independently of whether AetherSmooth is
+	// active. Always send its current state so service-side latch matches UI.
+	{
+		char cmd[128];
+		sprintf_s(cmd, "ClickStabilizer %d %.2f",
+			clickStabilize.enabled.value ? 1 : 0,
+			clickStabilize.holdMs.value);
+		driver.SendCommand(cmd);
 	}
 }
 
@@ -2669,19 +2797,106 @@ void AetherApp::RefreshConfigFiles() {
 void AetherApp::AutoSaveConfig() {
 	TrackSettingsUndo();
 	EnsureConfigDirectory();
+
+	// Background autosave goes ONLY into the anonymous _autosave.cfg. It used
+	// to also overwrite the currently loaded named config on every slider
+	// tick, which made experimentation destructive: nudging a value to test
+	// the feel silently rewrote the saved profile. Named profiles now only
+	// change when the user explicitly clicks Save. The _autosave file still
+	// captures every edit so a crash / power loss won't lose runtime state.
 	SaveConfig(GetConfigPath());
+
+	// Keep the one-shot suppression flag working for legacy callers that
+	// expect it: just consume it. Nothing else depends on the named write
+	// happening here anymore.
+	if (suppressNamedAutosave) suppressNamedAutosave = false;
+
+	SaveLastLoadedMarker();
 	RefreshConfigFiles();
 }
 
 void AetherApp::AutoLoadConfig() {
 	EnsureConfigDirectory();
+
+	// Per-app mappings are persisted globally (separate file). Load them
+	// before any config so the watcher already has them when it ticks.
+	LoadAppProfiles();
+
+	// Prefer the user's last *named* config so reopening AetherGUI puts them
+	// back where they were instead of dumping them into the anonymous autosave.
+	std::wstring lastNamed = ReadLastLoadedMarker();
+	if (!lastNamed.empty()) {
+		DWORD nattrs = GetFileAttributesW(lastNamed.c_str());
+		if (nattrs != INVALID_FILE_ATTRIBUTES && !(nattrs & FILE_ATTRIBUTE_DIRECTORY)) {
+			activeConfigPath = lastNamed;
+			loadingFromFile = true;
+			LoadConfig(activeConfigPath);
+			loadingFromFile = false;
+			suppressNamedAutosave = true;
+			RefreshConfigFiles();
+			return;
+		}
+	}
+
 	std::wstring path = GetConfigPath();
 	DWORD attrs = GetFileAttributesW(path.c_str());
 	if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
 		activeConfigPath.clear();
+		loadingFromFile = true;
 		LoadConfig(path);
+		loadingFromFile = false;
 	}
 	RefreshConfigFiles();
+}
+
+std::wstring AetherApp::GetLastLoadedMarkerPath() {
+	return GetConfigDirectory() + L"_last_loaded.txt";
+}
+
+void AetherApp::SaveLastLoadedMarker() {
+	EnsureConfigDirectory();
+	std::wstring marker = GetLastLoadedMarkerPath();
+	if (activeConfigPath.empty()) {
+		// Drop the marker so next launch falls back to plain autosave instead
+		// of pointing at a config we no longer track.
+		DeleteFileW(marker.c_str());
+		return;
+	}
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, marker.c_str(), L"wb") != 0 || !f)
+		return;
+	int cb = WideCharToMultiByte(CP_UTF8, 0, activeConfigPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+	if (cb > 0) {
+		std::string utf8(cb - 1, '\0');
+		WideCharToMultiByte(CP_UTF8, 0, activeConfigPath.c_str(), -1, utf8.data(), cb, nullptr, nullptr);
+		fwrite(utf8.data(), 1, utf8.size(), f);
+	}
+	fclose(f);
+}
+
+std::wstring AetherApp::ReadLastLoadedMarker() {
+	std::wstring marker = GetLastLoadedMarkerPath();
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, marker.c_str(), L"rb") != 0 || !f)
+		return {};
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	std::string buf;
+	if (size > 0 && size < 32 * 1024) {
+		buf.resize((size_t)size);
+		fread(buf.data(), 1, (size_t)size, f);
+	}
+	fclose(f);
+	while (!buf.empty() && (buf.back() == '\n' || buf.back() == '\r' ||
+	                        buf.back() == '\t' || buf.back() == ' '))
+		buf.pop_back();
+	if (buf.empty()) return {};
+	int cw = MultiByteToWideChar(CP_UTF8, 0, buf.c_str(), -1, nullptr, 0);
+	if (cw <= 0) return {};
+	std::wstring out(cw - 1, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, buf.c_str(), -1, out.data(), cw);
+	return out;
 }
 
 void AetherApp::PrepareModalDialog() {
@@ -2727,7 +2942,8 @@ void AetherApp::SyncLoadedControlVisuals() {
 		&aether.lagRemovalStrength, &aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter,
 		&aether.rhythmFlowStrength, &aether.rhythmFlowRelease, &aether.rhythmFlowJitter,
-		&aether.suppressionTime
+		&aether.suppressionTime,
+		&clickStabilize.holdMs
 	};
 	for (Slider* slider : sliders)
 		syncSlider(*slider);
@@ -2741,6 +2957,7 @@ void AetherApp::SyncLoadedControlVisuals() {
 		&filters.adaptiveEnabled,
 		&aether.enabled, &aether.lagRemovalEnabled, &aether.stabilizerEnabled,
 		&aether.snappingEnabled, &aether.rhythmFlowEnabled, &aether.suppressionEnabled,
+		&clickStabilize.enabled,
 		&visualizerToggle
 	};
 	for (Toggle* toggle : toggles)
@@ -2784,6 +3001,465 @@ bool AetherApp::SaveConfigWithDialog() {
 
 	activeConfigPath = filePath;
 	SaveConfig(activeConfigPath);
+	RefreshConfigFiles();
+	return true;
+}
+
+// Build a human-readable label for a hotkey binding, e.g. "Ctrl+Shift+1" or
+// "Win+F5". Returns L"unbound" if the binding has no key. Kept as a free
+// helper so both the UI badge code and the registration log share one format.
+static std::wstring FormatHotkeyLabel(UINT mods, UINT vk) {
+	if (vk == 0) return L"unbound";
+	std::wstring out;
+	if (mods & MOD_CONTROL) out += L"Ctrl+";
+	if (mods & MOD_ALT)     out += L"Alt+";
+	if (mods & MOD_SHIFT)   out += L"Shift+";
+	if (mods & MOD_WIN)     out += L"Win+";
+
+	// Friendly names for the keys people actually bind to. Everything else
+	// falls back to GetKeyNameText so unusual keys (numpad, OEM punctuation,
+	// media keys) still produce something readable.
+	switch (vk) {
+	case VK_F1:  out += L"F1";  return out;
+	case VK_F2:  out += L"F2";  return out;
+	case VK_F3:  out += L"F3";  return out;
+	case VK_F4:  out += L"F4";  return out;
+	case VK_F5:  out += L"F5";  return out;
+	case VK_F6:  out += L"F6";  return out;
+	case VK_F7:  out += L"F7";  return out;
+	case VK_F8:  out += L"F8";  return out;
+	case VK_F9:  out += L"F9";  return out;
+	case VK_F10: out += L"F10"; return out;
+	case VK_F11: out += L"F11"; return out;
+	case VK_F12: out += L"F12"; return out;
+	case VK_SPACE: out += L"Space"; return out;
+	case VK_TAB:   out += L"Tab";   return out;
+	case VK_BACK:  out += L"Back";  return out;
+	case VK_INSERT: out += L"Ins";  return out;
+	case VK_DELETE: out += L"Del";  return out;
+	case VK_HOME:   out += L"Home"; return out;
+	case VK_END:    out += L"End";  return out;
+	case VK_PRIOR:  out += L"PgUp"; return out;
+	case VK_NEXT:   out += L"PgDn"; return out;
+	}
+	if ((vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z')) {
+		out += (wchar_t)vk;
+		return out;
+	}
+	wchar_t name[64] = {};
+	UINT sc = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+	if (GetKeyNameTextW((LONG)(sc << 16), name, 64) > 0)
+		out += name;
+	else
+		out += L"?";
+	return out;
+}
+
+std::wstring AetherApp::HotkeyLabelForSlot(int oneBasedIndex) const {
+	if (oneBasedIndex < 1 || oneBasedIndex > kConfigHotkeyCount) return L"";
+	const HotkeyBinding& b = configHotkeys[oneBasedIndex - 1];
+	return FormatHotkeyLabel(b.mods, b.vk);
+}
+
+void AetherApp::ResetHotkeyDefaults() {
+	for (int i = 0; i < kConfigHotkeyCount; ++i) {
+		configHotkeys[i].mods = MOD_CONTROL | MOD_SHIFT;
+		configHotkeys[i].vk   = 0x31 + i; // '1'..'9'
+	}
+}
+
+void AetherApp::UnregisterConfigHotkeys() {
+	if (!hWnd) return;
+	for (int i = 1; i <= kConfigHotkeyCount; ++i)
+		UnregisterHotKey(hWnd, 0xA000 + i);
+}
+
+void AetherApp::RegisterConfigHotkeys() {
+	if (!hWnd) return;
+	UnregisterConfigHotkeys();
+	int ok = 0, fail = 0, skipped = 0;
+	for (int i = 0; i < kConfigHotkeyCount; ++i) {
+		const HotkeyBinding& b = configHotkeys[i];
+		if (b.vk == 0) { ++skipped; continue; }
+		if (RegisterHotKey(hWnd, 0xA001 + i, b.mods | MOD_NOREPEAT, b.vk))
+			++ok;
+		else
+			++fail;
+	}
+	wchar_t buf[160];
+	swprintf_s(buf, L"[Aether] Config hotkeys: ok=%d fail=%d skipped=%d\n", ok, fail, skipped);
+	OutputDebugStringW(buf);
+}
+
+// ===== PER-APP PROFILES =====
+
+std::wstring AetherApp::GetAppProfilesPath() {
+	return GetConfigDirectory() + L"_app_profiles.txt";
+}
+
+void AetherApp::SaveAppProfiles() {
+	// Per-app mappings are global -- they apply across every named config.
+	// Storing them inside _autosave.cfg / named configs meant a Load of a
+	// different config would wipe the user's app mappings, since LoadConfig
+	// resets the vector before reading and other configs naturally don't
+	// carry those lines. Park them in a sibling file instead.
+	EnsureConfigDirectory();
+	std::wstring path = GetAppProfilesPath();
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return;
+
+	char header[64];
+	sprintf_s(header, "AppProfilesEnabled=%d\n", appProfilesEnabled ? 1 : 0);
+	fwrite(header, 1, strlen(header), f);
+
+	for (const AppProfileEntry& e : appProfiles) {
+		int cb1 = WideCharToMultiByte(CP_UTF8, 0, e.processName.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		int cb2 = WideCharToMultiByte(CP_UTF8, 0, e.configPath.c_str(),  -1, nullptr, 0, nullptr, nullptr);
+		if (cb1 <= 1 || cb2 <= 1) continue;
+		std::string s1(cb1 - 1, '\0'), s2(cb2 - 1, '\0');
+		WideCharToMultiByte(CP_UTF8, 0, e.processName.c_str(), -1, s1.data(), cb1, nullptr, nullptr);
+		WideCharToMultiByte(CP_UTF8, 0, e.configPath.c_str(),  -1, s2.data(), cb2, nullptr, nullptr);
+		std::string line = "AppProfile=" + s1 + "|" + s2 + "\n";
+		fwrite(line.data(), 1, line.size(), f);
+	}
+	fclose(f);
+}
+
+void AetherApp::LoadAppProfiles() {
+	appProfiles.clear();
+	appProfilesEnabled = false;
+	std::wstring path = GetAppProfilesPath();
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return;
+
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	if (size <= 0) { fclose(f); return; }
+	std::string buf(size, '\0');
+	fread(buf.data(), 1, size, f);
+	fclose(f);
+
+	size_t pos = 0;
+	while (pos < buf.size()) {
+		size_t nl = buf.find('\n', pos);
+		std::string line = buf.substr(pos, (nl == std::string::npos ? buf.size() : nl) - pos);
+		pos = (nl == std::string::npos) ? buf.size() : nl + 1;
+		while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+		if (line.empty() || line[0] == '#') continue;
+
+		size_t eq = line.find('=');
+		if (eq == std::string::npos) continue;
+		std::string key = line.substr(0, eq);
+		std::string val = line.substr(eq + 1);
+
+		if (key == "AppProfilesEnabled") {
+			appProfilesEnabled = (atoi(val.c_str()) != 0);
+		}
+		else if (key == "AppProfile") {
+			size_t bar = val.find('|');
+			if (bar == std::string::npos) continue;
+			AppProfileEntry e;
+			e.processName = Utf8ToWide(val.substr(0, bar));
+			e.configPath  = Utf8ToWide(val.substr(bar + 1));
+			if (!e.processName.empty() && !e.configPath.empty())
+				appProfiles.push_back(e);
+		}
+	}
+}
+
+std::wstring AetherApp::GetForegroundProcessName() {
+	HWND fg = GetForegroundWindow();
+	if (!fg) return L"";
+	DWORD pid = 0;
+	GetWindowThreadProcessId(fg, &pid);
+	if (!pid) return L"";
+	HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+	if (!proc) return L"";
+	wchar_t path[MAX_PATH] = {};
+	DWORD sz = MAX_PATH;
+	BOOL ok = QueryFullProcessImageNameW(proc, 0, path, &sz);
+	CloseHandle(proc);
+	if (!ok) return L"";
+	std::wstring full = path;
+	size_t slash = full.find_last_of(L"\\/");
+	std::wstring name = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+	for (auto& c : name) c = (wchar_t)towlower(c);
+	return name;
+}
+
+void AetherApp::PollForegroundProcess() {
+	DWORD tick = GetTickCount();
+	if (tick - lastForegroundPollTick < 400) return; // ~2 Hz is plenty
+	lastForegroundPollTick = tick;
+
+	std::wstring name = GetForegroundProcessName();
+	if (name.empty()) return;
+
+	if (_wcsicmp(name.c_str(), L"aether.exe") != 0 &&
+		_wcsicmp(name.c_str(), L"aethergui.exe") != 0) {
+		lastForeignForeground = name;
+	}
+
+	if (!appProfilesEnabled || appProfiles.empty()) return;
+	if (name == lastForegroundProcess) return;
+
+	{
+		wchar_t buf[256];
+		swprintf_s(buf, L"[Aether] foreground changed: %s (was %s); %d profile(s) configured\n",
+			name.c_str(),
+			lastForegroundProcess.empty() ? L"<none>" : lastForegroundProcess.c_str(),
+			(int)appProfiles.size());
+		OutputDebugStringW(buf);
+	}
+	lastForegroundProcess = name;
+
+	bool matched = false;
+	for (const AppProfileEntry& e : appProfiles) {
+		{
+			wchar_t buf[300];
+			swprintf_s(buf, L"[Aether]   check: profile=%s vs %s -> %s\n",
+				e.processName.c_str(), name.c_str(),
+				(_wcsicmp(e.processName.c_str(), name.c_str()) == 0) ? L"MATCH" : L"no");
+			OutputDebugStringW(buf);
+		}
+		if (_wcsicmp(e.processName.c_str(), name.c_str()) != 0) continue;
+		DWORD attrs = GetFileAttributesW(e.configPath.c_str());
+		if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+			wchar_t buf[300];
+			swprintf_s(buf, L"[Aether]   path missing: %s\n", e.configPath.c_str());
+			OutputDebugStringW(buf);
+			continue;
+		}
+
+		activeConfigPath  = e.configPath;
+		loadingFromFile   = true;
+		LoadConfig(activeConfigPath);
+		loadingFromFile   = false;
+		suppressNamedAutosave = true;
+		ApplyAllSettings();
+		SaveLastLoadedMarker();
+		RefreshConfigFiles();
+		wchar_t buf[300];
+		swprintf_s(buf, L"[Aether]   LOADED profile for %s -> %s\n",
+			name.c_str(), e.configPath.c_str());
+		OutputDebugStringW(buf);
+		matched = true;
+		break;
+	}
+	if (!matched) {
+		wchar_t buf[160];
+		swprintf_s(buf, L"[Aether]   no profile matched %s\n", name.c_str());
+		OutputDebugStringW(buf);
+	}
+}
+
+void AetherApp::AddAppProfileFromForeground() {
+	// Prefer the last foreign foreground we observed -- typically the user
+	// alt-tabs from the target app into the GUI to click Add, so at click
+	// time the foreground is the GUI itself. Fall back to current foreground
+	// only if the watcher hasn't recorded anything yet.
+	std::wstring name = lastForeignForeground;
+	if (name.empty()) name = GetForegroundProcessName();
+	if (name.empty()) return;
+
+	for (AppProfileEntry& e : appProfiles) {
+		if (_wcsicmp(e.processName.c_str(), name.c_str()) == 0) {
+			e.configPath = activeConfigPath;
+			SaveAppProfiles();
+			return;
+		}
+	}
+	AppProfileEntry e;
+	e.processName = name;
+	e.configPath  = activeConfigPath;
+	appProfiles.push_back(e);
+	SaveAppProfiles();
+}
+
+// ===== CORNER CALIBRATION =====
+
+static const wchar_t* kCornerLabels[4] = {
+	L"TOP-LEFT",
+	L"TOP-RIGHT",
+	L"BOTTOM-RIGHT",
+	L"BOTTOM-LEFT",
+};
+
+void AetherApp::StartCalibration() {
+	calibrationOpen = true;
+	calibrationStep = 0;
+	calibrationWaitingForLift = false;
+	calibrationLastSeenValid = false;
+	for (int i = 0; i < 4; ++i) {
+		calibrationCapturedX[i] = 0;
+		calibrationCapturedY[i] = 0;
+	}
+}
+
+void AetherApp::TickCalibration() {
+	if (!calibrationOpen) return;
+
+	float px = driver.penX.load();
+	float py = driver.penY.load();
+	float pp = driver.penPressure.load();
+	bool active = driver.penActive.load();
+
+	// Workflow: user presses pen to a corner -> we wait for press, capture
+	// X/Y while pressed, then commit on lift. Capturing on lift gives the
+	// most stable reading because the user is no longer dragging.
+	if (!calibrationWaitingForLift) {
+		if (active && pp > 0.05f) {
+			calibrationLastSeenX = px;
+			calibrationLastSeenY = py;
+			calibrationLastSeenValid = true;
+			calibrationWaitingForLift = true;
+		}
+	}
+	else {
+		// Update captured pos with the most recent contact sample.
+		if (active && pp > 0.05f) {
+			calibrationLastSeenX = px;
+			calibrationLastSeenY = py;
+		}
+		else {
+			// Pen lifted -- commit and move to next corner.
+			if (calibrationStep >= 0 && calibrationStep < 4) {
+				calibrationCapturedX[calibrationStep] = calibrationLastSeenX;
+				calibrationCapturedY[calibrationStep] = calibrationLastSeenY;
+			}
+			calibrationStep++;
+			calibrationWaitingForLift = false;
+			calibrationLastSeenValid = false;
+			if (calibrationStep >= 4) {
+				ApplyCalibrationResult();
+				calibrationOpen = false;
+			}
+		}
+	}
+}
+
+void AetherApp::ApplyCalibrationResult() {
+	// Derive bounding rect from the four captured points. Use min/max instead
+	// of assuming the user tapped in the expected order: even if they tap a
+	// little out of sequence, the resulting rectangle is what they intended.
+	float minX = calibrationCapturedX[0], maxX = minX;
+	float minY = calibrationCapturedY[0], maxY = minY;
+	for (int i = 1; i < 4; ++i) {
+		minX = std::min(minX, calibrationCapturedX[i]);
+		maxX = std::max(maxX, calibrationCapturedX[i]);
+		minY = std::min(minY, calibrationCapturedY[i]);
+		maxY = std::max(maxY, calibrationCapturedY[i]);
+	}
+	float w = maxX - minX;
+	float h = maxY - minY;
+	if (w < 5.0f || h < 5.0f) return; // sanity: probably bad capture
+
+	area.tabletX.value      = minX;
+	area.tabletY.value      = minY;
+	area.tabletWidth.value  = w;
+	area.tabletHeight.value = h;
+	ApplyAllSettings();
+}
+
+void AetherApp::DrawCalibrationModal() {
+	if (!calibrationOpen) return;
+
+	float W = clientWidth;
+	float H = clientHeight;
+	renderer.FillRect(0, 0, W, H, D2D1::ColorF(0, 0, 0, 0.55f));
+
+	float modalW = 420.0f;
+	float modalH = 260.0f;
+	float mx = (W - modalW) * 0.5f;
+	float my = (H - modalH) * 0.5f;
+	renderer.FillRoundedRect(mx, my, modalW, modalH, 10, Theme::BgElevated());
+	renderer.DrawRoundedRect(mx, my, modalW, modalH, 10, Theme::BorderAccent());
+
+	renderer.DrawText(L"CORNER CALIBRATION", mx, my + 14, modalW, 24,
+		Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+
+	wchar_t step[64];
+	if (calibrationStep < 4) {
+		swprintf_s(step, L"Step %d of 4", calibrationStep + 1);
+	}
+	else {
+		swprintf_s(step, L"Done");
+	}
+	renderer.DrawText(step, mx, my + 42, modalW, 18,
+		Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
+
+	std::wstring prompt;
+	if (calibrationStep < 4) {
+		prompt = L"Press pen on the ";
+		prompt += kCornerLabels[calibrationStep];
+		prompt += L" corner of the tablet, then lift";
+	}
+	else {
+		prompt = L"Applying calibration...";
+	}
+	renderer.DrawText(prompt.c_str(), mx + 20, my + 78, modalW - 40, 30,
+		Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+
+	// Live position readout while the pen is on the surface.
+	if (calibrationWaitingForLift) {
+		wchar_t live[96];
+		swprintf_s(live, L"Holding... X=%.2f mm  Y=%.2f mm",
+			calibrationLastSeenX, calibrationLastSeenY);
+		renderer.DrawText(live, mx + 20, my + 118, modalW - 40, 24,
+			Theme::AccentPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+	}
+	else if (calibrationStep < 4) {
+		renderer.DrawText(L"Waiting for pen contact...", mx + 20, my + 118, modalW - 40, 24,
+			Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
+	}
+
+	// Show captured corners so far.
+	for (int i = 0; i < calibrationStep && i < 4; ++i) {
+		wchar_t row[96];
+		swprintf_s(row, L"%s: (%.2f, %.2f)", kCornerLabels[i],
+			calibrationCapturedX[i], calibrationCapturedY[i]);
+		renderer.DrawText(row, mx + 30, my + 150 + i * 18.0f, modalW - 60, 18,
+			Theme::TextSecondary(), renderer.pFontSmall);
+	}
+
+	// Cancel button bottom-right.
+	float btnW = 120.0f, btnH = 28.0f;
+	float bx = mx + modalW - btnW - 20.0f;
+	float by = my + modalH - btnH - 16.0f;
+	bool hover = PointInRect(mouseX, mouseY, bx, by, btnW, btnH);
+	D2D1_COLOR_F bg = hover
+		? Theme::Error()
+		: D2D1::ColorF(Theme::Error().r, Theme::Error().g, Theme::Error().b, 0.18f);
+	renderer.FillRoundedRect(bx, by, btnW, btnH, 6, bg);
+	renderer.DrawRoundedRect(bx, by, btnW, btnH, 6,
+		hover ? Theme::BorderAccent() : Theme::BorderSubtle());
+	renderer.DrawText(L"Cancel", bx, by, btnW, btnH,
+		hover ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+		renderer.pFontSmall, Renderer::AlignCenter);
+	if (hover && mouseClicked) {
+		calibrationOpen = false;
+	}
+}
+
+bool AetherApp::LoadConfigByHotkey(int oneBasedIndex) {
+	if (oneBasedIndex < 1) return false;
+	int idx = oneBasedIndex - 1;
+	if (idx >= (int)configEntries.size()) return false;
+
+	const std::wstring path = configEntries[idx].path;
+	DWORD attrs = GetFileAttributesW(path.c_str());
+	if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY))
+		return false;
+
+	selectedConfigIndex = idx;
+	activeConfigPath    = path;
+	loadingFromFile     = true;
+	LoadConfig(activeConfigPath);
+	loadingFromFile     = false;
+	suppressNamedAutosave = true;  // ApplyAllSettings -> AutoSaveConfig would otherwise rewrite
+	ApplyAllSettings();
+	SaveLastLoadedMarker();
 	RefreshConfigFiles();
 	return true;
 }
@@ -4162,6 +4838,26 @@ void AetherApp::DrawAreaPanel() {
 	sec.Layout(cx, y, cw, L"TABLET AREA");
 	y += sec.Draw(renderer);
 
+	// Calibrate corners button -- placed right below the section header so
+	// it's discoverable but doesn't compete with the preview rectangle. It
+	// kicks off a 4-step wizard that asks the user to tap each tablet corner
+	// with the pen and then writes the captured bounds to the area sliders.
+	{
+		float calW = 180.0f;
+		float calH = 24.0f;
+		float calX = cx + cw - calW;
+		float calY = y - 30.0f;
+		bool hover = PointInRect(mouseX, mouseY, calX, calY, calW, calH);
+		D2D1_COLOR_F bg = hover ? Theme::AccentPrimary() : Theme::AccentDim();
+		renderer.FillRoundedRect(calX, calY, calW, calH, 5, bg);
+		renderer.DrawRoundedRect(calX, calY, calW, calH, 5,
+			hover ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(L"Calibrate corners", calX, calY, calW, calH,
+			hover ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+		if (hover && mouseClicked) StartCalibration();
+	}
+
 	{
 		
 		float fullTabletW = (driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f;
@@ -4531,6 +5227,25 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "UITheme=" << currentTheme << "\n";
 	f << "DpiScale=" << dpiScale.value << "\n";
 
+	// Persist the chosen monitor so Load restores not just the screen rectangle
+	// but also the actual entry the user picked. The index is fragile (the
+	// monitor list can reorder between sessions), so we also write the rect
+	// and label as an identity "fingerprint" that LoadConfig can match against
+	// the live monitor list.
+	f << "SelectedDisplayTarget=" << selectedDisplayTarget << "\n";
+	if (selectedDisplayTarget >= 0 && selectedDisplayTarget < (int)displayTargets.size()) {
+		const DisplayTarget& dt = displayTargets[selectedDisplayTarget];
+		int cb = WideCharToMultiByte(CP_UTF8, 0, dt.label.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		std::string utf8;
+		if (cb > 0) {
+			utf8.assign((size_t)(cb - 1), '\0');
+			WideCharToMultiByte(CP_UTF8, 0, dt.label.c_str(), -1, utf8.data(), cb, nullptr, nullptr);
+		}
+		f << "DisplayTargetLabel=" << utf8 << "\n";
+		f << "DisplayTargetRect=" << dt.x << " " << dt.y << " "
+		                          << dt.width << " " << dt.height << "\n";
+	}
+
 	f << "\n";
 	f << "SmoothingEnabled=" << (int)filters.smoothingEnabled.value << "\n";
 	f << "SmoothingLatency=" << filters.smoothingLatency.value << "\n";
@@ -4584,6 +5299,13 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "AetherRhythmJitter=" << aether.rhythmFlowJitter.value << "\n";
 	f << "AetherSuppression=" << (int)aether.suppressionEnabled.value << "\n";
 	f << "AetherSuppressTime=" << aether.suppressionTime.value << "\n";
+
+	f << "ClickStabilizerEnabled=" << (int)clickStabilize.enabled.value << "\n";
+	f << "ClickStabilizerMs=" << clickStabilize.holdMs.value << "\n";
+	for (int i = 0; i < kConfigHotkeyCount; ++i) {
+		f << "HotkeySlot" << (i + 1) << "="
+		  << configHotkeys[i].mods << " " << configHotkeys[i].vk << "\n";
+	}
 	f << "Visualizer=" << (int)visualizerToggle.value << "\n";
 	f << "ParticleStyle=" << particleStyle << "\n";
 
@@ -4611,6 +5333,16 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 	float loadedAccentG = Theme::Custom::AccentG;
 	float loadedAccentB = Theme::Custom::AccentB;
 	bool hasLoadedAccent = false;
+
+	// Display-target restoration. We try, in order:
+	//   1. exact-rect match against the live monitor list  (best, immune to reorder)
+	//   2. label match                                      (handles label edits)
+	//   3. saved index                                      (last resort)
+	int loadedDisplayIndex = -1;
+	std::wstring loadedDisplayLabel;
+	bool hasLoadedDisplayRect = false;
+	float loadedDisplayX = 0, loadedDisplayY = 0, loadedDisplayW = 0, loadedDisplayH = 0;
+
 	std::string line;
 	while (std::getline(f, line)) {
 		if (line.empty() || line[0] == '#') continue;
@@ -4628,6 +5360,19 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		}
 		if (key == "PluginRepoRef") {
 			pluginRepoRef = Utf8ToWide(rawValue);
+			continue;
+		}
+		if (key == "DisplayTargetLabel") {
+			loadedDisplayLabel = Utf8ToWide(rawValue);
+			continue;
+		}
+		if (key == "DisplayTargetRect") {
+			float dx = 0, dy = 0, dw = 0, dh = 0;
+			if (sscanf_s(rawValue.c_str(), "%f %f %f %f", &dx, &dy, &dw, &dh) == 4) {
+				loadedDisplayX = dx; loadedDisplayY = dy;
+				loadedDisplayW = dw; loadedDisplayH = dh;
+				hasLoadedDisplayRect = true;
+			}
 			continue;
 		}
 
@@ -4676,6 +5421,9 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "DpiScale") {
 			dpiScale.value = Clamp(val, dpiScale.minVal, dpiScale.maxVal);
 			dpiScale.animValue = dpiScale.value;
+		}
+		else if (key == "SelectedDisplayTarget") {
+			loadedDisplayIndex = (int)val;
 		}
 		else if (key == "DpiScaleMode") {
 			int idx = (int)val;
@@ -4729,6 +5477,18 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "AetherRhythmJitter") aether.rhythmFlowJitter.value = val;
 		else if (key == "AetherSuppression") aether.suppressionEnabled.value = (val > 0.5f);
 		else if (key == "AetherSuppressTime") aether.suppressionTime.value = val;
+		else if (key == "ClickStabilizerEnabled") clickStabilize.enabled.value = (val > 0.5f);
+		else if (key == "ClickStabilizerMs") clickStabilize.holdMs.value = val;
+		else if (key.rfind("HotkeySlot", 0) == 0) {
+			int slot = atoi(key.c_str() + 10);
+			if (slot >= 1 && slot <= kConfigHotkeyCount) {
+				unsigned int m = 0, vk = 0;
+				if (sscanf_s(rawValue.c_str(), "%u %u", &m, &vk) == 2) {
+					configHotkeys[slot - 1].mods = m;
+					configHotkeys[slot - 1].vk   = vk;
+				}
+			}
+		}
 		else if (key == "Visualizer") visualizerToggle.value = (val > 0.5f);
 		else if (key == "ParticleStyle") { particleStyle = (int)val; if (particleStyle < 0 || particleStyle > 3) particleStyle = 0; }
 		else if (key.rfind("PluginEnabled.", 0) == 0) {
@@ -4775,12 +5535,54 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		}
 	}
 	f.close();
+
+	// Resolve which monitor to use based on what was saved. Try a strict
+	// rect match first, then fall back to label, then to the saved index.
+	// This survives the user reordering monitors between sessions.
+	if (!displayTargets.empty()) {
+		int resolved = -1;
+		if (hasLoadedDisplayRect) {
+			for (int i = 0; i < (int)displayTargets.size(); i++) {
+				const DisplayTarget& dt = displayTargets[i];
+				if (fabsf(dt.x - loadedDisplayX) < 0.5f &&
+				    fabsf(dt.y - loadedDisplayY) < 0.5f &&
+				    fabsf(dt.width  - loadedDisplayW) < 0.5f &&
+				    fabsf(dt.height - loadedDisplayH) < 0.5f) {
+					resolved = i;
+					break;
+				}
+			}
+		}
+		if (resolved < 0 && !loadedDisplayLabel.empty()) {
+			for (int i = 0; i < (int)displayTargets.size(); i++) {
+				if (displayTargets[i].label == loadedDisplayLabel) {
+					resolved = i;
+					break;
+				}
+			}
+		}
+		if (resolved < 0 && loadedDisplayIndex >= 0 &&
+		                    loadedDisplayIndex < (int)displayTargets.size()) {
+			resolved = loadedDisplayIndex;
+		}
+		if (resolved >= 0)
+			selectedDisplayTarget = resolved;
+	}
+
 	ClampScreenArea();
 	area.aspectRatio.value = Clamp(area.aspectRatio.value, area.aspectRatio.minVal, area.aspectRatio.maxVal);
 	area.aspectRatio.animValue = area.aspectRatio.value;
-	if (!area.customValues.value)
+	// Don't centre when restoring from disk -- the saved screenX/screenY ARE
+	// the user's intent. Centering only makes sense for fresh sessions where
+	// the screen rect was zeroed and the user hasn't picked a position yet.
+	if (!loadingFromFile && !area.customValues.value)
 		CenterScreenArea();
-	ApplyAspectLock(false);
+	// Same reasoning for ApplyAspectLock: it recomputes tabletHeight from
+	// tabletWidth/screen aspect, which silently overwrites the tablet area
+	// values we just restored. Skip it when loading from disk; the saved
+	// numbers ARE the desired aspect.
+	if (!loadingFromFile)
+		ApplyAspectLock(false);
 	ApplyDpiScale();
 	if (hasLoadedAccent)
 		Theme::Custom::SetAccent(loadedAccentR, loadedAccentG, loadedAccentB);
@@ -4804,6 +5606,9 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 	wcscpy_s(pluginRepoRefInput.buffer, pluginRepoRef.c_str());
 	pluginRepoRefInput.cursor = (int)pluginRepoRef.length();
 	SyncLoadedControlVisuals();
+
+	// Pick up any per-slot hotkey rebinds that were just read.
+	RegisterConfigHotkeys();
 }
 
 void AetherApp::DrawPluginFilterControls(float cx, float& y, float cw, float hw, float filterRightX, bool filterSingleColumn, bool& filterChanged) {
@@ -5524,6 +6329,18 @@ void AetherApp::DrawFilterPanel() {
 		}
 	}
 
+	// CLICK STABILIZER -- lives outside the AetherSmooth block on purpose: it
+	// is its own filter, and the user often wants it on regardless of whether
+	// AetherSmooth as a whole is active.
+	sec.Layout(cx, y, cw, L"CLICK STABILIZER"); y += sec.Draw(renderer);
+	clickStabilize.enabled.y = y; clickStabilize.enabled.x = cx;
+	filterChanged |= clickStabilize.enabled.Update(mouseX, mouseY, mouseClicked, deltaTime); clickStabilize.enabled.Draw(renderer); y += 28;
+	if (clickStabilize.enabled.value) {
+		clickStabilize.holdMs.y = y; clickStabilize.holdMs.x = cx; clickStabilize.holdMs.width = hw;
+		filterChanged |= clickStabilize.holdMs.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); clickStabilize.holdMs.Draw(renderer);
+		y += 48;
+	}
+
 	
 	sec.Layout(cx, y, cw, L"PLUGINS"); y += sec.Draw(renderer);
 	DrawPluginFilterControls(cx, y, cw, hw, filterRightX, filterSingleColumn, filterChanged);
@@ -6144,6 +6961,19 @@ void AetherApp::DrawConfigManager(float x, float& y, float w) {
 	renderer.DrawText(activeName.c_str(), x + 4, y, saveX - x - 12, 28, Theme::TextSecondary(), renderer.pFontSmall);
 	y += 36;
 
+	// Hotkey hint. Each row below has its own clickable badge with the
+	// per-slot combo; this line just tells the user that's what those are.
+	{
+		const wchar_t* hint =
+			capturingHotkeySlot >= 0
+			? L"Press a key combination to bind  (Esc to cancel)"
+			: L"Click a slot's badge to set hotkey";
+		renderer.DrawText(hint, x + 4, y, w - 8, 22,
+			capturingHotkeySlot >= 0 ? Theme::TextPrimary() : Theme::TextMuted(),
+			renderer.pFontSmall);
+		y += 26;
+	}
+
 	if (configEntries.empty()) {
 		renderer.FillRoundedRect(x, y, w, 30, 6, Theme::BgElevated());
 		renderer.DrawRoundedRect(x, y, w, 30, 6, Theme::BorderSubtle());
@@ -6162,41 +6992,128 @@ void AetherApp::DrawConfigManager(float x, float& y, float w) {
 		renderer.DrawRoundedRect(x, rowY, w, rowH, 6, selected ? Theme::BorderAccent() : Theme::BorderSubtle());
 
 		float miniW = 54.0f;
-		float loadBtnX = x + w - miniW - 8.0f;
-		float saveBtnX = loadBtnX - miniW - 6.0f;
+		float deleteBtnX = x + w - miniW - 8.0f;
+		float loadBtnX   = deleteBtnX - miniW - 6.0f;
+		float saveBtnX   = loadBtnX   - miniW - 6.0f;
 		float btnY = rowY + 4.0f;
 		float btnH = rowH - 8.0f;
-		bool saveHovered = PointInRect(mouseX, mouseY, saveBtnX, btnY, miniW, btnH);
-		bool loadHovered = PointInRect(mouseX, mouseY, loadBtnX, btnY, miniW, btnH);
+		bool saveHovered   = PointInRect(mouseX, mouseY, saveBtnX,   btnY, miniW, btnH);
+		bool loadHovered   = PointInRect(mouseX, mouseY, loadBtnX,   btnY, miniW, btnH);
+		bool deleteHovered = PointInRect(mouseX, mouseY, deleteBtnX, btnY, miniW, btnH);
 
-		renderer.DrawText(configEntries[i].name.c_str(), x + 10, rowY, saveBtnX - x - 18, rowH,
+		// Hotkey badge for the first 9 slots. Clicking it puts that slot into
+		// capture mode -- the next non-modifier key press in OnKeyDown writes
+		// the new binding. The badge sits just left of the Save button.
+		float hotkeyW = 110.0f;
+		float hotkeyX = saveBtnX - hotkeyW - 8.0f;
+		float hotkeyY = btnY;
+		float hotkeyH = btnH;
+		bool hotkeyHovered = (i < kConfigHotkeyCount) && PointInRect(mouseX, mouseY, hotkeyX, hotkeyY, hotkeyW, hotkeyH);
+
+		renderer.DrawText(configEntries[i].name.c_str(), x + 10, rowY,
+			(i < kConfigHotkeyCount ? hotkeyX : saveBtnX) - x - 18, rowH,
 			selected ? Theme::TextPrimary() : Theme::TextSecondary(), renderer.pFontSmall);
 
-		D2D1_COLOR_F saveBg = saveHovered ? Theme::BgHover() : Theme::BgSurface();
-		renderer.FillRoundedRect(saveBtnX, btnY, miniW, btnH, 5, saveBg);
-		renderer.DrawRoundedRect(saveBtnX, btnY, miniW, btnH, 5, Theme::BorderSubtle());
-		renderer.DrawText(L"Save", saveBtnX, btnY, miniW, btnH, Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+		if (i < kConfigHotkeyCount) {
+			bool capturing = (capturingHotkeySlot == i);
+			std::wstring label;
+			if (capturing)             label = L"press keys...";
+			else if (configHotkeys[i].vk == 0) label = L"unbound";
+			else                       label = HotkeyLabelForSlot(i + 1);
 
-		D2D1_COLOR_F loadBg = loadHovered ? Theme::AccentPrimary() : Theme::BgSurface();
+			D2D1_COLOR_F bg = capturing
+				? Theme::AccentPrimary()
+				: (hotkeyHovered ? Theme::AccentPrimary() : Theme::AccentDim());
+			renderer.FillRoundedRect(hotkeyX, hotkeyY, hotkeyW, hotkeyH, 5, bg);
+			renderer.DrawRoundedRect(hotkeyX, hotkeyY, hotkeyW, hotkeyH, 5,
+				(capturing || hotkeyHovered) ? Theme::BorderAccent() : Theme::BorderSubtle());
+			renderer.DrawText(label.c_str(), hotkeyX, hotkeyY, hotkeyW, hotkeyH,
+				(capturing || hotkeyHovered) ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+				renderer.pFontSmall, Renderer::AlignCenter);
+		}
+
+		// Save / Load / Delete buttons. All three follow the same hover pattern
+		// as Load did originally: idle uses a tinted background derived from the
+		// active theme accent (or error red for Delete), hover lights up to the
+		// full accent. This way the row reads consistently across every theme
+		// instead of having Load track the accent and the other two staying on
+		// the neutral surface color.
+		D2D1_COLOR_F saveBg = saveHovered ? Theme::AccentPrimary() : Theme::AccentDim();
+		renderer.FillRoundedRect(saveBtnX, btnY, miniW, btnH, 5, saveBg);
+		renderer.DrawRoundedRect(saveBtnX, btnY, miniW, btnH, 5,
+			saveHovered ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(L"Save", saveBtnX, btnY, miniW, btnH,
+			saveHovered ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+
+		D2D1_COLOR_F loadBg = loadHovered ? Theme::AccentPrimary() : Theme::AccentDim();
 		renderer.FillRoundedRect(loadBtnX, btnY, miniW, btnH, 5, loadBg);
-		renderer.DrawRoundedRect(loadBtnX, btnY, miniW, btnH, 5, loadHovered ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawRoundedRect(loadBtnX, btnY, miniW, btnH, 5,
+			loadHovered ? Theme::BorderAccent() : Theme::BorderSubtle());
 		renderer.DrawText(L"Load", loadBtnX, btnY, miniW, btnH,
-			loadHovered ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+			loadHovered ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+
+		// Delete is destructive; we keep its idle state distinct from Save/Load
+		// by tinting it red so the row visually warns about the action without
+		// being so loud it draws the eye on every frame.
+		D2D1_COLOR_F deleteIdle = Theme::Error();
+		deleteIdle.a = 0.18f;
+		D2D1_COLOR_F deleteBg = deleteHovered ? Theme::Error() : deleteIdle;
+		renderer.FillRoundedRect(deleteBtnX, btnY, miniW, btnH, 5, deleteBg);
+		renderer.DrawRoundedRect(deleteBtnX, btnY, miniW, btnH, 5,
+			deleteHovered ? Theme::Error() : Theme::BorderSubtle());
+		renderer.DrawText(L"Delete", deleteBtnX, btnY, miniW, btnH,
+			deleteHovered ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
 
 		if (mouseClicked) {
+			if (hotkeyHovered && i < kConfigHotkeyCount) {
+				// Enter capture mode for this slot. The actual binding gets
+				// written by OnKeyDown when the user presses a non-modifier
+				// key. Esc cancels. Clicking the same badge again also cancels.
+				capturingHotkeySlot = (capturingHotkeySlot == i) ? -1 : i;
+				break;
+			}
 			if (saveHovered) {
 				selectedConfigIndex = i;
 				activeConfigPath = configEntries[i].path;
 				SaveConfig(activeConfigPath);
+				SaveLastLoadedMarker();
 				RefreshConfigFiles();
 				break;
 			}
 			else if (loadHovered) {
 				selectedConfigIndex = i;
 				activeConfigPath = configEntries[i].path;
+				loadingFromFile = true;
 				LoadConfig(activeConfigPath);
+				loadingFromFile = false;
+				// ApplyAllSettings about to fire AutoSaveConfig; tell it to
+				// skip rewriting the named config we just loaded.
+				suppressNamedAutosave = true;
 				ApplyAllSettings();
+				SaveLastLoadedMarker();
 				RefreshConfigFiles();
+				break;
+			}
+			else if (deleteHovered) {
+				// Confirm via the OS dialog so a stray click doesn't nuke a
+				// painstakingly tuned profile.
+				std::wstring prompt = L"Delete config '" + configEntries[i].name + L"'?\nThis cannot be undone.";
+				PrepareModalDialog();
+				int res = MessageBoxW(hWnd, prompt.c_str(), L"Delete config",
+					MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+				if (res == IDYES) {
+					std::wstring victim = configEntries[i].path;
+					DeleteFileW(victim.c_str());
+					if (_wcsicmp(victim.c_str(), activeConfigPath.c_str()) == 0) {
+						activeConfigPath.clear();
+						SaveLastLoadedMarker();
+					}
+					selectedConfigIndex = -1;
+					RefreshConfigFiles();
+				}
 				break;
 			}
 			else if (hovered) {
@@ -6206,6 +7123,112 @@ void AetherApp::DrawConfigManager(float x, float& y, float w) {
 	}
 
 	y += (float)configEntries.size() * (rowH + 6.0f) + 4.0f;
+
+	// ===== PER-APP PROFILES =====
+	// Section header and master toggle.
+	sec.Layout(x, y, w, L"PER-APP PROFILES");
+	y += sec.Draw(renderer);
+
+	{
+		float toggleW = 130.0f;
+		float toggleH = 22.0f;
+		float toggleX = x;
+		float toggleY = y;
+		bool toggleHover = PointInRect(mouseX, mouseY, toggleX, toggleY, toggleW, toggleH);
+		std::wstring label = appProfilesEnabled ? L"Auto-switch: ON" : L"Auto-switch: OFF";
+		D2D1_COLOR_F bg = appProfilesEnabled
+			? (toggleHover ? Theme::AccentPrimary() : Theme::AccentDim())
+			: (toggleHover ? Theme::BgHover() : Theme::BgElevated());
+		renderer.FillRoundedRect(toggleX, toggleY, toggleW, toggleH, 5, bg);
+		renderer.DrawRoundedRect(toggleX, toggleY, toggleW, toggleH, 5,
+			(appProfilesEnabled || toggleHover) ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(label.c_str(), toggleX, toggleY, toggleW, toggleH,
+			(appProfilesEnabled || toggleHover) ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+		if (toggleHover && mouseClicked) {
+			appProfilesEnabled = !appProfilesEnabled;
+			lastForegroundProcess.clear(); // re-trigger on next poll
+			SaveAppProfiles();
+		}
+
+		// "Add" button on the right. Shows which process will be captured so
+		// the user isn't guessing -- the watcher remembers the last foreign
+		// foreground, since clicking this button inevitably puts the GUI on top.
+		float addW = 240.0f;
+		float addX = x + w - addW;
+		bool addHover = PointInRect(mouseX, mouseY, addX, toggleY, addW, toggleH);
+		D2D1_COLOR_F addBg = addHover ? Theme::AccentPrimary() : Theme::AccentDim();
+		renderer.FillRoundedRect(addX, toggleY, addW, toggleH, 5, addBg);
+		renderer.DrawRoundedRect(addX, toggleY, addW, toggleH, 5,
+			addHover ? Theme::BorderAccent() : Theme::BorderSubtle());
+		std::wstring addLabel;
+		if (lastForeignForeground.empty())
+			addLabel = L"+ Add  (focus another window first)";
+		else
+			addLabel = L"+ Add  " + lastForeignForeground;
+		renderer.DrawText(addLabel.c_str(), addX, toggleY, addW, toggleH,
+			addHover ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+		if (addHover && mouseClicked) AddAppProfileFromForeground();
+
+		y += toggleH + 8.0f;
+	}
+
+	// Hint about behavior.
+	renderer.DrawText(
+		L"When the foreground window matches a process here, its profile loads automatically.",
+		x + 2, y, w - 4, 18, Theme::TextMuted(), renderer.pFontSmall);
+	y += 22.0f;
+
+	if (appProfiles.empty()) {
+		renderer.FillRoundedRect(x, y, w, 28, 6, Theme::BgElevated());
+		renderer.DrawRoundedRect(x, y, w, 28, 6, Theme::BorderSubtle());
+		renderer.DrawText(L"No app profiles yet. Click '+ Add current foreground' to map one.",
+			x + 10, y, w - 20, 28, Theme::TextMuted(), renderer.pFontSmall);
+		y += 34.0f;
+		return;
+	}
+
+	float appRowH = 28.0f;
+	int removeIdx = -1;
+	for (int i = 0; i < (int)appProfiles.size(); ++i) {
+		float rowY = y + i * (appRowH + 4.0f);
+		renderer.FillRoundedRect(x, rowY, w, appRowH, 6, Theme::BgElevated());
+		renderer.DrawRoundedRect(x, rowY, w, appRowH, 6, Theme::BorderSubtle());
+
+		float removeW = 70.0f;
+		float removeX = x + w - removeW - 8.0f;
+		float btnY = rowY + 3.0f;
+		float btnH = appRowH - 6.0f;
+		bool removeHover = PointInRect(mouseX, mouseY, removeX, btnY, removeW, btnH);
+
+		// process | -> | config name
+		std::wstring cfgName = appProfiles[i].configPath;
+		size_t slash = cfgName.find_last_of(L"\\/");
+		if (slash != std::wstring::npos) cfgName = cfgName.substr(slash + 1);
+		std::wstring line = appProfiles[i].processName + L"  ->  " + cfgName;
+		renderer.DrawText(line.c_str(), x + 10, rowY, removeX - x - 18, appRowH,
+			Theme::TextPrimary(), renderer.pFontSmall);
+
+		D2D1_COLOR_F rmBg = removeHover
+			? Theme::Error()
+			: D2D1::ColorF(Theme::Error().r, Theme::Error().g, Theme::Error().b, 0.18f);
+		renderer.FillRoundedRect(removeX, btnY, removeW, btnH, 5, rmBg);
+		renderer.DrawRoundedRect(removeX, btnY, removeW, btnH, 5,
+			removeHover ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(L"Remove", removeX, btnY, removeW, btnH,
+			removeHover ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+
+		if (mouseClicked && removeHover) {
+			removeIdx = i;
+		}
+	}
+	if (removeIdx >= 0) {
+		appProfiles.erase(appProfiles.begin() + removeIdx);
+		SaveAppProfiles();
+	}
+	y += (float)appProfiles.size() * (appRowH + 4.0f) + 6.0f;
 }
 
 void AetherApp::UpdateHzMeter() {

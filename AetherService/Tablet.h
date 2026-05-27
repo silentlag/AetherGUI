@@ -12,6 +12,7 @@
 #include "TabletFilterReconstructor.h"
 #include "TabletFilterAdaptive.h"
 #include "TabletFilterAetherSmooth.h"
+#include "TabletFilterClickStabilizer.h"
 #include "TabletFilterPlugin.h"
 #include "TabletBenchmark.h"
 #include "Vector2D.h"
@@ -68,6 +69,8 @@ public:
 	TabletFilterAdaptive adaptive;
 
 	TabletFilterAetherSmooth aetherSmooth;
+
+	TabletFilterClickStabilizer clickStabilizer;
 
 	std::vector<TabletFilterPlugin*> pluginFilters;
 

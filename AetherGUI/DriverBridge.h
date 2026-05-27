@@ -85,9 +85,19 @@ public:
 	// Public so the GUI can show the user where the log file lives.
 	const std::wstring& GetDebugLogPath() const { return debugLogPath; }
 
+	// Called from the GUI main thread once per frame. Drains the shared-
+	// memory ring (if available) into the public penX/Y/pressure/hz atomics
+	// and trail buffer. Cheap when nothing happens.
+	void PollShmem();
+
 private:
 	static DWORD WINAPI ReadThreadProc(LPVOID param);
 	void ReadLoop();
 	
 	void ParseStatusLine(const std::string& line);
+
+	// Shared-memory fast path. Pointer so the .h doesn't need to pull in the
+	// full reader/header; concrete type lives in the .cpp.
+	class StatusSharedReader* shmem = nullptr;
+	bool shmemActive = false;
 };

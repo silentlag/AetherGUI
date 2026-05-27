@@ -352,6 +352,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		app.OnKeyDown((int)wParam);
 		return 0;
 
+	case WM_HOTKEY: {
+		// Hotkey id encoding: 0xA001..0xA009 -> config slot 1..9.
+		int id = (int)wParam;
+		{
+			wchar_t buf[96];
+			swprintf_s(buf, L"[Aether] WM_HOTKEY id=0x%04X\n", id);
+			OutputDebugStringW(buf);
+		}
+		if (id >= 0xA001 && id <= 0xA009) {
+			bool loaded = app.LoadConfigByHotkey(id - 0xA000);
+			wchar_t buf[96];
+			swprintf_s(buf, L"[Aether] hotkey load slot %d -> %s\n",
+				id - 0xA000, loaded ? L"OK" : L"NO-OP");
+			OutputDebugStringW(buf);
+		}
+		return 0;
+	}
+
 	case WM_SIZE:
 		if (wParam == SIZE_MINIMIZED) {
 			MinimizeToTray(hWnd);
@@ -442,6 +460,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 
 	case WM_DESTROY:
+		app.UnregisterConfigHotkeys();
 		RemoveTrayIcon();
 		isRunning = false;
 		PostQuitMessage(0);
@@ -583,11 +602,27 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		return 1;
 	}
 
+	// Register global Ctrl+Shift+1..9 (or whatever modifier the user picked,
+	// loaded from config) -> load configEntries[N-1]. Lives in AetherApp so
+	// the modifier can be flipped at runtime from the Configs panel.
+	app.RegisterConfigHotkeys();
+
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
 
 	MSG msg = {};
 	auto nextFrameTime = std::chrono::steady_clock::now();
+
+	// Frame pacing strategy:
+	//   * Sleep is replaced by MsgWaitForMultipleObjectsEx so the loop wakes
+	//     instantly on input rather than on the next Sleep boundary. That
+	//     removes up to ~8 ms of input-to-paint latency the old loop had.
+	//   * Once per frame we ask DWM to flush the compositor queue. On DWM-on
+	//     systems (Win10/11 always) this aligns our paint with the monitor's
+	//     vblank, so we render exactly one frame per refresh and don't waste
+	//     CPU on paints the compositor would just throw away.
+	//   * If DwmFlush returns an error (legacy / DWM disabled) we fall back
+	//     to the timer-based pacing so the loop never stalls.
 	while (isRunning) {
 		while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
 			if (msg.message == WM_QUIT) {
@@ -597,23 +632,36 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 			TranslateMessage(&msg);
 			DispatchMessageW(&msg);
 		}
+		if (!isRunning) break;
 
-		if (isRunning) {
-			if (windowHidden) {
-				Sleep(50);
+		if (windowHidden) {
+			// Tray-minimized: no rendering work, just keep pumping messages
+			// at a low rate so hotkeys / tray clicks stay responsive.
+			MsgWaitForMultipleObjectsEx(0, nullptr, 50, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			nextFrameTime = std::chrono::steady_clock::now();
+			continue;
+		}
+
+		auto now = std::chrono::steady_clock::now();
+		if (now >= nextFrameTime) {
+			app.Tick();
+
+			// Pace to DWM vblank when available; otherwise fall back to a
+			// fixed 16 ms tick. DwmFlush blocks for up to one refresh.
+			HRESULT hr = DwmFlush();
+			if (SUCCEEDED(hr)) {
+				// DWM did the waiting for us. Schedule the next deadline
+				// right now so the next iteration paints immediately.
 				nextFrameTime = std::chrono::steady_clock::now();
-				continue;
-			}
-
-			auto now = std::chrono::steady_clock::now();
-			if (now >= nextFrameTime) {
-				app.Tick();
+			} else {
 				nextFrameTime = now + std::chrono::milliseconds(16);
 			}
-			else {
-				auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrameTime - now).count();
-				Sleep((DWORD)Clamp((float)remaining, 1.0f, 8.0f));
-			}
+		} else {
+			auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+				nextFrameTime - now).count();
+			DWORD waitMs = (DWORD)Clamp((float)remainingMs, 1.0f, 8.0f);
+			MsgWaitForMultipleObjectsEx(0, nullptr, waitMs,
+				QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 		}
 	}
 

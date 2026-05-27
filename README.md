@@ -602,3 +602,42 @@
 </p>
 
 </div>
+
+
+
+## Antivirus false positives
+
+AetherGUI and AetherService are unsigned, and they do two things antivirus
+heuristics dislike: hook input and talk to HID devices. That's the whole job
+of a tablet driver, so generic ML detectors (Wacatac, Bearfoos, Wacapew, etc.)
+sometimes flag the binaries even though nothing malicious is happening.
+
+If your AV quarantines AetherGUI or AetherService:
+
+1. **Check the detection name.** Anything starting with Wacatac, Bearfoos,
+   Wacapew, "Trojan:Script/...", or labelled "Generic" / "Heuristic" /
+   "ML.Detection" is almost certainly a false positive. Real malware gets named
+   specifically (for example "Trojan:Win32/Emotet!gen").
+2. **Verify the download.** Only trust binaries from the official GitHub
+   releases page. Compare the SHA-256 of the file with what the release notes
+   list.
+3. **Add an exclusion.** Windows Security -> Virus and threat protection ->
+   Manage settings -> Exclusions: add the AetherGUI install folder.
+4. **Submit to the vendor as a false positive.** Microsoft accepts submissions
+   at https://www.microsoft.com/en-us/wdsi/filesubmission . Each report makes
+   future releases less likely to be flagged.
+
+What the project already does to minimise false positives:
+
+- All binaries ship a populated VS_VERSION_INFO block (CompanyName,
+  ProductName, FileDescription, version numbers).
+- Linker flags /GUARD:CF (Control Flow Guard) and /CETCOMPAT are enabled on
+  both AetherGUI.exe and AetherService.exe. Many AV heuristics treat the
+  absence of these as a "suspicious" signal.
+- No packing, no obfuscation, no anti-debug tricks. The binaries look exactly
+  like what they are: a regular Win32 application and a console helper.
+- Source is open: anything an AV report claims the binary does, you can verify
+  in the source tree.
+
+Long-term the only real fix is signing the binaries with an Authenticode
+certificate. That is on the roadmap.

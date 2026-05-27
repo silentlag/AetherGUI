@@ -157,43 +157,43 @@ bool Renderer::CreateTextFormats() {
 	hr = pDWriteFactory->CreateTextFormat(
 		Theme::Font::FamilyBrand, nullptr,
 		DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-		Theme::Font::SizeTitle * dpiScale, L"", &pFontTitle);
+		Theme::Font::SizeTitle, L"", &pFontTitle);
 	if (FAILED(hr)) {
 		hr = pDWriteFactory->CreateTextFormat(
 			Theme::Font::Family, nullptr,
 			DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-			Theme::Font::SizeTitle * dpiScale, L"", &pFontTitle);
+			Theme::Font::SizeTitle, L"", &pFontTitle);
 	}
 	if (FAILED(hr)) return false;
 
 	hr = pDWriteFactory->CreateTextFormat(
 		Theme::Font::Family, nullptr,
 		DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-		Theme::Font::SizeHeading * dpiScale, L"", &pFontHeading);
+		Theme::Font::SizeHeading, L"", &pFontHeading);
 	if (FAILED(hr)) return false;
 
 	hr = pDWriteFactory->CreateTextFormat(
 		Theme::Font::Family, nullptr,
 		DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-		Theme::Font::SizeBody * dpiScale, L"", &pFontBody);
+		Theme::Font::SizeBody, L"", &pFontBody);
 	if (FAILED(hr)) return false;
 
 	hr = pDWriteFactory->CreateTextFormat(
 		Theme::Font::Family, nullptr,
 		DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-		Theme::Font::SizeSmall * dpiScale, L"", &pFontSmall);
+		Theme::Font::SizeSmall, L"", &pFontSmall);
 	if (FAILED(hr)) return false;
 
 	hr = pDWriteFactory->CreateTextFormat(
 		Theme::Font::FamilyMono, nullptr,
 		DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-		Theme::Font::SizeBody * dpiScale, L"", &pFontMono);
+		Theme::Font::SizeBody, L"", &pFontMono);
 	if (FAILED(hr)) return false;
 
 	hr = pDWriteFactory->CreateTextFormat(
 		L"Segoe MDL2 Assets", nullptr,
 		DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-		16.0f * dpiScale, L"", &pFontIcon);
+		16.0f, L"", &pFontIcon);
 	if (FAILED(hr)) return false;
 
 	return true;
@@ -235,19 +235,26 @@ bool Renderer::SetDpiScale(float scale) {
 	if (fabsf(scale - dpiScale) < 0.001f)
 		return true;
 
+	// dpiScale is now consumed only by Theme::Runtime::UiScale (which AetherApp
+	// updates) and via the renderer transform pushed in BeginFrame. We do NOT
+	// rebuild fonts here -- DWrite formats use design-space sizes and the
+	// transform handles the actual physical-pixel scaling. Rebuilding fonts on
+	// every DPI tick was the source of the laggy text and the misaligned
+	// hit-test boxes.
 	dpiScale = scale;
-	SafeRelease(&pFontTitle);
-	SafeRelease(&pFontHeading);
-	SafeRelease(&pFontBody);
-	SafeRelease(&pFontSmall);
-	SafeRelease(&pFontMono);
-	SafeRelease(&pFontIcon);
-	return CreateTextFormats();
+	return true;
 }
 
 void Renderer::BeginFrame() {
 	if (!pRT) return;
 	pRT->BeginDraw();
+	// Rendering happens entirely in design pixels (96 DPI). The OS gave us a
+	// physical-pixel render target; push a Scale transform so every coordinate
+	// AetherApp sends us is multiplied up to physical pixels exactly once. This
+	// keeps layout, fonts, and mouse hit-test in the same coordinate space.
+	float s = Theme::Runtime::UiScale;
+	if (s < 0.001f) s = 1.0f;
+	pRT->SetTransform(D2D1::Matrix3x2F::Scale(s, s));
 	pRT->Clear(Theme::BgDeep());
 }
 

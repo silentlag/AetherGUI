@@ -83,30 +83,33 @@ void TabletFilterSmoothing::Update() {
 
 	deltaX = calculated_target.x - position.x;
 	deltaY = calculated_target.y - position.y;
-	distance = deltaX * deltaX + deltaY * deltaY;
-	distance = (distance > 0) ? sqrt(distance) : 0;
+	double distSq = deltaX * deltaX + deltaY * deltaY;
+	distance = (distSq > 0.0) ? sqrt(distSq) : 0.0;
 
- if (!AntichatterEnabled) {
+	if (!AntichatterEnabled) {
 		position.x += deltaX * weight;
 		position.y += deltaY * weight;
 	}
-
 	else {
+		// Original formula, kept verbatim so the slider feel matches what
+		// users tuned against. Two safety touches vs the legacy code:
+		//   1. compute pow() once per packet instead of twice (the legacy
+		//      version recomputed the whole expression for the clamp).
+		//   2. clamp the input to pow() away from zero so distance == 0 (pen
+		//      perfectly still between samples) doesn't push pow into +inf and
+		//      then rely on the post-clamp to hide it.
+		double base = distance + antichatterOffsetX;
+		if (base < 1e-6) base = 1e-6;
+		double shaped = pow(base, -antichatterStrength) * antichatterMultiplier;
+		double denom  = shaped + antichatterOffsetY;
+		if (denom < 0.0) denom = 0.0;
 
-		weightModifier = pow((distance + antichatterOffsetX), antichatterStrength*-1)*antichatterMultiplier;
-
-		if (weightModifier + antichatterOffsetY < 0)
-			weightModifier = 0;
-		else
-			weightModifier = pow((distance + antichatterOffsetX), antichatterStrength*-1)*antichatterMultiplier + antichatterOffsetY;
-
-		weightModifier = weight / weightModifier;
-		if (weightModifier > 1) weightModifier = 1;
-		else if (weightModifier < 0) weightModifier = 0;
+		weightModifier = (denom > 1e-9) ? (weight / denom) : 1.0;
+		if (weightModifier > 1.0) weightModifier = 1.0;
+		else if (weightModifier < 0.0) weightModifier = 0.0;
 
 		position.x += deltaX * weightModifier;
 		position.y += deltaY * weightModifier;
-
 	}
 }
 

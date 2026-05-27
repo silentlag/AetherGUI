@@ -1141,6 +1141,19 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.debounceMs);
 	}
 
+	else if (cmd->is("ClickStabilizer") || cmd->is("ClickStabilize")) {
+		if (!CheckTablet()) return true;
+		tablet->clickStabilizer.enabled         = cmd->GetBoolean(0, tablet->clickStabilizer.enabled);
+		tablet->clickStabilizer.clickStabilizeMs = cmd->GetDouble(1, tablet->clickStabilizer.clickStabilizeMs);
+		if (tablet->clickStabilizer.clickStabilizeMs < 0.0)
+			tablet->clickStabilizer.clickStabilizeMs = 0.0;
+		if (tablet->clickStabilizer.clickStabilizeMs > 200.0)
+			tablet->clickStabilizer.clickStabilizeMs = 200.0;
+		LOG_INFO("Click Stabilizer = %s, hold = %0.1f ms\n",
+			tablet->clickStabilizer.enabled ? "on" : "off",
+			tablet->clickStabilizer.clickStabilizeMs);
+	}
+
 	else if (cmd->is("PluginInstall") || cmd->is("InstallPlugin")) {
 		string source = cmd->GetString(0, "");
 		if (source.empty()) {

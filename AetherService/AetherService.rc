@@ -1,0 +1,11 @@
+// Resource script for AetherService.exe.
+// Only purpose: ship a populated VS_VERSION_INFO block so the binary doesn't
+// look like a generic unsigned tool to antivirus heuristics. See
+// AetherVersionInfo.rc.h for the rationale.
+
+#include <windows.h>
+
+#define AETHER_RC_INTERNAL_NAME     "AetherService"
+#define AETHER_RC_ORIGINAL_FILENAME "AetherService.exe"
+#define AETHER_RC_FILE_DESCRIPTION  "Aether tablet driver - background service"
+#include "AetherVersionInfo.rc.h"

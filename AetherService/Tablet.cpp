@@ -104,6 +104,11 @@ void Tablet::ResetPacketFilters() {
 	filterPacket[filterPacketCount++] = &reconstructor;
 	filterPacket[filterPacketCount++] = &adaptive;
 	filterPacket[filterPacketCount++] = &aetherSmooth;
+	// Click stabilizer runs LAST in the chain so it latches the position
+	// the user actually saw under the pen tip after every other filter has
+	// had its say. Putting it earlier would let smoothing/prediction shift
+	// the cursor away from the latched point during the hold window.
+	filterPacket[filterPacketCount++] = &clickStabilizer;
 }
 
 void Tablet::ClearPluginFilters() {
