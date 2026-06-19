@@ -24,4 +24,3 @@ public:
 	TabletFilterNoiseReduction();
 	~TabletFilterNoiseReduction();
 };
-

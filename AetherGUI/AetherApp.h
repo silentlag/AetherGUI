@@ -25,7 +25,6 @@ public:
 	bool mouseClicked = false;
 	float scrollDelta = 0;
 
-	
 	bool middleMouseDown = false;
 	bool rightMouseDown = false;
 	bool isDragScrolling = false;
@@ -102,7 +101,6 @@ public:
 	TwinkleStar twinkleStars[MAX_TWINKLE_STARS];
 	bool twinkleStarsInitialized = false;
 
-	
 	int particleStyle = 0;
 	struct Firefly {
 		float x, y;
@@ -166,8 +164,12 @@ public:
 		Toggle reconstructorEnabled;
 		Slider reconStrength;
 		Slider reconVelSmooth;
-		Slider reconAccelCap;
-		Slider reconPredTime;
+		Toggle reconInverseEma;
+		Slider reconEmaWeight;
+
+		Toggle jitterStabEnabled;
+		Slider jitterStabRadius;
+		Slider jitterStabRelease;
 
 		Toggle adaptiveEnabled;
 		Slider adaptiveProcessNoise;
@@ -190,6 +192,8 @@ public:
 	Slider overclockHz;
 	Toggle penRateLimitEnabled;
 	Slider penRateLimitHz;
+
+	RadioGroup rateMode;
 
 	Button saveConfigBtn;
 	Button loadConfigBtn;
@@ -283,24 +287,10 @@ public:
 	std::wstring activeConfigPath;
 	int selectedConfigIndex = -1;
 
-	// Set while LoadConfig is reading from disk so the area panel doesn't
-	// reapply Auto Center / aspect logic to the freshly loaded numbers. Auto
-	// Center should only kick in when the user is actively editing screen
-	// width/height, not when we're restoring a saved layout verbatim.
 	bool loadingFromFile = false;
 
-	// Set right after a Load to keep AutoSaveConfig from immediately
-	// overwriting the named config with the just-loaded values. Cleared by
-	// the first real user-driven mutation (slider commit, toggle, etc) so
-	// editing after a Load behaves normally.
 	bool suppressNamedAutosave = false;
 
-	// After StartDriverService() we mark this true, then watch for the
-	// service's [STATUS] WIDTH/HEIGHT broadcast and re-clamp+re-send the
-	// tablet area exactly once with the real tablet dimensions. Without this
-	// the GUI ships startup settings before the tablet enumerates, the
-	// service sees a 152x95 fallback, and the loaded config gets quietly
-	// rewritten with the default area.
 	bool pendingTabletInfoResync = false;
 	float lastSeenTabletWidth  = -1.0f;
 	float lastSeenTabletHeight = -1.0f;
@@ -341,11 +331,8 @@ public:
 
 	ColorPicker accentPicker;
 
-	
 	struct {
 		Toggle enabled;
-		Toggle lagRemovalEnabled;
-		Slider lagRemovalStrength;
 		Toggle stabilizerEnabled;
 		Slider stabilizerStability;
 		Slider stabilizerSensitivity;
@@ -358,94 +345,85 @@ public:
 		Slider rhythmFlowJitter;
 		Toggle suppressionEnabled;
 		Slider suppressionTime;
+		Toggle pressureGateEnabled;
+		Slider pressureGateAmount;
 	} aether;
 
-	// Click stabilizer is its own little filter (not part of AetherSmooth's
-	// internal pipeline) so users can toggle it independently of the rest.
 	struct {
 		Toggle enabled;
 		Slider holdMs;
 	} clickStabilize;
 
-	
 	static const int MAX_THEMES = 14;
-	const Theme::ThemeData* uiThemeDefaults[MAX_THEMES]; 
-	Theme::ThemeData uiThemes[MAX_THEMES];               
+	const Theme::ThemeData* uiThemeDefaults[MAX_THEMES];
+	Theme::ThemeData uiThemes[MAX_THEMES];
 	int uiThemeCount = 0;
 	int currentTheme = 0;
 	float themeHoverT[MAX_THEMES] = {};
 
-	
 	TextInput hexColorInput;
 
-	
-	int editingTheme = -1;    
-	int editingSlot = -1;     
+	int editingTheme = -1;
+	int editingSlot = -1;
 	ColorPicker slotPicker;
-	TextInput slotHexInput;   
+	TextInput slotHexInput;
 
 	static const int THEME_SLOT_COUNT = 6;
 	const wchar_t* themeSlotNames[THEME_SLOT_COUNT] = {
 		L"Deep BG", L"Base BG", L"Surface", L"Elevated", L"Text", L"Accent"
 	};
 
-	
 	void GetThemeSlotColor(Theme::ThemeData& t, int slot, float& r, float& g, float& b);
 	void SetThemeSlotColor(Theme::ThemeData& t, int slot, float r, float g, float b);
 	void ResetThemeToDefault(int themeIndex);
 
-	
 	float liveCursorAnimT = 0;
 	float liveCursorPulseT = 0;
 
-	
 	bool showVisualizer = false;
 	Toggle visualizerToggle;
 	float vizAnimT = 0;
 
-	
 	float measuredHz = 0;
 
-	
 	bool Initialize(HWND hwnd);
-	
+
 	void Shutdown();
-	
+
 	void Tick();
 
-	
 	void OnMouseMove(float x, float y);
-	
+
 	void OnMouseDown();
-	
+
 	void OnMouseUp();
-	
+
 	void OnMouseWheel(float delta);
-	
+
 	void OnMiddleMouseDown();
-	
+
 	void OnMiddleMouseUp();
-	
+
 	void OnRightMouseDown();
-	
+
 	void OnRightMouseUp();
-	
+
 	void OnChar(wchar_t ch);
-	
+
 	void OnKeyDown(int vk);
-	
+
 	void OnResize(UINT width, UINT height);
-	
+
 	void OnDisplayChange();
 
 private:
-	
+
 	void InitControls();
-	
+
 	void UpdateControls();
-	
+
 	void SendFilterSettings();
-	
+
 	void ApplyAllSettings();
 
 	void CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const;
@@ -473,13 +451,11 @@ private:
 	float GetSelectedDpiScale() const;
 
 	void ApplyDpiScale();
-	
+
 	void AutoSaveConfig();
-	
+
 	void AutoLoadConfig();
 
-	// Tracks which named config the user last had open so AutoLoadConfig can
-	// restore it on next launch instead of dropping back to _autosave.cfg.
 	std::wstring GetLastLoadedMarkerPath();
 	void SaveLastLoadedMarker();
 	std::wstring ReadLastLoadedMarker();
@@ -487,39 +463,30 @@ private:
 	void PrepareModalDialog();
 
 	void SyncLoadedControlVisuals();
-	
+
 	std::wstring GetConfigPath();
 
 	std::wstring GetConfigDirectory();
-	
+
 	void EnsureConfigDirectory();
-	
+
 	void RefreshConfigFiles();
-	
+
 	bool SaveConfigWithDialog();
-	
+
 	bool LoadConfigWithDialog();
 
 public:
-	// Load the N-th config (1-based) from configEntries, if it exists.
-	// Returns true if a load actually happened. Used by the Ctrl+Shift+1..9
-	// global hotkeys to flip profiles without touching the UI. Public so
-	// WndProc (which only holds an AetherApp&) can call it from WM_HOTKEY.
+
 	bool LoadConfigByHotkey(int oneBasedIndex);
 
-	// Per-slot global hotkeys. Each of the 9 config slots can be bound to any
-	// Windows virtual-key plus modifier combo. The user rebinds them by
-	// clicking the badge next to a profile and pressing a combo. Storage is
-	// a flat array; index N (zero-based) maps to config slot N+1.
 	struct HotkeyBinding {
-		UINT mods; // MOD_CONTROL | MOD_SHIFT | MOD_ALT | MOD_WIN (0 = disabled)
-		UINT vk;   // VK_* code; 0 = no binding
+		UINT mods;
+		UINT vk;
 	};
 	static const int kConfigHotkeyCount = 9;
 	HotkeyBinding configHotkeys[kConfigHotkeyCount];
 
-	// >= 0 while the user is recording a new combo for that slot. The next
-	// non-modifier key press in OnKeyDown writes the binding and clears this.
 	int capturingHotkeySlot = -1;
 
 	void RegisterConfigHotkeys();
@@ -527,33 +494,25 @@ public:
 	std::wstring HotkeyLabelForSlot(int oneBasedIndex) const;
 	void ResetHotkeyDefaults();
 
-	// Per-app profile switching: when the foreground process matches an entry
-	// in `appProfiles`, we load the named config automatically. Toggling this
-	// off stops the watcher but keeps the list intact so the user doesn't lose
-	// their mappings.
 	struct AppProfileEntry {
-		std::wstring processName; // lowercase basename, e.g. L"osu!.exe"
-		std::wstring configPath;  // absolute path to the .cfg file
+		std::wstring processName;
+		std::wstring configPath;
 	};
 	std::vector<AppProfileEntry> appProfiles;
 	bool   appProfilesEnabled = false;
-	std::wstring lastForegroundProcess; // tracks last seen process so we don't reload every poll
-	std::wstring lastForeignForeground; // last foreground that was NOT us; used by "Add" button
+	std::wstring lastForegroundProcess;
+	std::wstring lastForeignForeground;
 	DWORD  lastForegroundPollTick = 0;
 
-	void PollForegroundProcess();             // called from Tick at ~2 Hz
-	std::wstring GetForegroundProcessName();  // basename of foreground process, lowercased
-	void AddAppProfileFromForeground();       // "Add current" button handler
-	void SaveAppProfiles();                   // writes config/_app_profiles.txt
-	void LoadAppProfiles();                   // reads config/_app_profiles.txt
+	void PollForegroundProcess();
+	std::wstring GetForegroundProcessName();
+	void AddAppProfileFromForeground();
+	void SaveAppProfiles();
+	void LoadAppProfiles();
 	std::wstring GetAppProfilesPath();
 
-	// Corner calibration: walk the user through tapping the four corners of
-	// the active tablet area with the pen, then derive tabletX/Y/W/H from the
-	// captured points. Lives in AetherApp because it needs both pen events
-	// (via DriverBridge) and access to the area sliders.
 	bool   calibrationOpen = false;
-	int    calibrationStep = 0;         // 0..3 = TL, TR, BR, BL
+	int    calibrationStep = 0;
 	bool   calibrationWaitingForLift = false;
 	float  calibrationCapturedX[4]{};
 	float  calibrationCapturedY[4]{};
@@ -610,70 +569,68 @@ private:
 
 	void DrawConfigManager(float x, float& y, float w);
 
-	
 	void DrawHeader();
-	
+
 	void DrawBackground();
-	
+
 	void DrawLogoBadge(float x, float y);
-	
+
 	void DrawAreaPanel();
-	
+
 	void DrawFilterPanel();
-	
+
 	void DrawConsolePanel();
-	
+
 	void DrawSettingsPanel();
-	
+
 	void DrawAboutPanel();
-	
+
 	void DrawStatusBar();
-	
+
 	void DrawLiveCursor(float previewX, float previewY, float previewW, float previewH, float fullW, float fullH);
-	
+
 	void DrawInputVisualizer(float x, float y, float w, float h);
-	
+
 	void DrawThemeSelector(float x, float& y, float w);
-	
+
 	void UpdateHzMeter();
-	
+
 	void DrawOverclockInfo(float x, float y, float w);
-	
+
 	void RefreshDetectedScreen();
-	
+
 	void ClampScrollOffsets();
-	
+
 	void SendDisplaySettingsToDriver();
-	
+
 	void SendStaticMonitorInfoToDriver();
-	
+
 public:
 	bool StartDriverService();
 
 	void ShowUpdateModal(const std::wstring& latestTag, const std::wstring& currentVersion, const std::wstring& releaseUrl);
 
 private:
-	
+
 	void SendStartupSettingsToDriver();
-	
+
 	void ApplyDisplayTarget(int index);
-	
+
 	float GetScreenAspectRatio() const;
-	
+
 	void ClampScreenArea();
-	
+
 	void CenterScreenArea();
-	
+
 	void ClampTabletAreaToFull(float fullTabletW, float fullTabletH);
-	
+
 	void ApplyAspectLock(bool preserveHeight);
 
-	
 	float GetContentAreaTop();
-	
+
 	float GetContentAreaBottom();
-	
+
 	void BeginClipContent();
-	
+
 	void EndClipContent();
 };

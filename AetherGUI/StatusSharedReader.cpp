@@ -21,7 +21,6 @@ bool StatusSharedReader::TryOpen() {
 
 	Header* h = (Header*)view;
 
-	
 	if (h->magic != kMagic || h->version != kVersion || h->capacity != kPosRingCapacity) {
 		UnmapViewOfFile(view);
 		CloseHandle(hMapping);
@@ -32,7 +31,6 @@ bool StatusSharedReader::TryOpen() {
 	header = h;
 	ring   = (const PosSlot*)((char*)view + sizeof(Header));
 
-	
 	auto* wp = reinterpret_cast<volatile uint64_t*>(&header->writeIndex);
 	readIndex = *wp;
 	return true;

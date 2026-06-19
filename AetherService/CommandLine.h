@@ -30,4 +30,3 @@ public:
 	float GetFloat(int index, float defaultValue);
 	bool GetBoolean(int index, bool defaultValue);
 };
-

@@ -38,7 +38,9 @@ public:
 		TypeWacomBambooPad,
 		TypeWacomCintiqV1,
 		TypeWacomPL,
-		TypeWacomPTU
+		TypeWacomPTU,
+
+		TypeHidDigitizer
 	};
 
 	BYTE detectMask;

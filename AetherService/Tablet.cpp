@@ -66,8 +66,6 @@ Tablet::Tablet() {
 	filterTimedCount = 1;
 	ResetPacketFilters();
 
-	peak.isEnabled = true;
-
 	memset(&buttonMap, 0, sizeof(buttonMap));
 	buttonMap[0] = 1;
 	buttonMap[1] = 2;
@@ -104,10 +102,9 @@ void Tablet::ResetPacketFilters() {
 	filterPacket[filterPacketCount++] = &reconstructor;
 	filterPacket[filterPacketCount++] = &adaptive;
 	filterPacket[filterPacketCount++] = &aetherSmooth;
-	// Click stabilizer runs LAST in the chain so it latches the position
-	// the user actually saw under the pen tip after every other filter has
-	// had its say. Putting it earlier would let smoothing/prediction shift
-	// the cursor away from the latched point during the hold window.
+
+	filterPacket[filterPacketCount++] = &jitterStabilizer;
+
 	filterPacket[filterPacketCount++] = &clickStabilizer;
 }
 
@@ -271,33 +268,55 @@ bool Tablet::Init() {
 	}
 
 	if (!initFeatureReports.empty() && hidDevice != NULL) {
+#if defined(_WIN32)
+
+		HIDDevice *featureTarget = hidDevice;
+		if (hidDevice->featureReportLength <= 0) {
+			if (hidDevice2 == NULL) {
+				hidDevice2 = new HIDDevice();
+			}
+			if (hidDevice2->featureReportLength <= 0) {
+				if (hidDevice2->OpenFeatureCapable(hidDevice->vendorId, hidDevice->productId)) {
+					LOG_INFO("Routing init feature report to feature-capable HID collection (FeatureReportLength=%d).\n",
+						hidDevice2->featureReportLength);
+				}
+			}
+			if (hidDevice2->featureReportLength > 0) {
+				featureTarget = hidDevice2;
+			}
+		}
+#else
+		HIDDevice *featureTarget = hidDevice;
+#endif
+
+		bool allSent = true;
 		for (size_t reportIndex = 0; reportIndex < initFeatureReports.size(); reportIndex++) {
 			vector<BYTE> &report = initFeatureReports[reportIndex];
 
 			vector<BYTE> paddedReport;
 			BYTE *writePtr = report.data();
 			int writeLen = (int)report.size();
-			if (hidDevice->featureReportLength > 0 &&
-				hidDevice->featureReportLength > writeLen) {
+			if (featureTarget->featureReportLength > 0 &&
+				featureTarget->featureReportLength > writeLen) {
 				paddedReport.assign(report.begin(), report.end());
-				paddedReport.resize(hidDevice->featureReportLength, 0);
+				paddedReport.resize(featureTarget->featureReportLength, 0);
 				writePtr = paddedReport.data();
-				writeLen = hidDevice->featureReportLength;
+				writeLen = featureTarget->featureReportLength;
 			}
 
 			bool sent = false;
 			for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
-				if (hidDevice->SetFeature(writePtr, writeLen)) {
+				if (featureTarget->SetFeature(writePtr, writeLen)) {
 					LOG_INFO("Tablet init feature report %d/%d sent successfully (%d bytes, padded to FeatureReportLength=%d).\n",
 						(int)reportIndex + 1, (int)initFeatureReports.size(),
-						(int)report.size(), hidDevice->featureReportLength);
+						(int)report.size(), featureTarget->featureReportLength);
 					sent = true;
 					break;
 				}
 				uint32_t err = platform::LastErrorCode();
 				LOG_WARNING("Init feature report %d/%d attempt %d/%d failed (error 0x%08X, wrote %d bytes, FeatureReportLength=%d).\n",
 					(int)reportIndex + 1, (int)initFeatureReports.size(), attempt + 1, MAX_RETRIES,
-					err, writeLen, hidDevice->featureReportLength);
+					err, writeLen, featureTarget->featureReportLength);
 				if (err == platform::ErrorDeviceNotConnected()) {
 					LOG_ERROR("Device disconnected during init.\n");
 					return false;
@@ -308,12 +327,27 @@ bool Tablet::Init() {
 				}
 			}
 			if (!sent) {
-				LOG_ERROR("All init feature attempts failed. Another driver may be blocking the device.\n");
-				LOG_ERROR("Try: taskkill /F /IM WTabletServicePro.exe  or  net stop TabletInputService\n");
-				return false;
+				allSent = false;
+				break;
 			}
 		}
-		return true;
+
+		if (allSent) {
+			return true;
+		}
+
+#if defined(_WIN32)
+
+		if (hidDevice->IsDigitizer()) {
+			LOG_WARNING("Raw mode switch failed; falling back to standard HID digitizer parsing (Windows Ink).\n");
+			EnableDigitizerFallback();
+			return true;
+		}
+#endif
+
+		LOG_ERROR("All init feature attempts failed. Another driver may be blocking the device.\n");
+		LOG_ERROR("Try: taskkill /F /IM WTabletServicePro.exe  or  net stop TabletInputService\n");
+		return false;
 	}
 
 	if (!initOutputReports.empty() && hidDevice != NULL) {
@@ -380,6 +414,40 @@ bool Tablet::Init() {
 	return true;
 }
 
+void Tablet::EnableDigitizerFallback() {
+#if defined(_WIN32)
+	digitizerFallback = true;
+	settings.type = TabletSettings::TypeHidDigitizer;
+
+	settings.reportId = 0;
+	settings.detectMask = 0;
+	settings.ignoreMask = 0;
+	settings.reportOffset = 0;
+
+	if (hidDevice != NULL && hidDevice->inputReportLength > 0) {
+		settings.reportLength = hidDevice->inputReportLength;
+		LOG_INFO("Digitizer input report length = %d bytes\n", settings.reportLength);
+	}
+
+	long logMax = 0;
+	if (hidDevice != NULL && hidDevice->GetLogicalMax(0x01, 0x30, &logMax) && logMax > 1) {
+		settings.maxX = (int)logMax;
+		settings.invMaxX = 1.0 / (double)settings.maxX;
+		LOG_INFO("Digitizer logical MaxX = %ld\n", logMax);
+	}
+	if (hidDevice != NULL && hidDevice->GetLogicalMax(0x01, 0x31, &logMax) && logMax > 1) {
+		settings.maxY = (int)logMax;
+		settings.invMaxY = 1.0 / (double)settings.maxY;
+		LOG_INFO("Digitizer logical MaxY = %ld\n", logMax);
+	}
+	long pMax = 0;
+	if (hidDevice != NULL && hidDevice->GetLogicalMax(0x0D, 0x30, &pMax) && pMax > 1) {
+		settings.maxPressure = (int)pMax;
+		LOG_INFO("Digitizer logical MaxPressure = %ld\n", pMax);
+	}
+#endif
+}
+
 bool Tablet::IsConfigured() {
 	if (
 		settings.maxX > 1 &&
@@ -412,6 +480,87 @@ int Tablet::ReadPosition() {
 		reportOffset = 1;
 	}
 	data = buffer + reportOffset;
+
+#if defined(_WIN32)
+
+	if (settings.type == TabletSettings::TypeHidDigitizer && hidDevice != NULL) {
+		HIDDevice::DigitizerReport dr;
+		int readLen = hidDevice->inputReportLength > 0
+			? hidDevice->inputReportLength
+			: settings.reportLength;
+
+		if (!digitizerDiagLogged) {
+			digitizerDiagLogged = true;
+			LOG_INFO("Digitizer first packet: readLen=%d reportId=0x%02X bytes=[%02X %02X %02X %02X %02X %02X %02X %02X]\n",
+				readLen, buffer[0],
+				buffer[0], buffer[1], buffer[2], buffer[3],
+				buffer[4], buffer[5], buffer[6], buffer[7]);
+		}
+
+		if (!hidDevice->ParseDigitizer(buffer, readLen, &dr) || !dr.valid) {
+
+			if ((digitizerParseFailCount++ % 250) == 0) {
+				LOG_WARNING("Digitizer parse produced no valid X/Y (count=%d, reportId=0x%02X). "
+					"Collection may not be emitting pen data (driver conflict?).\n",
+					digitizerParseFailCount, buffer[0]);
+			}
+			return Tablet::PacketPositionInvalid;
+		}
+
+		if (!digitizerFirstValidLogged) {
+			digitizerFirstValidLogged = true;
+			LOG_INFO("Digitizer first VALID packet parsed: x=%d y=%d pressure=%d tip=%d (pen is alive).\n",
+				dr.x, dr.y, dr.pressure, dr.tipSwitch ? 1 : 0);
+		}
+
+		reportData.reportId = buffer[0];
+		reportData.x = dr.x;
+		reportData.y = dr.y;
+		reportData.pressure = dr.pressure;
+		reportData.z = 0;
+
+		reportData.buttons = 0;
+		if (dr.tipSwitch)    reportData.buttons |= 0x01;
+		if (dr.barrelSwitch) reportData.buttons |= 0x02;
+
+		if (settings.clickPressure > 0) {
+			reportData.buttons &= ~1;
+			if ((int)reportData.pressure > settings.clickPressure) {
+				reportData.buttons |= 1;
+			}
+		}
+
+		if (settings.keepTipDown > 0) {
+			if (reportData.buttons & 0x01) {
+				tipDownCounter = settings.keepTipDown;
+			}
+			if (tipDownCounter-- >= 0) {
+				reportData.buttons |= 1;
+			}
+		}
+
+		state.isValid = true;
+		reportData.buttons = reportData.buttons & 0x0F;
+		state.buttons = 0;
+		for (buttonIndex = 0; buttonIndex < sizeof(buttonMap); buttonIndex++) {
+			if (buttonMap[buttonIndex] > 0) {
+				if ((reportData.buttons & (1 << buttonIndex)) > 0) {
+					state.buttons |= (1 << (buttonMap[buttonIndex] - 1));
+				}
+			}
+		}
+
+		state.position.x = (double)reportData.x * settings.invMaxX * settings.width;
+		state.position.y = (double)reportData.y * settings.invMaxY * settings.height;
+		state.z = 0;
+		if (settings.skew != 0)
+			state.position.x += state.position.y * settings.skew;
+		state.pressure = ((double)reportData.pressure / (double)settings.maxPressure);
+
+		benchmark.Update(state.position);
+		return Tablet::PacketValid;
+	}
+#endif
 
 	if (settings.type == TabletSettings::TypeWacomIntuos) {
 		if (settings.reportLength == 11 && settings.reportOffset == 0) {

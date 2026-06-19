@@ -1,5 +1,4 @@
 
-
 #pragma once
 #include "targetver.h"
 
@@ -55,4 +54,3 @@ extern void ResetPenRateLimiter();
 extern int WritePenReport(bool force);
 extern bool IsTimedOutputEnabled();
 extern void RefreshTimedOutputTimer();
-

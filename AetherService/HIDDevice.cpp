@@ -65,6 +65,7 @@ HIDDevice::HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT
 HIDDevice::HIDDevice() {
 	isOpen = false;
 	_deviceHandle = NULL;
+	_preparsedData = NULL;
 	inputReportLength = 0;
 	outputReportLength = 0;
 	featureReportLength = 0;
@@ -384,6 +385,12 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 		this->inputReportLength = resultInputReportLength;
 		this->outputReportLength = resultOutputReportLength;
 		this->featureReportLength = resultFeatureReportLength;
+
+		if (_preparsedData != NULL) {
+			HidD_FreePreparsedData(_preparsedData);
+			_preparsedData = NULL;
+		}
+		HidD_GetPreparsedData(resultHandle, &_preparsedData);
 		memcpy(handle, &resultHandle, sizeof(HANDLE));
 		return true;
 	}
@@ -420,7 +427,190 @@ bool HIDDevice::GetIndexedString(int stringId, string *result) {
 	return ReadHidIndexedString(_deviceHandle, stringId, result);
 }
 
+bool HIDDevice::OpenFeatureCapable(USHORT vendorId, USHORT productId) {
+	GUID hidGuid;
+	HidD_GetHidGuid(&hidGuid);
+
+	HDEVINFO deviceInfo = SetupDiGetClassDevs(&hidGuid, NULL, 0,
+		DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
+	if (deviceInfo == INVALID_HANDLE_VALUE) {
+		return false;
+	}
+
+	HANDLE bestHandle = NULL;
+	int bestScore = -1;
+	int bestFeatureLen = 0;
+	USHORT bestUsagePage = 0;
+
+	DWORD dwMemberIdx = 0;
+	while (true) {
+		SP_DEVICE_INTERFACE_DATA deviceInterfaceData;
+		deviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+		if (!SetupDiEnumDeviceInterfaces(deviceInfo, NULL, &hidGuid, dwMemberIdx, &deviceInterfaceData)) {
+			if (GetLastError() == ERROR_NO_MORE_ITEMS) break;
+			dwMemberIdx++;
+			continue;
+		}
+
+		DWORD dwSize = 0;
+		SetupDiGetDeviceInterfaceDetail(deviceInfo, &deviceInterfaceData, NULL, 0, &dwSize, NULL);
+		PSP_DEVICE_INTERFACE_DETAIL_DATA detail =
+			(PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(dwSize);
+		if (detail == NULL) { dwMemberIdx++; continue; }
+		detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+		if (SetupDiGetDeviceInterfaceDetail(deviceInfo, &deviceInterfaceData, detail, dwSize, &dwSize, NULL)) {
+			HANDLE inspectHandle = CreateFile(detail->DevicePath, 0,
+				FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+				NULL, OPEN_EXISTING, 0, NULL);
+
+			if (inspectHandle != INVALID_HANDLE_VALUE) {
+				HIDD_ATTRIBUTES attrs;
+				memset(&attrs, 0, sizeof(attrs));
+				attrs.Size = sizeof(HIDD_ATTRIBUTES);
+				bool hasAttrs = HidD_GetAttributes(inspectHandle, &attrs) != FALSE;
+
+				PHIDP_PREPARSED_DATA preparsed = NULL;
+				bool hasPreparsed = HidD_GetPreparsedData(inspectHandle, &preparsed) != FALSE;
+				HIDP_CAPS caps;
+				memset(&caps, 0, sizeof(caps));
+				bool hasCaps = hasPreparsed &&
+					HidP_GetCaps(preparsed, &caps) == HIDP_STATUS_SUCCESS;
+
+				if (hasAttrs && hasCaps &&
+					attrs.VendorID == vendorId &&
+					attrs.ProductID == productId &&
+					caps.FeatureReportByteLength > 0) {
+
+					int score;
+					if (caps.UsagePage >= 0xFF00) {
+						score = 100000 + caps.FeatureReportByteLength;
+					} else {
+						score = 10000 - caps.FeatureReportByteLength;
+					}
+
+					if (score > bestScore) {
+						HANDLE rw = CreateFile(detail->DevicePath,
+							GENERIC_READ | GENERIC_WRITE,
+							FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+							NULL, OPEN_EXISTING, 0, NULL);
+						if (rw != INVALID_HANDLE_VALUE) {
+							if (bestHandle && bestHandle != INVALID_HANDLE_VALUE) {
+								CloseHandle(bestHandle);
+							}
+							bestHandle = rw;
+							bestScore = score;
+							bestFeatureLen = caps.FeatureReportByteLength;
+							bestUsagePage = caps.UsagePage;
+						}
+					}
+				}
+
+				if (preparsed != NULL) HidD_FreePreparsedData(preparsed);
+				CloseHandle(inspectHandle);
+			}
+		}
+
+		free(detail);
+		dwMemberIdx++;
+	}
+
+	SetupDiDestroyDeviceInfoList(deviceInfo);
+
+	if (bestHandle && bestHandle != INVALID_HANDLE_VALUE) {
+		CloseDevice();
+		_deviceHandle = bestHandle;
+		featureReportLength = bestFeatureLen;
+		isOpen = true;
+		LOG_INFO("Feature-capable collection selected: usagePage=0x%04X FeatureReportLength=%d\n",
+			bestUsagePage, bestFeatureLen);
+		return true;
+	}
+	return false;
+}
+
+bool HIDDevice::IsDigitizer() {
+
+	return usagePage == 0x0D;
+}
+
+bool HIDDevice::GetLogicalMax(USHORT targetUsagePage, USHORT targetUsage, long *outMax) {
+	if (_preparsedData == NULL || outMax == NULL) return false;
+
+	HIDP_CAPS caps;
+	if (HidP_GetCaps(_preparsedData, &caps) != HIDP_STATUS_SUCCESS) return false;
+	if (caps.NumberInputValueCaps == 0) return false;
+
+	USHORT count = caps.NumberInputValueCaps;
+	HIDP_VALUE_CAPS *valueCaps = new HIDP_VALUE_CAPS[count];
+	bool found = false;
+	if (HidP_GetValueCaps(HidP_Input, valueCaps, &count, _preparsedData) == HIDP_STATUS_SUCCESS) {
+		for (USHORT i = 0; i < count; i++) {
+			USHORT cuPage = valueCaps[i].UsagePage;
+			USHORT cuUsage = valueCaps[i].IsRange
+				? valueCaps[i].Range.UsageMin
+				: valueCaps[i].NotRange.Usage;
+			if (cuPage == targetUsagePage && cuUsage == targetUsage) {
+				long logicalMax = valueCaps[i].LogicalMax;
+
+				if (logicalMax < 0 && valueCaps[i].BitSize < 32) {
+					logicalMax &= (1L << valueCaps[i].BitSize) - 1;
+				}
+				*outMax = logicalMax;
+				found = (logicalMax > 0);
+				break;
+			}
+		}
+	}
+	delete[] valueCaps;
+	return found;
+}
+
+bool HIDDevice::ParseDigitizer(void *buffer, int length, DigitizerReport *out) {
+	if (_preparsedData == NULL || out == NULL) return false;
+
+	memset(out, 0, sizeof(*out));
+	PCHAR report = (PCHAR)buffer;
+	ULONG reportLen = (ULONG)length;
+
+	ULONG value = 0;
+	bool gotX = HidP_GetUsageValue(HidP_Input, 0x01, 0, 0x30, &value,
+		_preparsedData, report, reportLen) == HIDP_STATUS_SUCCESS;
+	if (gotX) out->x = (int)value;
+
+	value = 0;
+	bool gotY = HidP_GetUsageValue(HidP_Input, 0x01, 0, 0x31, &value,
+		_preparsedData, report, reportLen) == HIDP_STATUS_SUCCESS;
+	if (gotY) out->y = (int)value;
+
+	value = 0;
+	if (HidP_GetUsageValue(HidP_Input, 0x0D, 0, 0x30, &value,
+		_preparsedData, report, reportLen) == HIDP_STATUS_SUCCESS) {
+		out->pressure = (int)value;
+	}
+
+	USAGE usages[16];
+	ULONG usageCount = 16;
+	if (HidP_GetUsages(HidP_Input, 0x0D, 0, usages, &usageCount,
+		_preparsedData, report, reportLen) == HIDP_STATUS_SUCCESS) {
+		for (ULONG i = 0; i < usageCount; i++) {
+			switch (usages[i]) {
+				case 0x42: out->tipSwitch = true; break;
+				case 0x44: out->barrelSwitch = true; break;
+				case 0x32: out->inRange = true; break;
+			}
+		}
+	}
+
+	out->valid = gotX && gotY;
+	return out->valid;
+}
+
 void HIDDevice::CloseDevice() {
+	if (_preparsedData != NULL) {
+		HidD_FreePreparsedData(_preparsedData);
+		_preparsedData = NULL;
+	}
 	if (isOpen && _deviceHandle != NULL && _deviceHandle != INVALID_HANDLE_VALUE) {
 		try {
 			CloseHandle(_deviceHandle);

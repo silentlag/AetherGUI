@@ -594,6 +594,11 @@ bool ProcessCommand(CommandLine *cmd) {
 			overclockActive = true;
 			overclockTargetHz = (double)targetHz;
 
+			if (penRateLimitActive) {
+				penRateLimitActive = false;
+				LOG_INFO("Pen rate limit disabled: superseded by Overclock.\n");
+			}
+
 			tablet->smoothing.StopTimer();
 			if (tablet->filterTimedCount > 0 && tablet->filterTimed[0]->callback != NULL) {
 				StartOverclockTimer((double)targetHz);
@@ -633,6 +638,12 @@ bool ProcessCommand(CommandLine *cmd) {
 
 		if (targetHz < 30.0) targetHz = 30.0;
 		if (targetHz > 1000.0) targetHz = 1000.0;
+
+		if (enabled && overclockActive) {
+			overclockActive = false;
+			StopOverclockTimer();
+			LOG_INFO("Overclock disabled: superseded by Pen rate limit.\n");
+		}
 
 		penRateLimitActive = enabled;
 		penRateLimitHz = targetHz;
@@ -1000,8 +1011,6 @@ bool ProcessCommand(CommandLine *cmd) {
 		else {
 			double strength = cmd->GetDouble(0, tablet->reconstructor.reconstructionStrength);
 			double velSmooth = cmd->GetDouble(1, tablet->reconstructor.velocitySmoothing);
-			double accelCap = cmd->GetDouble(2, tablet->reconstructor.accelerationCap);
-			double predTime = cmd->GetDouble(3, tablet->reconstructor.predictionTimeMs);
 
 			if (strength < 0) strength = 0;
 			else if (strength > 2.0) strength = 2.0;
@@ -1009,26 +1018,56 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (velSmooth < 0) velSmooth = 0;
 			else if (velSmooth > 0.99) velSmooth = 0.99;
 
-			if (accelCap < 1) accelCap = 1;
-			else if (accelCap > 200) accelCap = 200;
-
-			if (predTime < 0.1) predTime = 0.1;
-			else if (predTime > 50) predTime = 50;
-
 			tablet->reconstructor.reconstructionStrength = strength;
 			tablet->reconstructor.velocitySmoothing = velSmooth;
-			tablet->reconstructor.accelerationCap = accelCap;
-			tablet->reconstructor.predictionTimeMs = predTime;
 
-			if (strength > 0.001) {
+			if (strength > 0.001 || tablet->reconstructor.useInverseEma) {
 				tablet->reconstructor.isEnabled = true;
-				LOG_INFO("Reconstructor = strength %0.2f, velSmooth %0.2f, accelCap %0.1f, predTime %0.1f ms\n",
-					strength, velSmooth, accelCap, predTime);
+				if (tablet->reconstructor.useInverseEma) {
+					LOG_INFO("Reconstructor (inverse-EMA) = weight %0.2f\n",
+						tablet->reconstructor.emaWeight);
+				} else {
+					LOG_INFO("Reconstructor (lag removal) = strength %0.2f, velSmooth %0.2f\n",
+						strength, velSmooth);
+				}
 			}
 			else {
 				tablet->reconstructor.isEnabled = false;
 				LOG_INFO("Reconstructor = off\n");
 			}
+		}
+	}
+
+	else if (cmd->is("ReconMode")) {
+		if (!CheckTablet()) return true;
+
+		tablet->reconstructor.useInverseEma =
+			cmd->GetBoolean(0, tablet->reconstructor.useInverseEma);
+		double w = cmd->GetDouble(1, tablet->reconstructor.emaWeight);
+		if (w < 0.05) w = 0.05;
+		if (w > 1.0)  w = 1.0;
+		tablet->reconstructor.emaWeight = w;
+		LOG_INFO("Reconstructor mode = %s (emaWeight %0.2f)\n",
+			tablet->reconstructor.useInverseEma ? "inverse-EMA" : "velocity-adaptive",
+			tablet->reconstructor.emaWeight);
+	}
+
+	else if (cmd->is("JitterStabilizer") || cmd->is("JitterStab")) {
+		if (!CheckTablet()) return true;
+
+		tablet->jitterStabilizer.isEnabled = cmd->GetBoolean(0, tablet->jitterStabilizer.isEnabled);
+		double r = cmd->GetDouble(1, tablet->jitterStabilizer.radius);
+		double rs = cmd->GetDouble(2, tablet->jitterStabilizer.releaseSpeed);
+		if (r < 0.0) r = 0.0;
+		if (r > 2.0) r = 2.0;
+		if (rs < 1.0) rs = 1.0;
+		if (rs > 200.0) rs = 200.0;
+		tablet->jitterStabilizer.radius = r;
+		tablet->jitterStabilizer.releaseSpeed = rs;
+		if (tablet->jitterStabilizer.isEnabled) {
+			LOG_INFO("Jitter Stabilizer = on (radius %0.2f mm, release %0.0f mm/s)\n", r, rs);
+		} else {
+			LOG_INFO("Jitter Stabilizer = off\n");
 		}
 	}
 
@@ -1082,11 +1121,8 @@ bool ProcessCommand(CommandLine *cmd) {
 
 	else if (cmd->is("AetherLagRemoval") || cmd->is("AS_LagRemoval")) {
 		if (!CheckTablet()) return true;
-		tablet->aetherSmooth.enableAntismoothing = cmd->GetBoolean(0, tablet->aetherSmooth.enableAntismoothing);
-		tablet->aetherSmooth.antismoothing = cmd->GetDouble(1, tablet->aetherSmooth.antismoothing);
-		LOG_INFO("Aether Lag Removal = %s, strength = %0.3f\n",
-			tablet->aetherSmooth.enableAntismoothing ? "on" : "off",
-			tablet->aetherSmooth.antismoothing);
+
+		LOG_INFO("Aether Lag Removal is deprecated; use Reconstructor (lag removal) instead. Ignored.\n");
 	}
 
 	else if (cmd->is("AetherStabilizer") || cmd->is("AS_Stabilizer")) {
@@ -1130,6 +1166,17 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->aetherSmooth.rhythmStrength,
 			tablet->aetherSmooth.rhythmTurnRelease,
 			tablet->aetherSmooth.rhythmJitter);
+	}
+
+	else if (cmd->is("AetherPressureGate") || cmd->is("AS_PressureGate")) {
+		if (!CheckTablet()) return true;
+		tablet->aetherSmooth.enablePressureGate = cmd->GetBoolean(0, tablet->aetherSmooth.enablePressureGate);
+		tablet->aetherSmooth.pressureGateAmount = cmd->GetDouble(1, tablet->aetherSmooth.pressureGateAmount);
+		if (tablet->aetherSmooth.pressureGateAmount < 0) tablet->aetherSmooth.pressureGateAmount = 0;
+		if (tablet->aetherSmooth.pressureGateAmount > 1) tablet->aetherSmooth.pressureGateAmount = 1;
+		LOG_INFO("Aether Pressure Gate = %s, amount = %0.2f\n",
+			tablet->aetherSmooth.enablePressureGate ? "on" : "off",
+			tablet->aetherSmooth.pressureGateAmount);
 	}
 
 	else if (cmd->is("AetherSuppression") || cmd->is("AS_Suppress")) {

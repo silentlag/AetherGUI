@@ -1,12 +1,8 @@
 #pragma once
 #include "Framework.h"
 
-
 namespace Theme {
 
-	
-	
-	
 	namespace Base {
 		inline float BgDeepR = 0.020f, BgDeepG = 0.020f, BgDeepB = 0.024f;
 		inline float BgBaseR = 0.035f, BgBaseG = 0.035f, BgBaseB = 0.043f;
@@ -52,7 +48,6 @@ namespace Theme {
 		}
 	}
 
-	
 	inline D2D1_COLOR_F BgDeep()       { return D2D1::ColorF(Base::BgDeepR, Base::BgDeepG, Base::BgDeepB); }
 	inline D2D1_COLOR_F BgBase()       { return D2D1::ColorF(Base::BgBaseR, Base::BgBaseG, Base::BgBaseB); }
 	inline D2D1_COLOR_F BgSurface()    { return D2D1::ColorF(Base::BgSurfR, Base::BgSurfG, Base::BgSurfB); }
@@ -78,18 +73,15 @@ namespace Theme {
 	inline D2D1_COLOR_F BorderNormal()  { return D2D1::ColorF(Base::BorderNormR, Base::BorderNormG, Base::BorderNormB, Base::BorderNormA); }
 	inline D2D1_COLOR_F BorderAccent()  { return Custom::Accent(0.35f); }
 
-	
-	
-	
 	struct ThemeData {
 		const wchar_t* name;
-		
+
 		float bgDeep[3], bgBase[3], bgSurface[3], bgElevated[3], bgHover[3];
-		
+
 		float textPri[3], textSec[3], textMut[3];
-		
+
 		float borderSub[4], borderNorm[4];
-		
+
 		float accent[3];
 	};
 
@@ -107,11 +99,8 @@ namespace Theme {
 		Custom::SetAccent(t.accent[0], t.accent[1], t.accent[2]);
 	}
 
-	
-	
-	
 	namespace Themes {
-		
+
 		inline const ThemeData Midnight = {
 			L"Midnight",
 			{0.020f, 0.020f, 0.024f}, {0.035f, 0.035f, 0.043f}, {0.055f, 0.055f, 0.063f}, {0.086f, 0.086f, 0.094f}, {0.122f, 0.122f, 0.141f},
@@ -120,7 +109,6 @@ namespace Theme {
 			{0.498f, 0.608f, 0.831f}
 		};
 
-		
 		inline const ThemeData Abyss = {
 			L"Abyss",
 			{0.008f, 0.012f, 0.028f}, {0.016f, 0.024f, 0.048f}, {0.028f, 0.038f, 0.068f}, {0.045f, 0.058f, 0.095f}, {0.065f, 0.082f, 0.130f},
@@ -129,7 +117,6 @@ namespace Theme {
 			{0.350f, 0.520f, 0.920f}
 		};
 
-		
 		inline const ThemeData Rose = {
 			L"Ros\x00E9",
 			{0.030f, 0.020f, 0.025f}, {0.050f, 0.035f, 0.042f}, {0.075f, 0.055f, 0.065f}, {0.105f, 0.080f, 0.092f}, {0.150f, 0.115f, 0.130f},
@@ -138,7 +125,6 @@ namespace Theme {
 			{0.886f, 0.490f, 0.620f}
 		};
 
-		
 		inline const ThemeData Nord = {
 			L"Nord",
 			{0.020f, 0.024f, 0.030f}, {0.040f, 0.047f, 0.058f}, {0.060f, 0.070f, 0.086f}, {0.090f, 0.102f, 0.122f}, {0.130f, 0.145f, 0.170f},
@@ -147,7 +133,6 @@ namespace Theme {
 			{0.530f, 0.750f, 0.820f}
 		};
 
-		
 		inline const ThemeData Ember = {
 			L"Ember",
 			{0.028f, 0.018f, 0.012f}, {0.050f, 0.035f, 0.025f}, {0.078f, 0.058f, 0.042f}, {0.110f, 0.084f, 0.062f}, {0.155f, 0.120f, 0.090f},
@@ -156,7 +141,6 @@ namespace Theme {
 			{0.920f, 0.520f, 0.220f}
 		};
 
-		
 		inline const ThemeData Void = {
 			L"Void",
 			{0.000f, 0.000f, 0.000f}, {0.012f, 0.012f, 0.012f}, {0.030f, 0.030f, 0.030f}, {0.055f, 0.055f, 0.055f}, {0.085f, 0.085f, 0.085f},
@@ -165,7 +149,6 @@ namespace Theme {
 			{0.700f, 0.700f, 0.700f}
 		};
 
-		
 		inline const ThemeData Matcha = {
 			L"Matcha",
 			{0.016f, 0.025f, 0.016f}, {0.030f, 0.045f, 0.032f}, {0.048f, 0.068f, 0.050f}, {0.072f, 0.098f, 0.076f}, {0.105f, 0.140f, 0.110f},
@@ -174,7 +157,6 @@ namespace Theme {
 			{0.420f, 0.780f, 0.460f}
 		};
 
-		
 		inline const ThemeData Lavender = {
 			L"Lavender",
 			{0.024f, 0.018f, 0.032f}, {0.042f, 0.034f, 0.055f}, {0.065f, 0.054f, 0.080f}, {0.092f, 0.078f, 0.112f}, {0.130f, 0.112f, 0.158f},
@@ -183,9 +165,6 @@ namespace Theme {
 			{0.690f, 0.460f, 0.860f}
 		};
 
-		
-
-		
 		inline const ThemeData Snow = {
 			L"Snow",
 			{0.940f, 0.940f, 0.945f}, {0.960f, 0.960f, 0.965f}, {0.975f, 0.975f, 0.980f}, {1.000f, 1.000f, 1.000f}, {0.920f, 0.925f, 0.935f},
@@ -194,7 +173,6 @@ namespace Theme {
 			{0.300f, 0.480f, 0.860f}
 		};
 
-		
 		inline const ThemeData Linen = {
 			L"Linen",
 			{0.930f, 0.920f, 0.900f}, {0.950f, 0.940f, 0.920f}, {0.965f, 0.958f, 0.940f}, {0.985f, 0.980f, 0.965f}, {0.910f, 0.900f, 0.880f},
@@ -203,7 +181,6 @@ namespace Theme {
 			{0.720f, 0.520f, 0.300f}
 		};
 
-		
 		inline const ThemeData Frost = {
 			L"Frost",
 			{0.920f, 0.935f, 0.950f}, {0.940f, 0.952f, 0.968f}, {0.955f, 0.966f, 0.980f}, {0.978f, 0.985f, 0.995f}, {0.900f, 0.918f, 0.940f},
@@ -212,7 +189,6 @@ namespace Theme {
 			{0.220f, 0.520f, 0.820f}
 		};
 
-		
 		inline const ThemeData Blossom = {
 			L"Blossom",
 			{0.945f, 0.925f, 0.935f}, {0.960f, 0.942f, 0.950f}, {0.975f, 0.960f, 0.966f}, {0.992f, 0.980f, 0.985f}, {0.925f, 0.905f, 0.915f},
@@ -221,7 +197,6 @@ namespace Theme {
 			{0.850f, 0.400f, 0.550f}
 		};
 
-		
 		inline ThemeData Custom = {
 			L"Custom",
 			{0.020f, 0.020f, 0.024f}, {0.035f, 0.035f, 0.043f}, {0.055f, 0.055f, 0.063f}, {0.086f, 0.086f, 0.094f}, {0.122f, 0.122f, 0.141f},
@@ -231,12 +206,10 @@ namespace Theme {
 		};
 	}
 
-	
 	inline bool IsLightTheme() {
 		return (Base::BgBaseR + Base::BgBaseG + Base::BgBaseB) / 3.0f > 0.5f;
 	}
 
-	
 	inline void SaveCurrentToCustom() {
 		auto& c = Themes::Custom;
 		c.bgDeep[0] = Base::BgDeepR; c.bgDeep[1] = Base::BgDeepG; c.bgDeep[2] = Base::BgDeepB;
@@ -272,11 +245,6 @@ namespace Theme {
 		inline float WindowWidth = Size::WindowWidth;
 		inline float WindowHeight = Size::WindowHeight;
 
-		// Single source of truth for "how many physical pixels is one design pixel".
-		// = systemDpi/96 * userExtraScale. The whole UI is laid out in design pixels
-		// (96 DPI) and the renderer pushes a Scale(UiScale, UiScale) transform when
-		// drawing, so layout, fonts, and hit-test all live in the same coordinate
-		// space and the OS DPI just stretches the result.
 		inline float UiScale = 1.0f;
 
 		inline void SetWindowSize(float width, float height) {
@@ -309,11 +277,9 @@ namespace Theme {
 	}
 }
 
-
 inline float Lerp(float a, float b, float t) {
 	return a + (b - a) * t;
 }
-
 
 inline D2D1_COLOR_F LerpColor(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
 	return D2D1::ColorF(
@@ -323,7 +289,6 @@ inline D2D1_COLOR_F LerpColor(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
 		Lerp(a.a, b.a, t)
 	);
 }
-
 
 inline float Clamp(float v, float lo, float hi) {
 	return (v < lo) ? lo : (v > hi) ? hi : v;

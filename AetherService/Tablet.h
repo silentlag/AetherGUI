@@ -8,11 +8,11 @@
 #include "TabletSettings.h"
 #include "TabletFilterSmoothing.h"
 #include "TabletFilterNoiseReduction.h"
-#include "TabletFilterPeak.h"
 #include "TabletFilterReconstructor.h"
 #include "TabletFilterAdaptive.h"
 #include "TabletFilterAetherSmooth.h"
 #include "TabletFilterClickStabilizer.h"
+#include "TabletFilterJitterStabilizer.h"
 #include "TabletFilterPlugin.h"
 #include "TabletBenchmark.h"
 #include "Vector2D.h"
@@ -62,8 +62,6 @@ public:
 
 	TabletFilterNoiseReduction noise;
 
-	TabletFilterPeak peak;
-
 	TabletFilterReconstructor reconstructor;
 
 	TabletFilterAdaptive adaptive;
@@ -71,6 +69,8 @@ public:
 	TabletFilterAetherSmooth aetherSmooth;
 
 	TabletFilterClickStabilizer clickStabilizer;
+
+	TabletFilterJitterStabilizer jitterStabilizer;
 
 	std::vector<TabletFilterPlugin*> pluginFilters;
 
@@ -90,6 +90,12 @@ public:
 	int skipPackets;
 
 	int tipDownCounter;
+
+	bool digitizerFallback = false;
+
+	bool digitizerDiagLogged = false;
+	bool digitizerFirstValidLogged = false;
+	int  digitizerParseFailCount = 0;
 
 	vector<vector<BYTE>> initFeatureReports;
 	vector<vector<BYTE>> initOutputReports;
@@ -112,6 +118,8 @@ public:
 
 	bool Init();
 	bool IsConfigured();
+
+	void EnableDigitizerFallback();
 
 	int ReadPosition();
 	bool Write(void *buffer, int length);

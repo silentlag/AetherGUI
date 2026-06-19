@@ -1,5 +1,4 @@
 
-
 #include "stdafx.h"
 #if defined(_WIN32)
 

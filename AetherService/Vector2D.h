@@ -18,4 +18,3 @@ public:
 	double LengthSq();
 	void CopyTo(Vector2D *target);
 };
-

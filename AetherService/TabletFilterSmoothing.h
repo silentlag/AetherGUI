@@ -44,4 +44,3 @@ public:
 	double GetWeight(double latency);
 	void SetLatency(double latency);
 };
-

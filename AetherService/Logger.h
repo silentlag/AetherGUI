@@ -105,4 +105,3 @@ public:
 	bool CloseLogFile();
 };
 extern Logger logger;
-

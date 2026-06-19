@@ -121,4 +121,3 @@ bool TabletFilterNoiseReduction::GetGeometricMedianVector(Vector2D *output, int 
 	return true;
 
 }
-

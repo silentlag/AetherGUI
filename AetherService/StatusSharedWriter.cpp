@@ -10,7 +10,6 @@ StatusSharedWriter::~StatusSharedWriter() { Shutdown(); }
 bool StatusSharedWriter::Initialize() {
 	if (hMapping) return true;
 
-	
 	size_t total = TotalSize();
 	hMapping = CreateFileMappingW(
 		INVALID_HANDLE_VALUE,
@@ -27,9 +26,6 @@ bool StatusSharedWriter::Initialize() {
 		return false;
 	}
 
-	
-
-	
 	header = (Header*)view;
 	header->magic       = kMagic;
 	header->version     = kVersion;
@@ -53,8 +49,6 @@ void StatusSharedWriter::Shutdown() {
 void StatusSharedWriter::PushPos(uint64_t tsNs, float x, float y, float pressure, float hz, bool tipDown) {
 	if (!header) return;
 
-	
-
 	auto* wp = reinterpret_cast<std::atomic<uint64_t>*>(&header->writeIndex);
 	uint64_t w = wp->load(std::memory_order_relaxed);
 
@@ -73,7 +67,6 @@ void StatusSharedWriter::PushPos(uint64_t tsNs, float x, float y, float pressure
 void StatusSharedWriter::PushLatency(float avgMs, float p99Ms, float maxMs, int samples) {
 	if (!header) return;
 
-	
 	header->latency.avgMs   = avgMs;
 	header->latency.p99Ms   = p99Ms;
 	header->latency.maxMs   = maxMs;

@@ -16,7 +16,6 @@ public:
 	bool flowFirstTime;
 
 	Vector2D lastPos;
-	Vector2D lastAntismoothPos;
 	Vector2D lastSmoothedPos;
 	Vector2D prevProcessedPos;
 	Vector2D debouncePos;
@@ -25,9 +24,6 @@ public:
 
 	std::chrono::high_resolution_clock::time_point lastTime;
 	std::chrono::high_resolution_clock::time_point debounceTime;
-
-	bool enableAntismoothing;
-	double antismoothing;
 
 	bool enableSmoothing;
 	double stability;
@@ -49,11 +45,16 @@ public:
 	Vector2D rhythmPrevVelocity;
 	bool rhythmFirstTime;
 
+	bool enablePressureGate;
+	double pressureGateAmount;
+	double pressureGate;
+
 	TabletFilterAetherSmooth();
 	~TabletFilterAetherSmooth();
 
 	void SetTarget(Vector2D vector, double h);
 	void SetPosition(Vector2D vector, double h);
+	void SetReportState(BYTE buttons, double pressure, double hoverDistance);
 	bool GetPosition(Vector2D *outputVector);
 	void Update();
 	void Reset(Vector2D position);

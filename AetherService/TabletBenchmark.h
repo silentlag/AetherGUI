@@ -17,4 +17,3 @@ public:
 	void Start(int packetCount);
 	void Update(Vector2D position);
 };
-

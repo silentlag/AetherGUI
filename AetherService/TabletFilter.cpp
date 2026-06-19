@@ -9,9 +9,18 @@ TabletFilter::TabletFilter() {
 	isValid = false;
 	isEnabled = false;
 	uTimerID = 0;
+	hostDtSec = 0.0;
+	hostRawSpeed = 0.0;
+	hasHostTiming = false;
 }
 
 void TabletFilter::SetReportState(BYTE buttons, double pressure, double hoverDistance) {
+}
+
+void TabletFilter::SetFrameTiming(double dtSec, double rawSpeedMmPerSec) {
+	hostDtSec = dtSec;
+	hostRawSpeed = rawSpeedMmPerSec;
+	hasHostTiming = true;
 }
 
 #if defined(_WIN32)

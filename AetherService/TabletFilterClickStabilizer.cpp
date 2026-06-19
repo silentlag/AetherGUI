@@ -37,16 +37,10 @@ bool TabletFilterClickStabilizer::GetPosition(Vector2D *outputVector) {
 
 void TabletFilterClickStabilizer::SetReportState(BYTE buttons, double pressure, double hoverDistance) {
 
-	
-
-	
 	bool tipDown = (buttons & 0x01) != 0;
 
 	if (tipDown && !wasTipDown) {
 
-		
-
-		
 		latchedPos.Set(target);
 		latchStart = std::chrono::high_resolution_clock::now();
 	}

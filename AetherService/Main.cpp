@@ -12,9 +12,6 @@
 #include "EmbeddedConfig.h"
 #include "StatusSharedWriter.h"
 
-// Shared-memory writer for high-rate pen-status updates. Initialized in
-// main() if the OS lets us; if creation fails the service falls back to
-// emitting only the rate-limited [STATUS] POS text lines.
 StatusSharedWriter g_statusShmem;
 #include "AetherPluginManager.h"
 
@@ -139,12 +136,15 @@ double measuredReportRate = 0;
 struct OverclockInterp {
 	double prevX, prevY, prevP;
 	double currX, currY, currP;
+	double prevPrevX, prevPrevY;
+	bool   hasPrevPrev;
 	chrono::high_resolution_clock::time_point lastReportTime;
 	double reportMsAvg;
 	bool initialized;
 
 	OverclockInterp() : prevX(0), prevY(0), prevP(0),
 		currX(0), currY(0), currP(0),
+		prevPrevX(0), prevPrevY(0), hasPrevPrev(false),
 		reportMsAvg(5.0), initialized(false) {}
 
 	void OnNewReport(double x, double y, double pressure) {
@@ -156,12 +156,17 @@ struct OverclockInterp {
 		}
 		lastReportTime = now;
 
+		prevPrevX = prevX; prevPrevY = prevY;
 		prevX = currX;  prevY = currY;  prevP = currP;
 		currX = x;      currY = y;      currP = pressure;
 
 		if (!initialized) {
 			prevX = x; prevY = y; prevP = pressure;
+			prevPrevX = x; prevPrevY = y;
+			hasPrevPrev = false;
 			initialized = true;
+		} else {
+			hasPrevPrev = true;
 		}
 	}
 
@@ -174,8 +179,38 @@ struct OverclockInterp {
 		if (alpha < 0.0) alpha = 0.0;
 		if (alpha > 1.0) alpha = 1.0;
 
-		double nextX = currX + (currX - prevX);
-		double nextY = currY + (currY - prevY);
+		double vx = currX - prevX;
+		double vy = currY - prevY;
+
+		double curvGain = 1.0;
+		if (hasPrevPrev) {
+			double ux = prevX - prevPrevX;
+			double uy = prevY - prevPrevY;
+			double nv = sqrt(vx * vx + vy * vy);
+			double nu = sqrt(ux * ux + uy * uy);
+			if (nv > 1e-9 && nu > 1e-9) {
+				double cosA = (vx * ux + vy * uy) / (nv * nu);
+
+				curvGain = cosA;
+				if (curvGain < 0.0) curvGain = 0.0;
+				curvGain *= curvGain;
+			} else {
+				curvGain = 0.0;
+			}
+		}
+
+		double leadX = vx * curvGain;
+		double leadY = vy * curvGain;
+
+		double stepLen = sqrt(vx * vx + vy * vy);
+		double leadLen = sqrt(leadX * leadX + leadY * leadY);
+		if (leadLen > stepLen && leadLen > 1e-9) {
+			double s = stepLen / leadLen;
+			leadX *= s; leadY *= s;
+		}
+
+		double nextX = currX + leadX;
+		double nextY = currY + leadY;
 		double nextP = currP + (currP - prevP);
 		if (nextP < 0) nextP = 0;
 
@@ -193,6 +228,8 @@ struct OverclockInterp {
 		prevX = currX = x;
 		prevY = currY = y;
 		prevP = currP = pressure;
+		prevPrevX = x; prevPrevY = y;
+		hasPrevPrev = false;
 		lastReportTime = chrono::high_resolution_clock::now();
 		initialized = false;
 		reportMsAvg = 5.0;
@@ -249,8 +286,7 @@ static void MaybePublishLatency() {
 	int n = snprintf(buf, sizeof(buf),
 		"[STATUS] LATENCY %0.3f %0.3f %0.3f %u\n",
 		avgMs, p99Ms, maxMs, window);
-	// Mirror to shmem so the GUI sees fresh latency without having to wait
-	// for the text line through the pipe.
+
 	g_statusShmem.PushLatency((float)avgMs, (float)p99Ms, (float)maxMs, (int)window);
 	if (n > 0) {
 		_write(_fileno(stdout), buf, n);
@@ -395,7 +431,7 @@ int WritePenReport(bool force) {
 		return 0;
 
 	auto now = chrono::steady_clock::now();
-	if (penRateLimitActive && !force && vmulti->mode != VMulti::ModeRelativeMouse) {
+	if (penRateLimitActive && !overclockActive && !force && vmulti->mode != VMulti::ModeRelativeMouse) {
 		double hz = penRateLimitHz;
 		if (hz < 30.0) hz = 30.0;
 		if (hz > 1000.0) hz = 1000.0;
@@ -579,11 +615,72 @@ void RunTabletThread() {
 				tablet->state.buttons = 0;
 			}
 
+			{
+				static Vector2D guardPrev;
+				static bool guardHasPrev = false;
+				static int guardRejectStreak = 0;
+
+				bool tipDown = (tablet->state.buttons & 0x01) != 0;
+				if (!tablet->state.isValid || status != Tablet::PacketValid) {
+					guardHasPrev = false;
+				}
+				else if (guardHasPrev && tipDown) {
+					double diag = sqrt(
+						tablet->settings.width * tablet->settings.width +
+						tablet->settings.height * tablet->settings.height);
+
+					double maxStep = diag * 0.25;
+					if (maxStep > 1.0) {
+						double jump = tablet->state.position.Distance(guardPrev);
+						if (jump > maxStep && guardRejectStreak < 5) {
+
+							tablet->state.position.Set(guardPrev);
+							guardRejectStreak++;
+							status = Tablet::PacketPositionInvalid;
+						} else {
+							guardRejectStreak = 0;
+						}
+					}
+				}
+				if (status == Tablet::PacketValid) {
+					guardPrev.Set(tablet->state.position);
+					guardHasPrev = true;
+				}
+			}
+
 			if (tablet->filterPacketCount > 0) {
+
+				double frameDtSec = 0.0;
+				double rawSpeed = 0.0;
+				{
+					static chrono::high_resolution_clock::time_point busPrevTime;
+					static Vector2D busPrevPos;
+					static bool busHasPrev = false;
+
+					chrono::high_resolution_clock::time_point busNow =
+						chrono::high_resolution_clock::now();
+
+					if (status != Tablet::PacketValid || !busHasPrev) {
+
+						busPrevTime = busNow;
+						busPrevPos.Set(tablet->state.position);
+						busHasPrev = true;
+					} else {
+						frameDtSec = (busNow - busPrevTime).count() / 1.0e9;
+
+						if (frameDtSec <= 0.0 || frameDtSec > 0.1) frameDtSec = 0.001;
+						double step = tablet->state.position.Distance(busPrevPos);
+						rawSpeed = step / frameDtSec;
+						busPrevTime = busNow;
+						busPrevPos.Set(tablet->state.position);
+					}
+				}
+
 				for (int filterIndex = 0; filterIndex < tablet->filterPacketCount; filterIndex++) {
 					filter = tablet->filterPacket[filterIndex];
 					if (filter != NULL && filter->isEnabled) {
 						filter->SetReportState(tablet->state.buttons, tablet->state.pressure, tablet->state.z);
+						filter->SetFrameTiming(frameDtSec, rawSpeed);
 						filter->SetTarget(tablet->state.position, tablet->state.z);
 						filter->Update();
 						filter->GetPosition(&tablet->state.position);
@@ -637,10 +734,6 @@ void RunTabletThread() {
 
 			MaybePublishLatency();
 
-			// Push every packet into the shared-memory ring (zero syscalls).
-			// The text [STATUS] POS line below is still emitted but rate-limited
-			// to ~60 Hz, kept for backwards compatibility with older GUIs that
-			// don't know about shmem.
 			{
 				double shmemRate = penRateLimitActive ? measuredOutputRate : measuredReportRate;
 				uint64_t tsNs = (uint64_t)(posNow - timeBegin).count();
@@ -985,9 +1078,6 @@ int main(int argc, char**argv) {
 
 	platform::GlobalInit();
 
-	// Bring up the shared-memory transport. Best-effort: on failure (no
-	// permissions, exotic sandbox) we just don't have the fast path and the
-	// GUI falls back to text [STATUS] POS lines.
 	if (!g_statusShmem.Initialize()) {
 		LOG_INFO("shmem: CreateFileMapping failed, GUI will use text status only\n");
 	}
@@ -995,11 +1085,6 @@ int main(int argc, char**argv) {
 #if defined(_WIN32)
 	SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
-	// Match the GUI's DPI awareness. Without this the service reads desktop
-	// metrics in logical pixels (e.g. 1152 instead of 1440 on a 125% monitor)
-	// and SendInput/SetCursorPos work in logical coordinates while the GUI
-	// sends area rectangles in physical pixels. The two sides disagreed by
-	// exactly the DPI factor, which is what "cursor stops at 80%" looked like.
 	{
 		HMODULE user32 = GetModuleHandleW(L"user32.dll");
 		typedef BOOL (WINAPI *PFN_SPDAC)(DPI_AWARENESS_CONTEXT);
@@ -1120,4 +1205,3 @@ void CleanupAndExit(int code) {
 
 	exit(code);
 }
-

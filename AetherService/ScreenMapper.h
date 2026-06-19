@@ -25,4 +25,3 @@ public:
 	bool GetRotatedTabletPosition(double *x, double *y);
 	bool GetScreenPosition(double *x, double *y);
 };
-

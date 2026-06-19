@@ -91,13 +91,7 @@ void TabletFilterSmoothing::Update() {
 		position.y += deltaY * weight;
 	}
 	else {
-		// Original formula, kept verbatim so the slider feel matches what
-		// users tuned against. Two safety touches vs the legacy code:
-		//   1. compute pow() once per packet instead of twice (the legacy
-		//      version recomputed the whole expression for the clamp).
-		//   2. clamp the input to pow() away from zero so distance == 0 (pen
-		//      perfectly still between samples) doesn't push pow into +inf and
-		//      then rely on the post-clamp to hide it.
+
 		double base = distance + antichatterOffsetX;
 		if (base < 1e-6) base = 1e-6;
 		double shaped = pow(base, -antichatterStrength) * antichatterMultiplier;
@@ -149,4 +143,3 @@ void TabletFilterSmoothing::SetLatency(double latency) {
 	this->weight = GetWeight(latency);
 	this->latency = latency;
 }
-

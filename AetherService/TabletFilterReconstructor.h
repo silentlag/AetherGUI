@@ -6,27 +6,19 @@
 class TabletFilterReconstructor : public TabletFilter {
 public:
 
-	static const int HISTORY_SIZE = 16;
-	struct HistoryEntry {
-		Vector2D position;
-		double timestamp;
-	};
-	HistoryEntry history[HISTORY_SIZE];
-	int historyIndex;
-	int historyCount;
+	double reconstructionStrength;
 
-	Vector2D velocity;
-	Vector2D acceleration;
-	Vector2D smoothedVelocity;
+	double velocitySmoothing;
+
+	bool useInverseEma;
+	double emaWeight;
 
 	Vector2D position;
 	Vector2D target;
 
-	double reconstructionStrength;
-	double velocitySmoothing;
-	double accelerationCap;
-	double predictionTimeMs;
-
+	Vector2D prevTarget;
+	double smoothedSpeed;
+	bool isFirstReport;
 	double lastTimestamp;
 
 	TabletFilterReconstructor();
@@ -39,6 +31,4 @@ public:
 	void Reset(Vector2D position);
 
 	double GetCurrentTimeMs();
-	void AddToHistory(Vector2D pos, double time);
-	void EstimateVelocityAndAcceleration();
 };

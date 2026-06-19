@@ -11,9 +11,6 @@ TabletFilterAetherSmooth::TabletFilterAetherSmooth() {
 
 	isFirstReport = true;
 
-	enableAntismoothing = true;
-	antismoothing = 0.6;
-
 	enableSmoothing = true;
 	stability = 1.0;
 	speedSensitivity = 0.015;
@@ -31,6 +28,10 @@ TabletFilterAetherSmooth::TabletFilterAetherSmooth() {
 	rhythmJitter = 0.18;
 	rhythmFirstTime = true;
 
+	enablePressureGate = false;
+	pressureGateAmount = 0.7;
+	pressureGate = 0.0;
+
 	lastTime = std::chrono::high_resolution_clock::now();
 	debounceTime = std::chrono::high_resolution_clock::now();
 }
@@ -40,7 +41,6 @@ TabletFilterAetherSmooth::~TabletFilterAetherSmooth() {
 
 void TabletFilterAetherSmooth::Reset(Vector2D pos) {
 	lastPos.Set(pos);
-	lastAntismoothPos.Set(pos);
 	lastSmoothedPos.Set(pos);
 	prevProcessedPos.Set(pos);
 	debouncePos.Set(pos);
@@ -58,6 +58,14 @@ void TabletFilterAetherSmooth::SetTarget(Vector2D vector, double h) {
 	target.x = vector.x;
 	target.y = vector.y;
 	z = h;
+}
+
+void TabletFilterAetherSmooth::SetReportState(BYTE buttons, double pressure, double hoverDistance) {
+	(void)buttons; (void)hoverDistance;
+
+	if (pressure < 0.0) pressure = 0.0;
+	if (pressure > 1.0) pressure = 1.0;
+	pressureGate = pressure;
 }
 
 void TabletFilterAetherSmooth::SetPosition(Vector2D vector, double h) {
@@ -188,9 +196,17 @@ Vector2D TabletFilterAetherSmooth::RhythmFlow(Vector2D x, Vector2D raw, double d
 void TabletFilterAetherSmooth::Update() {
 
 	auto now = std::chrono::high_resolution_clock::now();
-	double dt = (now - lastTime).count() / 1000000000.0;
-	lastTime = now;
-	if (dt <= 0 || dt > 0.1) dt = 0.001;
+	double dt;
+	if (hasHostTiming) {
+
+		dt = hostDtSec;
+		if (dt <= 0 || dt > 0.1) dt = 0.001;
+		lastTime = now;
+	} else {
+		dt = (now - lastTime).count() / 1000000000.0;
+		lastTime = now;
+		if (dt <= 0 || dt > 0.1) dt = 0.001;
+	}
 
 	Vector2D currentPos = target;
 
@@ -201,33 +217,20 @@ void TabletFilterAetherSmooth::Update() {
 		return;
 	}
 
-	// Always estimate velocity from raw target deltas. The previous version
-	// only updated `velocity` inside AdaptiveFlow, so disabling smoothing
-	// silently locked velocity at 0 and broke the velocity-aware tweaks below
-	// (antismoothing scaling, debounce intent detection).
 	{
-		double vdx = (currentPos.x - lastPos.x) / dt;
-		double vdy = (currentPos.y - lastPos.y) / dt;
-		double vMagInstant = sqrt(vdx * vdx + vdy * vdy);
-		const double kAlpha = 0.4; // light EMA so we follow speed but ignore noise
+		double vMagInstant;
+		if (hasHostTiming) {
+			vMagInstant = hostRawSpeed;
+		} else {
+			double vdx = (currentPos.x - lastPos.x) / dt;
+			double vdy = (currentPos.y - lastPos.y) / dt;
+			vMagInstant = sqrt(vdx * vdx + vdy * vdy);
+		}
+		const double kAlpha = 0.4;
 		velocity = velocity * (1.0 - kAlpha) + vMagInstant * kAlpha;
 	}
 
-	double velocityScale = velocity / 100.0;
-	if (velocityScale < 0) velocityScale = 0;
-	if (velocityScale > 1) velocityScale = 1;
-
-	double effectiveAntismoothing = 1.0 + (antismoothing - 1.0) * velocityScale;
-	double safeAntismoothing = effectiveAntismoothing;
-	if (safeAntismoothing < 0.6) safeAntismoothing = 0.6;
-
 	Vector2D processedPos = currentPos;
-
-	if (enableAntismoothing) {
-		processedPos.x = lastAntismoothPos.x + (currentPos.x - lastAntismoothPos.x) / safeAntismoothing;
-		processedPos.y = lastAntismoothPos.y + (currentPos.y - lastAntismoothPos.y) / safeAntismoothing;
-		lastAntismoothPos.Set(currentPos);
-	}
 
 	if (enableSmoothing) {
 		processedPos = AdaptiveFlow(processedPos, dt, stability, speedSensitivity, 1.0);
@@ -258,14 +261,7 @@ void TabletFilterAetherSmooth::Update() {
 	}
 
 	if (enableDebounce) {
-		// Dead-band style debounce: hold the last reported position until the
-		// new processed point has drifted beyond `debounceMs` (mm). The old
-		// implementation froze the cursor for N milliseconds whenever motion
-		// was below threshold, which produced a stutter on slow strokes (the
-		// pen was moving, but the GUI treated each sample as "too small" and
-		// refused to advance until the timer expired). The new behavior is
-		// classic input dead-zone: ignore micro-jitter under the threshold
-		// without blocking real motion.
+
 		double drift = processedPos.Distance(debouncePos);
 		if (drift >= debounceMs) {
 			debouncePos.Set(processedPos);
@@ -280,5 +276,14 @@ void TabletFilterAetherSmooth::Update() {
 
 	prevProcessedPos.Set(processedPos);
 	lastPos.Set(currentPos);
+
+	if (enablePressureGate && pressureGateAmount > 0.0001) {
+		double passthrough = pressureGate * pressureGateAmount;
+		if (passthrough < 0.0) passthrough = 0.0;
+		if (passthrough > 1.0) passthrough = 1.0;
+		processedPos.x = processedPos.x + (currentPos.x - processedPos.x) * passthrough;
+		processedPos.y = processedPos.y + (currentPos.y - processedPos.y) * passthrough;
+	}
+
 	position.Set(processedPos);
 }

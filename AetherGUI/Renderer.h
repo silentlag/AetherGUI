@@ -2,7 +2,6 @@
 #include "Framework.h"
 #include "Theme.h"
 
-
 class Renderer {
 public:
 	ID2D1Factory* pFactory = nullptr;
@@ -28,18 +27,16 @@ public:
 	float dpiScale = 1.0f;
 	float deltaTime = 0.016f;
 
-	
 	bool Initialize(HWND hwnd);
-	
+
 	void Shutdown();
-	
+
 	void Resize(UINT width, UINT height);
 
 	bool SetDpiScale(float scale);
 
-	
 	void BeginFrame();
-	
+
 	void EndFrame();
 
 	void FillRect(float x, float y, float w, float h, D2D1_COLOR_F color);
@@ -57,9 +54,6 @@ public:
 	void DrawTextSimple(const wchar_t* text, float x, float y,
 		D2D1_COLOR_F color, IDWriteTextFormat* font);
 
-	// Measure wrapped text size in DIPs given a max width. Returns the actual
-	// box DirectWrite produces (with line wrapping at maxWidth). Used for
-	// auto-sized panels like tooltips.
 	bool MeasureText(const wchar_t* text, IDWriteTextFormat* font,
 		float maxWidth, float* outWidth, float* outHeight);
 
@@ -71,11 +65,15 @@ public:
 		D2D1_COLOR_F leftColor, D2D1_COLOR_F rightColor);
 
 private:
-	
+
 	void TryLoadPrivateFont();
-	
+
 	void TryLoadLogoBitmap();
 	bool LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize = 0);
-	
+
 	bool CreateTextFormats();
+
+	bool CreateDeviceResources();
+
+	bool deviceResourcesValid = false;
 };

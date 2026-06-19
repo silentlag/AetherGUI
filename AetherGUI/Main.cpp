@@ -6,7 +6,6 @@
 #include "AetherApp.h"
 #include "resource.h"
 
-
 static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 	IWICImagingFactory* wicFactory = nullptr;
 	IWICBitmapDecoder* decoder = nullptr;
@@ -24,14 +23,12 @@ static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 	hr = decoder->GetFrame(0, &frame);
 	if (FAILED(hr)) goto cleanup;
 
-	
 	hr = wicFactory->CreateBitmapScaler(&scaler);
 	if (FAILED(hr)) goto cleanup;
 
 	hr = scaler->Initialize(frame, size, size, WICBitmapInterpolationModeHighQualityCubic);
 	if (FAILED(hr)) goto cleanup;
 
-	
 	hr = wicFactory->CreateFormatConverter(&converter);
 	if (FAILED(hr)) goto cleanup;
 
@@ -43,16 +40,15 @@ static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 		UINT stride = size * 4;
 		UINT bufSize = stride * size;
 		std::vector<BYTE> colorBits(bufSize, 0);
-		std::vector<BYTE> maskBits((size * size + 7) / 8, 0); 
+		std::vector<BYTE> maskBits((size * size + 7) / 8, 0);
 
 		hr = converter->CopyPixels(nullptr, stride, bufSize, colorBits.data());
 		if (FAILED(hr)) goto cleanup;
 
-		
 		BITMAPINFO bmi = {};
 		bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 		bmi.bmiHeader.biWidth = size;
-		bmi.bmiHeader.biHeight = -(LONG)size; 
+		bmi.bmiHeader.biHeight = -(LONG)size;
 		bmi.bmiHeader.biPlanes = 1;
 		bmi.bmiHeader.biBitCount = 32;
 		bmi.bmiHeader.biCompression = BI_RGB;
@@ -63,7 +59,6 @@ static HICON CreateIconFromPNG(const std::wstring& pngPath, int size) {
 		if (hbmColor && dibBits) {
 			memcpy(dibBits, colorBits.data(), bufSize);
 
-			
 			BYTE* px = (BYTE*)dibBits;
 			for (UINT i = 0; i < (UINT)(size * size); i++) {
 				BYTE a = px[3];
@@ -98,7 +93,6 @@ cleanup:
 	return hIcon;
 }
 
-
 static std::wstring FindLogoPNG() {
 	wchar_t exePath[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, exePath, MAX_PATH);
@@ -127,7 +121,6 @@ static std::wstring FindLogoPNG() {
 AetherApp app;
 bool isRunning = true;
 
-
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAY_SHOW     4001
 #define ID_TRAY_START    4002
@@ -145,7 +138,7 @@ void CreateTrayIcon(HWND hWnd, HINSTANCE hInstance) {
 	nid.uID = 1;
 	nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 	nid.uCallbackMessage = WM_TRAYICON;
-	
+
 	int traySize = GetSystemMetrics(SM_CXSMICON);
 	{
 		std::wstring png = FindLogoPNG();
@@ -200,7 +193,7 @@ void ShowTrayMenu(HWND hWnd) {
 	AppendMenuW(hMenu, MF_STRING, ID_TRAY_CONSOLE, L"Console");
 	AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"Exit Aether");
-	
+
 	SetForegroundWindow(hWnd);
 	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, nullptr);
 	DestroyMenu(hMenu);
@@ -239,7 +232,7 @@ void EnablePerMonitorDpiAwareness() {
 }
 
 void ApplyAetherWindowTheme(HWND hWnd) {
-	
+
 	BOOL darkMode = Theme::IsLightTheme() ? FALSE : TRUE;
 	DwmSetWindowAttribute(hWnd, 19, &darkMode, sizeof(darkMode));
 	DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
@@ -263,7 +256,6 @@ void ApplyAetherWindowTheme(HWND hWnd) {
 	DWM_WINDOW_CORNER_PREFERENCE corner = static_cast<DWM_WINDOW_CORNER_PREFERENCE>(DWMWCP_ROUND);
 	DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
 
-	
 	SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
 		SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
@@ -353,7 +345,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		return 0;
 
 	case WM_HOTKEY: {
-		// Hotkey id encoding: 0xA001..0xA009 -> config slot 1..9.
+
 		int id = (int)wParam;
 		{
 			wchar_t buf[96];
@@ -455,8 +447,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 	case WM_ACTIVATE:
 	case WM_SETTINGCHANGE:
-		
-		
+
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 
 	case WM_DESTROY:
@@ -489,10 +480,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
-	
+
 	HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"AetherGUI_SingleInstance");
 	if (GetLastError() == ERROR_ALREADY_EXISTS) {
-		
+
 		HWND existing = FindWindowW(L"AetherDriverClass", nullptr);
 		if (existing) {
 			if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
@@ -505,7 +496,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 	EnablePerMonitorDpiAwareness();
 
-	
 	{
 		struct { ULONG Version; ULONG ControlMask; ULONG StateMask; } throttling = {};
 		throttling.Version = 1;
@@ -515,7 +505,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	}
 	timeBeginPeriod(1);
 
-	
 	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
 	WNDCLASSEXW wc = {};
@@ -528,8 +517,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	wc.hbrBackground = hDarkBrush;
 	wc.lpszClassName = L"AetherDriverClass";
 
-	
-	
 	std::wstring logoPng = FindLogoPNG();
 	HICON hIconClassBig = nullptr;
 	HICON hIconClassSmall = nullptr;
@@ -579,11 +566,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 	if (!hWnd) return 1;
 
-	
 	HICON hIconBig = nullptr;
 	HICON hIconSmall = nullptr;
 	if (!logoPng.empty()) {
-		
+
 		int bigSize = std::max(48, GetSystemMetrics(SM_CXICON));
 		hIconBig = CreateIconFromPNG(logoPng, bigSize);
 		hIconSmall = CreateIconFromPNG(logoPng, GetSystemMetrics(SM_CXSMICON));
@@ -602,9 +588,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		return 1;
 	}
 
-	// Register global Ctrl+Shift+1..9 (or whatever modifier the user picked,
-	// loaded from config) -> load configEntries[N-1]. Lives in AetherApp so
-	// the modifier can be flipped at runtime from the Configs panel.
 	app.RegisterConfigHotkeys();
 
 	ShowWindow(hWnd, nCmdShow);
@@ -613,16 +596,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	MSG msg = {};
 	auto nextFrameTime = std::chrono::steady_clock::now();
 
-	// Frame pacing strategy:
-	//   * Sleep is replaced by MsgWaitForMultipleObjectsEx so the loop wakes
-	//     instantly on input rather than on the next Sleep boundary. That
-	//     removes up to ~8 ms of input-to-paint latency the old loop had.
-	//   * Once per frame we ask DWM to flush the compositor queue. On DWM-on
-	//     systems (Win10/11 always) this aligns our paint with the monitor's
-	//     vblank, so we render exactly one frame per refresh and don't waste
-	//     CPU on paints the compositor would just throw away.
-	//   * If DwmFlush returns an error (legacy / DWM disabled) we fall back
-	//     to the timer-based pacing so the loop never stalls.
 	while (isRunning) {
 		while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
 			if (msg.message == WM_QUIT) {
@@ -635,8 +608,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		if (!isRunning) break;
 
 		if (windowHidden) {
-			// Tray-minimized: no rendering work, just keep pumping messages
-			// at a low rate so hotkeys / tray clicks stay responsive.
+
 			MsgWaitForMultipleObjectsEx(0, nullptr, 50, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			nextFrameTime = std::chrono::steady_clock::now();
 			continue;
@@ -646,12 +618,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		if (now >= nextFrameTime) {
 			app.Tick();
 
-			// Pace to DWM vblank when available; otherwise fall back to a
-			// fixed 16 ms tick. DwmFlush blocks for up to one refresh.
 			HRESULT hr = DwmFlush();
 			if (SUCCEEDED(hr)) {
-				// DWM did the waiting for us. Schedule the next deadline
-				// right now so the next iteration paints immediately.
+
 				nextFrameTime = std::chrono::steady_clock::now();
 			} else {
 				nextFrameTime = now + std::chrono::milliseconds(16);

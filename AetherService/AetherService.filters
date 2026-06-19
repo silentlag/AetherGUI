@@ -69,13 +69,13 @@
     <ClInclude Include="TabletSettings.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TabletFilterPeak.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="PositionRingBuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TabletFilterReconstructor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TabletFilterJitterStabilizer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TabletFilterAdaptive.h">
@@ -143,13 +143,13 @@
     <ClCompile Include="TabletSettings.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TabletFilterPeak.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PositionRingBuffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabletFilterReconstructor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TabletFilterJitterStabilizer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabletFilterAdaptive.cpp">

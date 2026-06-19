@@ -11,10 +11,6 @@ DriverBridge::~DriverBridge() {
 	if (shmem) { delete shmem; shmem = nullptr; }
 }
 
-// ---------------------------------------------------------------------------
-// Diagnostic log file (next to AetherGUI.exe)
-// ---------------------------------------------------------------------------
-
 static std::wstring BridgeDirNextToExe() {
 	wchar_t exePath[MAX_PATH] = {};
 	DWORD n = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
@@ -40,11 +36,10 @@ void DriverBridge::OpenDebugLog() {
 	std::wstring file = dir + L"AetherGUI.log";
 
 	FILE* fp = nullptr;
-	// Plain binary append - we write raw UTF-8 ourselves. The "ccs=UTF-8"
-	// mode has had append-mode quirks in some MSVC builds.
+
 	errno_t err = _wfopen_s(&fp, file.c_str(), L"ab");
 	if (err != 0 || fp == nullptr) {
-		// Fall back to %TEMP% if exe directory isn't writable (Program Files etc.)
+
 		std::wstring tmpDir = BridgeFallbackTempDir();
 		if (!tmpDir.empty()) {
 			file = tmpDir + L"AetherGUI.log";
@@ -57,7 +52,6 @@ void DriverBridge::OpenDebugLog() {
 		debugLogOpened = true;
 		debugLogPath = file;
 
-		// Write UTF-8 BOM once if the file is empty.
 		long pos = ftell(fp);
 		if (pos == 0) {
 			const unsigned char bom[3] = { 0xEF, 0xBB, 0xBF };
@@ -102,7 +96,6 @@ void DriverBridge::DebugLog(const char* tag, const char* fmt, ...) {
 	va_end(ap);
 	message[sizeof(message) - 1] = '\0';
 
-	// Strip a trailing newline so we control formatting consistently.
 	size_t len = strlen(message);
 	while (len > 0 && (message[len - 1] == '\n' || message[len - 1] == '\r')) {
 		message[--len] = '\0';
@@ -218,7 +211,6 @@ bool DriverBridge::Start(const std::wstring& exePath, const std::string& configF
 
 	PROCESS_INFORMATION pi = {};
 
-	// Build wide command line: "<quoted exe>" <config>
 	std::wstring cmdLine;
 	cmdLine.reserve(exePath.size() + configFile.size() + 8);
 	cmdLine.push_back(L'"');
@@ -234,7 +226,6 @@ bool DriverBridge::Start(const std::wstring& exePath, const std::string& configF
 		}
 	}
 
-	// CreateProcessW requires a writable buffer for lpCommandLine.
 	std::vector<wchar_t> cmdBuf(cmdLine.begin(), cmdLine.end());
 	cmdBuf.push_back(L'\0');
 
@@ -276,13 +267,11 @@ bool DriverBridge::Start(const std::wstring& exePath, const std::string& configF
 	CloseHandle(hStdinRead);
 	CloseHandle(hStdoutWrite);
 
-	
-	
 	{
 		struct { ULONG Version; ULONG ControlMask; ULONG StateMask; } throttling = {};
 		throttling.Version = 1;
-		throttling.ControlMask = 0x1; 
-		throttling.StateMask = 0;     
+		throttling.ControlMask = 0x1;
+		throttling.StateMask = 0;
 		SetProcessInformation(hProcess, ProcessPowerThrottling, &throttling, sizeof(throttling));
 	}
 
@@ -292,8 +281,6 @@ bool DriverBridge::Start(const std::wstring& exePath, const std::string& configF
 	hReadThread = CreateThread(nullptr, 0, ReadThreadProc, this, 0, nullptr);
 	return true;
 }
-
-
 
 void DriverBridge::Stop() {
 	if (!isRunning) return;
@@ -363,11 +350,10 @@ void DriverBridge::ReadLoop() {
 
 			ParseStatusLine(line);
 
-			// High-rate position updates drive the live cursor/Hz meter, but should not spam the Console tab.
 			bool isPosStatus = (line.find("[STATUS] POS ") != std::string::npos);
 
 			if (!isPosStatus) {
-				// Mirror every non-POS service line to the persistent log file.
+
 				DebugLogRaw("SVC", line);
 
 				std::lock_guard<std::mutex> lock(logMutex);
@@ -379,7 +365,6 @@ void DriverBridge::ReadLoop() {
 		}
 	}
 
-	// Capture exit code so we can tell crash vs. clean shutdown.
 	if (hProcess != nullptr) {
 		DWORD exitCode = 0;
 		if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
@@ -392,18 +377,15 @@ void DriverBridge::ReadLoop() {
 }
 
 void DriverBridge::ParseStatusLine(const std::string& line) {
-	// Hot path: this runs for every line the service emits, including [STATUS]
-	// POS lines at the full overclock rate (up to 2000 Hz). Avoid substr/find
-	// chains, work directly on the underlying buffer.
+
 	const char* s   = line.c_str();
 	const char* end = s + line.size();
 
 	const char* tag = strstr(s, "[STATUS]");
 	if (!tag) return;
-	const char* p = tag + 8;            // skip "[STATUS]"
-	while (p < end && *p == ' ') ++p;   // skip the single space
+	const char* p = tag + 8;
+	while (p < end && *p == ' ') ++p;
 
-	// Match a prefix and advance p past it (and any trailing spaces).
 	auto match = [&](const char* prefix, size_t prefixLen) -> bool {
 		if ((size_t)(end - p) < prefixLen) return false;
 		if (memcmp(p, prefix, prefixLen) != 0) return false;
@@ -423,7 +405,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 	if (match("MAX_PRESSURE", 12)) { maxPressure  = atoi(p);        return; }
 
 	if (match("LATENCY", 7)) {
-		// Same as POS: shmem already has it.
+
 		if (shmemActive) return;
 		float avg = 0, p99 = 0, mx = 0;
 		int samples = 0;
@@ -437,9 +419,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 	}
 
 	if (match("POS", 3)) {
-		// When the shmem fast path is up we already pulled the latest sample
-		// into the atomics + trail. The service still emits text POS lines for
-		// older GUIs, but here they'd just duplicate the work. Skip.
+
 		if (shmemActive) return;
 		float px = 0, py = 0, pp = 0, phz = 0;
 		if (sscanf_s(p, "%f %f %f %f", &px, &py, &pp, &phz) >= 2) {
@@ -472,23 +452,11 @@ void DriverBridge::ClearLog() {
 	logLines.clear();
 }
 
-// ---------------------------------------------------------------------------
-// Shared-memory fast path
-// ---------------------------------------------------------------------------
-//
-// The service writes one PosSlot per HID report into a memory-mapped ring.
-// PollShmem() is called every GUI frame; it drains everything new into the
-// public atomics and trail buffer with zero syscalls per sample. We lazily
-// try to open the mapping every few seconds until it appears, in case the
-// service comes up after the GUI does.
-
 void DriverBridge::PollShmem() {
 	if (!shmem) shmem = new StatusSharedReader();
 
 	if (!shmem->IsActive()) {
-		// Retry-open is cheap (a single OpenFileMappingW) so do it once per
-		// call. The OS quickly returns ERROR_FILE_NOT_FOUND when the mapping
-		// doesn't exist; no need to throttle harder than the frame rate.
+
 		if (!shmem->TryOpen()) {
 			shmemActive = false;
 			return;
@@ -507,10 +475,6 @@ void DriverBridge::PollShmem() {
 		lastHz = s.hz;
 		anySample = true;
 
-		// Push into the trail buffer just like ParseStatusLine does. We
-		// downsample the trail to avoid filling it with thousands of points
-		// per second; one in every four samples is enough for the preview
-		// (~250 Hz visualisation rate, plenty smooth).
 		static int trailDecimator = 0;
 		if ((trailDecimator++ & 3) == 0) {
 			std::lock_guard<std::mutex> lock(trailMutex);
@@ -530,7 +494,6 @@ void DriverBridge::PollShmem() {
 	}
 	(void)n;
 
-	// Latency block too -- cheaper than waiting for the next text line.
 	AetherShared::LatencyBlock lb{};
 	if (shmem->ReadLatency(lb) && lb.samples > 0) {
 		latencyAvgMs.store(lb.avgMs);

@@ -1,12 +1,3 @@
-// Shared VERSIONINFO block for both AetherGUI.exe and AetherService.exe.
-// Including a populated version resource is one of the cheapest ways to push
-// down false-positive antivirus heuristics: unsigned binaries with empty
-// CompanyName/ProductName/FileDescription get flagged as "suspicious" by
-// generic ML detectors (Wacatac, Bearfoos, etc) almost reflexively, while
-// the same binary with a normal version block is left alone in most cases.
-//
-// Files that #include this header must define AETHER_RC_INTERNAL_NAME and
-// AETHER_RC_ORIGINAL_FILENAME before including, e.g. "AetherGUI.exe".
 
 #include "Version.h"
 

@@ -3,8 +3,6 @@
 #define AETHERGUI_VERSION "1.0.3"
 #define AETHERGUI_VERSION_W L"1.0.3"
 
-// Numeric form for resource VERSIONINFO blocks. Keep in sync with the string
-// constants above; the .rc preprocessor can't parse "1.0.3" itself.
 #define AETHER_VERSION_MAJOR 1
 #define AETHER_VERSION_MINOR 0
 #define AETHER_VERSION_PATCH 3

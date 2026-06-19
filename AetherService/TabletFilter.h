@@ -27,6 +27,11 @@ public:
 	bool isEnabled;
 	bool isValid;
 
+	double hostDtSec;
+	double hostRawSpeed;
+	bool   hasHostTiming;
+	void SetFrameTiming(double dtSec, double rawSpeedMmPerSec);
+
 	TabletFilter();
 
 	bool StartTimer();

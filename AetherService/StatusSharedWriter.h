@@ -8,7 +8,6 @@ public:
 	StatusSharedWriter();
 	~StatusSharedWriter();
 
-	
 	bool Initialize();
 	void Shutdown();
 
@@ -16,7 +15,6 @@ public:
 
 	void PushPos(uint64_t tsNs, float x, float y, float pressure, float hz, bool tipDown);
 
-	
 	void PushLatency(float avgMs, float p99Ms, float maxMs, int samples);
 
 private:

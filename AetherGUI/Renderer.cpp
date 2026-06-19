@@ -48,7 +48,6 @@ bool Renderer::LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap
 	if (SUCCEEDED(hr))
 		hr = decoder->GetFrame(0, &frame);
 
-	
 	IWICBitmapSource* scaledSource = nullptr;
 	if (SUCCEEDED(hr) && maxSize > 0) {
 		UINT srcW = 0, srcH = 0;
@@ -94,7 +93,7 @@ void Renderer::TryLoadLogoBitmap() {
 	};
 
 	for (const auto& candidate : candidates) {
-		
+
 		if (FileExistsW(candidate) && LoadBitmapFromFile(candidate, &pLogoBitmap, 128))
 			break;
 	}
@@ -116,19 +115,6 @@ bool Renderer::Initialize(HWND hwnd) {
 	HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pFactory);
 	if (FAILED(hr)) return false;
 
-	RECT rc;
-	GetClientRect(hwnd, &rc);
-	D2D1_SIZE_U size = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
-
-	hr = pFactory->CreateHwndRenderTarget(
-		D2D1::RenderTargetProperties(),
-		D2D1::HwndRenderTargetProperties(hwnd, size),
-		&pRT);
-	if (FAILED(hr)) return false;
-
-	pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-	pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
-
 	D2D1_STROKE_STYLE_PROPERTIES roundStroke = D2D1::StrokeStyleProperties(
 		D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
 		D2D1_LINE_JOIN_ROUND, 10.0f, D2D1_DASH_STYLE_SOLID, 0.0f);
@@ -142,12 +128,42 @@ bool Renderer::Initialize(HWND hwnd) {
 	hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pWICFactory));
 	if (FAILED(hr)) return false;
 
-	hr = pRT->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF), &pBrush);
-	if (FAILED(hr)) return false;
-
 	if (!CreateTextFormats()) return false;
+
+	CreateDeviceResources();
+
+	return true;
+}
+
+bool Renderer::CreateDeviceResources() {
+	if (!pFactory || !hWnd) return false;
+	if (deviceResourcesValid && pRT) return true;
+
+	SafeRelease(&pLogoBitmap);
+	SafeRelease(&pBrush);
+	SafeRelease(&pRT);
+
+	RECT rc;
+	GetClientRect(hWnd, &rc);
+	D2D1_SIZE_U size = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
+	if (size.width == 0)  size.width = 1;
+	if (size.height == 0) size.height = 1;
+
+	HRESULT hr = pFactory->CreateHwndRenderTarget(
+		D2D1::RenderTargetProperties(),
+		D2D1::HwndRenderTargetProperties(hWnd, size),
+		&pRT);
+	if (FAILED(hr)) { SafeRelease(&pRT); return false; }
+
+	pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+	pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
+
+	hr = pRT->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF), &pBrush);
+	if (FAILED(hr)) { SafeRelease(&pBrush); SafeRelease(&pRT); return false; }
+
 	TryLoadLogoBitmap();
 
+	deviceResourcesValid = true;
 	return true;
 }
 
@@ -200,6 +216,7 @@ bool Renderer::CreateTextFormats() {
 }
 
 void Renderer::Shutdown() {
+	deviceResourcesValid = false;
 	SafeRelease(&pLogoBitmap);
 	SafeRelease(&pFontTitle);
 	SafeRelease(&pFontHeading);
@@ -226,7 +243,10 @@ void Renderer::Shutdown() {
 
 void Renderer::Resize(UINT width, UINT height) {
 	if (pRT && width > 0 && height > 0) {
-		pRT->Resize(D2D1::SizeU(width, height));
+		if (FAILED(pRT->Resize(D2D1::SizeU(width, height)))) {
+
+			deviceResourcesValid = false;
+		}
 	}
 }
 
@@ -235,23 +255,18 @@ bool Renderer::SetDpiScale(float scale) {
 	if (fabsf(scale - dpiScale) < 0.001f)
 		return true;
 
-	// dpiScale is now consumed only by Theme::Runtime::UiScale (which AetherApp
-	// updates) and via the renderer transform pushed in BeginFrame. We do NOT
-	// rebuild fonts here -- DWrite formats use design-space sizes and the
-	// transform handles the actual physical-pixel scaling. Rebuilding fonts on
-	// every DPI tick was the source of the laggy text and the misaligned
-	// hit-test boxes.
 	dpiScale = scale;
 	return true;
 }
 
 void Renderer::BeginFrame() {
-	if (!pRT) return;
+
+	if (!pRT || !deviceResourcesValid) {
+		if (!CreateDeviceResources())
+			return;
+	}
 	pRT->BeginDraw();
-	// Rendering happens entirely in design pixels (96 DPI). The OS gave us a
-	// physical-pixel render target; push a Scale transform so every coordinate
-	// AetherApp sends us is multiplied up to physical pixels exactly once. This
-	// keeps layout, fonts, and mouse hit-test in the same coordinate space.
+
 	float s = Theme::Runtime::UiScale;
 	if (s < 0.001f) s = 1.0f;
 	pRT->SetTransform(D2D1::Matrix3x2F::Scale(s, s));
@@ -262,61 +277,67 @@ void Renderer::EndFrame() {
 	if (!pRT) return;
 	HRESULT hr = pRT->EndDraw();
 	if (hr == D2DERR_RECREATE_TARGET) {
-		Shutdown();
-		Initialize(hWnd);
+
+		deviceResourcesValid = false;
+		SafeRelease(&pLogoBitmap);
+		SafeRelease(&pBrush);
+		SafeRelease(&pRT);
 	}
 }
 
 void Renderer::FillRect(float x, float y, float w, float h, D2D1_COLOR_F color) {
+	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);
 	pRT->FillRectangle(D2D1::RectF(x, y, x + w, y + h), pBrush);
 }
 
 void Renderer::FillRoundedRect(float x, float y, float w, float h, float radius, D2D1_COLOR_F color) {
+	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);
 	D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), radius, radius);
 	pRT->FillRoundedRectangle(rr, pBrush);
 }
 
 void Renderer::DrawRoundedRect(float x, float y, float w, float h, float radius, D2D1_COLOR_F color, float strokeWidth) {
+	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);
 	D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), radius, radius);
 	pRT->DrawRoundedRectangle(rr, pBrush, strokeWidth);
 }
 
 void Renderer::FillCircle(float cx, float cy, float r, D2D1_COLOR_F color) {
+	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);
 	pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), pBrush);
 }
 
 void Renderer::DrawCircle(float cx, float cy, float r, D2D1_COLOR_F color, float strokeWidth) {
+	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);
 	pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), pBrush, strokeWidth);
 }
 
 void Renderer::DrawLine(float x1, float y1, float x2, float y2, D2D1_COLOR_F color, float strokeWidth) {
+	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);
 	pRT->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), pBrush, strokeWidth);
 }
 
 void Renderer::DrawBitmap(ID2D1Bitmap* bitmap, float x, float y, float w, float h, float opacity) {
-	if (!bitmap) return;
+	if (!pRT || !bitmap) return;
 	pRT->DrawBitmap(bitmap, D2D1::RectF(x, y, x + w, y + h), opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
 void Renderer::DrawBitmapTinted(ID2D1Bitmap* bitmap, float x, float y, float w, float h, D2D1_COLOR_F tint, float opacity) {
-	if (!bitmap || !pRT) return;
+	if (!bitmap || !pRT || !pBrush) return;
 
-	
 	D2D1_RECT_F destRect = D2D1::RectF(x, y, x + w, y + h);
 	pRT->DrawBitmap(bitmap, destRect, opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 
-	
-	
 	ID2D1BitmapBrush* pBmpBrush = nullptr;
 	HRESULT hr = pRT->CreateBitmapBrush(bitmap, &pBmpBrush);
 	if (SUCCEEDED(hr)) {
-		
+
 		D2D1_SIZE_F bmpSize = bitmap->GetSize();
 		float sx = w / bmpSize.width;
 		float sy = h / bmpSize.height;
@@ -326,13 +347,12 @@ void Renderer::DrawBitmapTinted(ID2D1Bitmap* bitmap, float x, float y, float w, 
 		ID2D1Layer* pLayer = nullptr;
 		hr = pRT->CreateLayer(nullptr, &pLayer);
 		if (SUCCEEDED(hr)) {
-			
+
 			pRT->PushLayer(
 				D2D1::LayerParameters(destRect, nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
 					D2D1::Matrix3x2F::Identity(), 1.0f, pBmpBrush),
 				pLayer);
 
-			
 			pBrush->SetColor(tint);
 			pRT->FillRectangle(destRect, pBrush);
 
@@ -345,6 +365,7 @@ void Renderer::DrawBitmapTinted(ID2D1Bitmap* bitmap, float x, float y, float w, 
 
 void Renderer::DrawText(const wchar_t* text, float x, float y, float w, float h,
 	D2D1_COLOR_F color, IDWriteTextFormat* font, TextAlign align) {
+	if (!pRT || !pBrush || !font) return;
 	pBrush->SetColor(color);
 
 	switch (align) {
@@ -392,6 +413,7 @@ bool Renderer::MeasureText(const wchar_t* text, IDWriteTextFormat* font,
 
 void Renderer::FillRectGradientV(float x, float y, float w, float h,
 	D2D1_COLOR_F topColor, D2D1_COLOR_F bottomColor) {
+	if (!pRT) return;
 	ID2D1GradientStopCollection* pStops = nullptr;
 	D2D1_GRADIENT_STOP stops[2];
 	stops[0] = { 0.0f, topColor };
@@ -413,6 +435,7 @@ void Renderer::FillRectGradientV(float x, float y, float w, float h,
 
 void Renderer::FillRectGradientH(float x, float y, float w, float h,
 	D2D1_COLOR_F leftColor, D2D1_COLOR_F rightColor) {
+	if (!pRT) return;
 	ID2D1GradientStopCollection* pStops = nullptr;
 	D2D1_GRADIENT_STOP stops[2];
 	stops[0] = { 0.0f, leftColor };
@@ -434,6 +457,7 @@ void Renderer::FillRectGradientH(float x, float y, float w, float h,
 
 void Renderer::FillRoundedRectGradientH(float x, float y, float w, float h, float radius,
 	D2D1_COLOR_F leftColor, D2D1_COLOR_F rightColor) {
+	if (!pRT || !pFactory) return;
 	ID2D1RoundedRectangleGeometry* pGeometry = nullptr;
 	D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), radius, radius);
 	HRESULT hr = pFactory->CreateRoundedRectangleGeometry(rr, &pGeometry);
