@@ -279,6 +279,7 @@ public:
 	bool autoStartEnabled = true;
 	float autoStartRetryTimer = 0.0f;
 	int autoStartRetryCount = 0;
+	float pendingStartupSettingsTimer = -1.0f;
 	struct ConfigEntry {
 		std::wstring name;
 		std::wstring path;

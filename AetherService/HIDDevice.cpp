@@ -484,7 +484,7 @@ bool HIDDevice::OpenFeatureCapable(USHORT vendorId, USHORT productId) {
 
 					int score;
 					if (caps.UsagePage >= 0xFF00) {
-						score = 100000 + caps.FeatureReportByteLength;
+						score = 100000 - caps.FeatureReportByteLength;
 					} else {
 						score = 10000 - caps.FeatureReportByteLength;
 					}

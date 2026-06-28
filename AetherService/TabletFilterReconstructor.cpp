@@ -17,6 +17,9 @@ TabletFilterReconstructor::TabletFilterReconstructor() {
 	isFirstReport = true;
 	lastTimestamp = 0.0;
 
+	prevStepX = 0.0;
+	prevStepY = 0.0;
+
 	position.Set(0, 0);
 	target.Set(0, 0);
 	prevTarget.Set(0, 0);
@@ -36,6 +39,8 @@ void TabletFilterReconstructor::Reset(Vector2D pos) {
 	smoothedSpeed = 0.0;
 	isFirstReport = true;
 	lastTimestamp = GetCurrentTimeMs();
+	prevStepX = 0.0;
+	prevStepY = 0.0;
 }
 
 void TabletFilterReconstructor::SetTarget(Vector2D vector, double h) {
@@ -66,6 +71,8 @@ void TabletFilterReconstructor::Update() {
 		position.Set(target);
 		prevTarget.Set(target);
 		smoothedSpeed = 0.0;
+		prevStepX = 0.0;
+		prevStepY = 0.0;
 		lastTimestamp = now;
 		isFirstReport = false;
 		return;
@@ -73,10 +80,23 @@ void TabletFilterReconstructor::Update() {
 
 	if (useInverseEma) {
 		double w = emaWeight;
-		if (w < 0.05) w = 0.05;
+		if (w < 0.15) w = 0.15;
 		if (w > 1.0)  w = 1.0;
-		position.x = (target.x - prevTarget.x) / w + prevTarget.x;
-		position.y = (target.y - prevTarget.y) / w + prevTarget.y;
+
+		double dx = (target.x - prevTarget.x) / w;
+		double dy = (target.y - prevTarget.y) / w;
+
+		double instStep = target.Distance(prevTarget);
+		double maxLead = instStep / w + 0.01;
+		double leadDist = sqrt(dx * dx + dy * dy);
+		if (leadDist > maxLead && leadDist > 0.0) {
+			double scale = maxLead / leadDist;
+			dx *= scale;
+			dy *= scale;
+		}
+
+		position.x = prevTarget.x + dx;
+		position.y = prevTarget.y + dy;
 		prevTarget.Set(target);
 		return;
 	}
@@ -110,13 +130,27 @@ void TabletFilterReconstructor::Update() {
 	if (smoothedSpeed < kSpeedDeadZone) {
 		position.Set(target);
 		prevTarget.Set(target);
+		prevStepX = 0.0;
+		prevStepY = 0.0;
 		return;
 	}
 
-	double gain = 1.0 + reconstructionStrength * velocityScale;
+	double stepX = target.x - prevTarget.x;
+	double stepY = target.y - prevTarget.y;
 
-	double dx = (target.x - prevTarget.x) * gain;
-	double dy = (target.y - prevTarget.y) * gain;
+	double curvGain = 1.0;
+	double nStep = sqrt(stepX * stepX + stepY * stepY);
+	double nPrev = sqrt(prevStepX * prevStepX + prevStepY * prevStepY);
+	if (nStep > 1e-9 && nPrev > 1e-9) {
+		double cosA = (stepX * prevStepX + stepY * prevStepY) / (nStep * nPrev);
+		if (cosA < 0.0) cosA = 0.0;
+		curvGain = cosA * cosA;
+	}
+
+	double gain = 1.0 + reconstructionStrength * velocityScale * curvGain;
+
+	double dx = stepX * gain;
+	double dy = stepY * gain;
 
 	double maxLead = instStep * (1.0 + reconstructionStrength) + 0.01;
 	double leadDist = sqrt(dx * dx + dy * dy);
@@ -129,5 +163,7 @@ void TabletFilterReconstructor::Update() {
 	position.x = prevTarget.x + dx;
 	position.y = prevTarget.y + dy;
 
+	prevStepX = stepX;
+	prevStepY = stepY;
 	prevTarget.Set(target);
 }

@@ -1917,8 +1917,7 @@ bool AetherApp::StartDriverService() {
 		return false;
 	}
 
-	Sleep(800);
-	SendStartupSettingsToDriver();
+	pendingStartupSettingsTimer = 0.8f;
 
 	pendingTabletInfoResync = true;
 	lastSeenTabletWidth = -1.0f;
@@ -2395,6 +2394,16 @@ void AetherApp::Tick() {
 			autoStartRetryCount++;
 			autoStartRetryTimer = autoStartRetryCount < 8 ? 1.5f : 5.0f;
 			StartDriverService();
+		}
+	}
+
+	if (pendingStartupSettingsTimer >= 0.0f) {
+		pendingStartupSettingsTimer -= deltaTime;
+		if (pendingStartupSettingsTimer <= 0.0f) {
+			pendingStartupSettingsTimer = -1.0f;
+			if (driver.isConnected) {
+				SendStartupSettingsToDriver();
+			}
 		}
 	}
 

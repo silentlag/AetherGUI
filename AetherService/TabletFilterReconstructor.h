@@ -18,6 +18,8 @@ public:
 
 	Vector2D prevTarget;
 	double smoothedSpeed;
+	double prevStepX;
+	double prevStepY;
 	bool isFirstReport;
 	double lastTimestamp;
 
