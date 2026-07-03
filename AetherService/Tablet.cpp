@@ -79,6 +79,11 @@ Tablet::Tablet() {
 
 	tipDownCounter = 0;
 
+	pressureCurveEnabled = false;
+	pressureExponent = 1.0;
+	pressureMin = 0.0;
+	pressureMax = 1.0;
+
 }
 
 Tablet::~Tablet() {
@@ -102,6 +107,7 @@ void Tablet::ResetPacketFilters() {
 	filterPacket[filterPacketCount++] = &reconstructor;
 	filterPacket[filterPacketCount++] = &adaptive;
 	filterPacket[filterPacketCount++] = &aetherSmooth;
+	filterPacket[filterPacketCount++] = &lazyMouse;
 
 	filterPacket[filterPacketCount++] = &jitterStabilizer;
 

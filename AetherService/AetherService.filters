@@ -78,6 +78,12 @@
     <ClInclude Include="TabletFilterJitterStabilizer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TabletFilterLazyMouse.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HotkeyManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="TabletFilterAdaptive.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -150,6 +156,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabletFilterJitterStabilizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TabletFilterLazyMouse.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HotkeyManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabletFilterAdaptive.cpp">

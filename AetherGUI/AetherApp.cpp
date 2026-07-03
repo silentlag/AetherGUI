@@ -987,6 +987,7 @@ bool AetherApp::Initialize(HWND hwnd) {
 	sidebar.AddTab(L"Filters", L"\xE71C");
 	sidebar.AddTab(L"Settings", L"\xE713");
 	sidebar.AddTab(L"Console", L"\xE756");
+	sidebar.AddTab(L"Brush", L"\xE70F");
 	sidebar.AddTab(L"About", L"\xE946");
 
 	wchar_t exePathW[MAX_PATH] = {};
@@ -1147,6 +1148,20 @@ void AetherApp::InitControls() {
 	filters.jitterStabRadius.format = L"%.2f";
 	filters.jitterStabRelease.Layout(cx + hw + 16, 0, hw, L"Release Speed (mm/s)", 1.0f, 200.0f, 15.0f, L"Above this pen speed the stabilizer fully releases (1:1 tracking, no lag).");
 	filters.jitterStabRelease.format = L"%.0f";
+
+	filters.lazyMouseEnabled.Layout(cx, 0, L"Lazy Mouse (Rope)", L"Drawing tool: the cursor trails the pen by a fixed rope length, smoothing out hand jitter for clean strokes. Turn off for osu!. Only affects position.");
+	filters.lazyMouseRadius.Layout(cx, 0, hw, L"Rope Radius (mm)", 0.0f, 50.0f, 3.0f, L"How far the pen must travel before the cursor starts moving. Larger = smoother but laggier lines.");
+	filters.lazyMouseRadius.format = L"%.2f";
+	filters.lazyMouseSmooth.Layout(cx + hw + 16, 0, hw, L"Glide", 0.0f, 0.95f, 0.5f, L"Extra trailing glide on top of the rope. 0 = pure rope, higher = softer, laggier lines.");
+	filters.lazyMouseSmooth.format = L"%.2f";
+
+	filters.pressureCurveEnabled.Layout(cx, 0, L"Pressure Curve", L"Remaps pen pressure via a power (gamma) curve. Exponent < 1 = firmer, easier to reach full pressure. > 1 = softer, needs more force. For drawing.");
+	filters.pressureExponent.Layout(cx, 0, hw, L"Exponent", 0.1f, 4.0f, 1.0f, L"Power applied to normalized pressure. 1.0 = linear (no change). 0.5 = firmer, 2.0 = softer.");
+	filters.pressureExponent.format = L"%.2f";
+	filters.pressureMin.Layout(cx, 0, hw * 0.5f, L"Floor", 0.0f, 0.95f, 0.0f, L"Minimum output pressure (baseline when pen is touching).");
+	filters.pressureMin.format = L"%.2f";
+	filters.pressureMax.Layout(cx + hw * 0.5f + 16, 0, hw * 0.5f, L"Ceiling", 0.05f, 1.0f, 1.0f, L"Maximum output pressure.");
+	filters.pressureMax.format = L"%.2f";
 
 	filters.adaptiveEnabled.Layout(cx, 0, L"Adaptive Filter", L"Statistical filter that balances prediction and measurement for optimal smoothing");
 	filters.adaptiveProcessNoise.Layout(cx, 0, hw, L"Process Noise (Q)", 0.001f, 10, 0.02f, L"Expected movement variance. Higher = trusts measurements more (less smooth)");
@@ -1322,6 +1337,8 @@ void AetherApp::CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const {
 	slider(filters.reconStrength); slider(filters.reconVelSmooth);
 	slider(filters.reconEmaWeight);
 	slider(filters.jitterStabRadius); slider(filters.jitterStabRelease);
+	slider(filters.lazyMouseRadius); slider(filters.lazyMouseSmooth);
+	slider(filters.pressureExponent); slider(filters.pressureMin); slider(filters.pressureMax);
 	slider(filters.adaptiveProcessNoise); slider(filters.adaptiveMeasNoise); slider(filters.adaptiveVelWeight);
 	slider(aether.stabilizerStability); slider(aether.stabilizerSensitivity);
 	slider(aether.snappingInner); slider(aether.snappingOuter); slider(aether.suppressionTime);
@@ -1338,6 +1355,7 @@ void AetherApp::CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const {
 	toggle(filters.smoothingEnabled); toggle(filters.antichatterEnabled); toggle(filters.noiseEnabled);
 	toggle(filters.velCurveEnabled); toggle(filters.snapEnabled); toggle(filters.reconstructorEnabled);
 	toggle(filters.reconInverseEma); toggle(filters.jitterStabEnabled);
+	toggle(filters.lazyMouseEnabled); toggle(filters.pressureCurveEnabled);
 	toggle(filters.adaptiveEnabled);
 	toggle(aether.enabled); toggle(aether.stabilizerEnabled);
 	toggle(aether.snappingEnabled); toggle(aether.suppressionEnabled);
@@ -1400,6 +1418,8 @@ void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
 	setSlider(filters.reconStrength); setSlider(filters.reconVelSmooth);
 	setSlider(filters.reconEmaWeight);
 	setSlider(filters.jitterStabRadius); setSlider(filters.jitterStabRelease);
+	setSlider(filters.lazyMouseRadius); setSlider(filters.lazyMouseSmooth);
+	setSlider(filters.pressureExponent); setSlider(filters.pressureMin); setSlider(filters.pressureMax);
 	setSlider(filters.adaptiveProcessNoise); setSlider(filters.adaptiveMeasNoise); setSlider(filters.adaptiveVelWeight);
 	setSlider(aether.stabilizerStability); setSlider(aether.stabilizerSensitivity);
 	setSlider(aether.snappingInner); setSlider(aether.snappingOuter); setSlider(aether.suppressionTime);
@@ -1418,6 +1438,7 @@ void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
 	setToggle(filters.smoothingEnabled); setToggle(filters.antichatterEnabled); setToggle(filters.noiseEnabled);
 	setToggle(filters.velCurveEnabled); setToggle(filters.snapEnabled); setToggle(filters.reconstructorEnabled);
 	setToggle(filters.reconInverseEma); setToggle(filters.jitterStabEnabled);
+	setToggle(filters.lazyMouseEnabled); setToggle(filters.pressureCurveEnabled);
 	setToggle(filters.adaptiveEnabled);
 	setToggle(aether.enabled); setToggle(aether.stabilizerEnabled);
 	setToggle(aether.snappingEnabled); setToggle(aether.suppressionEnabled);
@@ -1521,6 +1542,7 @@ bool AetherApp::IsTextEditingActive() const {
 		&filters.snapRadius, &filters.snapSmooth,
 		&filters.reconStrength, &filters.reconVelSmooth,
 		&filters.reconEmaWeight, &filters.jitterStabRadius, &filters.jitterStabRelease,
+		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
 		&aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime,
@@ -1583,6 +1605,15 @@ bool AetherApp::FocusNextEditableRow(bool reverse) {
 		if (filters.jitterStabEnabled.value) {
 			add(filters.jitterStabRadius);
 			add(filters.jitterStabRelease);
+		}
+		if (filters.lazyMouseEnabled.value) {
+			add(filters.lazyMouseRadius);
+			add(filters.lazyMouseSmooth);
+		}
+		if (filters.pressureCurveEnabled.value) {
+			add(filters.pressureExponent);
+			add(filters.pressureMin);
+			add(filters.pressureMax);
 		}
 		if (filters.adaptiveEnabled.value) {
 			add(filters.adaptiveProcessNoise);
@@ -1718,6 +1749,7 @@ void AetherApp::OnMouseMove(float x, float y) {
 		case 0: scrollTarget = &areaScrollY; break;
 		case 1: scrollTarget = &filterScrollY; break;
 		case 2: scrollTarget = &settingsScrollY; break;
+		case 4: scrollTarget = &brushScrollY; break;
 		}
 		if (scrollTarget) {
 			*scrollTarget = dragScrollStartOffset + dy;
@@ -1753,6 +1785,7 @@ void AetherApp::OnMiddleMouseDown() {
 		case 0: dragScrollStartOffset = areaScrollY; break;
 		case 1: dragScrollStartOffset = filterScrollY; break;
 		case 2: dragScrollStartOffset = settingsScrollY; break;
+		case 4: dragScrollStartOffset = brushScrollY; break;
 		default: dragScrollStartOffset = 0; break;
 		}
 	}
@@ -1773,6 +1806,7 @@ void AetherApp::OnRightMouseDown() {
 		case 0: dragScrollStartOffset = areaScrollY; break;
 		case 1: dragScrollStartOffset = filterScrollY; break;
 		case 2: dragScrollStartOffset = settingsScrollY; break;
+		case 4: dragScrollStartOffset = brushScrollY; break;
 		default: dragScrollStartOffset = 0; break;
 		}
 	}
@@ -1898,6 +1932,8 @@ void AetherApp::SendStartupSettingsToDriver() {
 	Sleep(80);
 	SendPluginSettings();
 
+	SendActionHotkeysToDriver();
+
 	driver.SendCommand("start");
 }
 
@@ -1922,8 +1958,6 @@ bool AetherApp::StartDriverService() {
 	pendingTabletInfoResync = true;
 	lastSeenTabletWidth = -1.0f;
 	lastSeenTabletHeight = -1.0f;
-	autoStartRetryCount = 0;
-	autoStartRetryTimer = 0.0f;
 	return true;
 }
 
@@ -2104,6 +2138,7 @@ void AetherApp::OnMouseWheel(float delta) {
 	case 0: areaScrollY -= delta * scrollSpeed; break;
 	case 1: filterScrollY -= delta * scrollSpeed; break;
 	case 2: settingsScrollY -= delta * scrollSpeed; break;
+	case 4: brushScrollY -= delta * scrollSpeed; break;
 	}
 	if (areaScrollY < 0) areaScrollY = 0;
 	if (filterScrollY < 0) filterScrollY = 0;
@@ -2143,6 +2178,8 @@ void AetherApp::OnChar(wchar_t ch) {
 	filterCommitted |= filters.reconStrength.OnChar(ch); filterCommitted |= filters.reconVelSmooth.OnChar(ch);
 	filterCommitted |= filters.reconEmaWeight.OnChar(ch);
 	filterCommitted |= filters.jitterStabRadius.OnChar(ch); filterCommitted |= filters.jitterStabRelease.OnChar(ch);
+	filterCommitted |= filters.lazyMouseRadius.OnChar(ch); filterCommitted |= filters.lazyMouseSmooth.OnChar(ch);
+	filterCommitted |= filters.pressureExponent.OnChar(ch); filterCommitted |= filters.pressureMin.OnChar(ch); filterCommitted |= filters.pressureMax.OnChar(ch);
 	filterCommitted |= filters.adaptiveProcessNoise.OnChar(ch); filterCommitted |= filters.adaptiveMeasNoise.OnChar(ch); filterCommitted |= filters.adaptiveVelWeight.OnChar(ch);
 	filterCommitted |= aether.stabilizerStability.OnChar(ch); filterCommitted |= aether.stabilizerSensitivity.OnChar(ch);
 	filterCommitted |= aether.snappingInner.OnChar(ch); filterCommitted |= aether.snappingOuter.OnChar(ch); filterCommitted |= aether.suppressionTime.OnChar(ch);
@@ -2265,6 +2302,38 @@ void AetherApp::OnKeyDown(int vk) {
 		return;
 	}
 
+	if (capturingActionHotkey >= 0 && capturingActionHotkey < kActionHotkeyCount) {
+		if (vk == VK_ESCAPE) {
+			actionHotkeys[capturingActionHotkey].vk = 0;
+			actionHotkeys[capturingActionHotkey].mods = 0;
+			capturingActionHotkey = -1;
+			SendActionHotkeysToDriver();
+			AutoSaveConfig();
+			return;
+		}
+		if (vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL ||
+			vk == VK_SHIFT   || vk == VK_LSHIFT   || vk == VK_RSHIFT   ||
+			vk == VK_MENU    || vk == VK_LMENU    || vk == VK_RMENU    ||
+			vk == VK_LWIN    || vk == VK_RWIN) {
+			return;
+		}
+		bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+		bool win = (GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000);
+		UINT mods = 0;
+		if (ctrl)  mods |= MOD_CONTROL;
+		if (shift) mods |= MOD_SHIFT;
+		if (alt)   mods |= MOD_ALT;
+		if (win)   mods |= MOD_WIN;
+		actionHotkeys[capturingActionHotkey].mods = mods;
+		actionHotkeys[capturingActionHotkey].vk   = (UINT)vk;
+		if (actionHotkeys[capturingActionHotkey].actionIndex <= 0)
+			actionHotkeys[capturingActionHotkey].actionIndex = 1;
+		capturingActionHotkey = -1;
+		SendActionHotkeysToDriver();
+		AutoSaveConfig();
+		return;
+	}
+
 	if (pluginSourceEditorOpen) {
 		if (vk == VK_ESCAPE) {
 			pluginSourceEditorOpen = false;
@@ -2311,6 +2380,7 @@ void AetherApp::OnKeyDown(int vk) {
 		&filters.snapRadius, &filters.snapSmooth,
 		&filters.reconStrength, &filters.reconVelSmooth,
 		&filters.reconEmaWeight, &filters.jitterStabRadius, &filters.jitterStabRelease,
+		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
 		&aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter, &aether.suppressionTime,
@@ -2445,6 +2515,8 @@ void AetherApp::Tick() {
 		prevTab = oldTab;
 		tabTransitionT = 0.0f;
 		tabSlideOffset = (sidebar.activeIndex > oldTab) ? 40.0f : -40.0f;
+		openActionDropdown = -1;
+		capturingActionHotkey = -1;
 	}
 	if (tabTransitionT < 1.0f) {
 		tabTransitionT += deltaTime * Theme::Anim::SpeedFast * 0.7f;
@@ -2465,7 +2537,8 @@ void AetherApp::Tick() {
 	case 1: DrawFilterPanel(); break;
 	case 2: DrawSettingsPanel(); break;
 	case 3: DrawConsolePanel(); break;
-	case 4: DrawAboutPanel(); break;
+	case 4: DrawBrushPanel(); break;
+	case 5: DrawAboutPanel(); break;
 	}
 
 	if (renderer.pRT) renderer.pRT->SetTransform(oldTransform);
@@ -2480,6 +2553,8 @@ void AetherApp::Tick() {
 		case 0: contentH = areaContentH; scrollY = areaScrollY; scrollPtr = &areaScrollY; break;
 		case 1: contentH = filterContentH; scrollY = filterScrollY; scrollPtr = &filterScrollY; break;
 		case 2: contentH = settingsContentH; scrollY = settingsScrollY; scrollPtr = &settingsScrollY; break;
+		case 4: contentH = brushContentH; scrollY = brushScrollY; scrollPtr = &brushScrollY; break;
+			break;
 		}
 		float visibleH = GetContentAreaBottom() - GetContentAreaTop();
 		if (contentH > visibleH + 1.0f && visibleH > 10.0f) {
@@ -2600,6 +2675,22 @@ void AetherApp::SendFilterSettings() {
 		driver.SendCommand("JitterStabilizer off");
 	}
 
+	if (filters.lazyMouseEnabled.value) {
+		sprintf_s(cmd, "LazyMouse on %.4f %.4f",
+			filters.lazyMouseRadius.value, filters.lazyMouseSmooth.value);
+		driver.SendCommand(cmd);
+	} else {
+		driver.SendCommand("LazyMouse off");
+	}
+
+	if (filters.pressureCurveEnabled.value) {
+		sprintf_s(cmd, "PressureCurve on %.4f %.4f %.4f",
+			filters.pressureExponent.value, filters.pressureMin.value, filters.pressureMax.value);
+		driver.SendCommand(cmd);
+	} else {
+		driver.SendCommand("PressureCurve off");
+	}
+
 	if (filters.adaptiveEnabled.value) {
 		sprintf_s(cmd, "Adaptive %.6f %.6f %.4f",
 			filters.adaptiveProcessNoise.value, filters.adaptiveMeasNoise.value,
@@ -2699,6 +2790,8 @@ void AetherApp::ApplyAllSettings() {
 
 	SendFilterSettings();
 	SendPluginSettings();
+
+	SendActionHotkeysToDriver();
 
 	AutoSaveConfig();
 }
@@ -2903,6 +2996,7 @@ void AetherApp::SyncLoadedControlVisuals() {
 		&filters.snapRadius, &filters.snapSmooth,
 		&filters.reconStrength, &filters.reconVelSmooth,
 		&filters.reconEmaWeight, &filters.jitterStabRadius, &filters.jitterStabRelease,
+		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight,
 		&aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter,
@@ -3028,6 +3122,11 @@ void AetherApp::ResetHotkeyDefaults() {
 		configHotkeys[i].mods = MOD_CONTROL | MOD_SHIFT;
 		configHotkeys[i].vk   = 0x31 + i;
 	}
+	for (int i = 0; i < kActionHotkeyCount; ++i) {
+		actionHotkeys[i].actionIndex = 0;
+		actionHotkeys[i].mods = 0;
+		actionHotkeys[i].vk = 0;
+	}
 }
 
 void AetherApp::UnregisterConfigHotkeys() {
@@ -3051,6 +3150,50 @@ void AetherApp::RegisterConfigHotkeys() {
 	wchar_t buf[160];
 	swprintf_s(buf, L"[Aether] Config hotkeys: ok=%d fail=%d skipped=%d\n", ok, fail, skipped);
 	OutputDebugStringW(buf);
+}
+
+static const wchar_t* kActionHotkeyNames[] = {
+	L"(none)",
+	L"Lazy Mouse",
+	L"Pressure Curve",
+	L"Reconstructor",
+	L"Jitter Stabilizer",
+	L"Noise Reduction",
+	L"Aether Smooth",
+	L"Click Stabilizer",
+	L"Smoothing"
+};
+static const int kActionHotkeyNameCount = (int)(sizeof(kActionHotkeyNames) / sizeof(kActionHotkeyNames[0]));
+static const char* kActionHotkeyCommands[] = {
+	"",
+	"Toggle LazyMouse",
+	"Toggle PressureCurve",
+	"Toggle Reconstructor",
+	"Toggle JitterStabilizer",
+	"Toggle NoiseReduction",
+	"Toggle AetherSmooth",
+	"Toggle ClickStabilizer",
+	"Toggle Smoothing"
+};
+
+std::wstring AetherApp::ActionHotkeyLabel(int slot) const {
+	if (slot < 0 || slot >= kActionHotkeyCount) return L"";
+	const ActionHotkey& h = actionHotkeys[slot];
+	if (h.vk == 0) return L"unbound";
+	return FormatHotkeyLabel(h.mods, h.vk);
+}
+
+void AetherApp::SendActionHotkeysToDriver() {
+	if (!driver.isConnected) return;
+	driver.SendCommand("HotkeyClear");
+	for (int i = 0; i < kActionHotkeyCount; ++i) {
+		const ActionHotkey& h = actionHotkeys[i];
+		if (h.actionIndex <= 0 || h.actionIndex >= kActionHotkeyNameCount || h.vk == 0) continue;
+		char cmd[160];
+		sprintf_s(cmd, "Hotkey %d %u %u %s",
+			i + 1, h.mods, h.vk, kActionHotkeyCommands[h.actionIndex]);
+		driver.SendCommand(cmd);
+	}
 }
 
 std::wstring AetherApp::GetAppProfilesPath() {
@@ -4118,6 +4261,7 @@ void AetherApp::ClampScrollOffsets() {
 	if (areaScrollY < 0) areaScrollY = 0;
 	if (filterScrollY < 0) filterScrollY = 0;
 	if (settingsScrollY < 0) settingsScrollY = 0;
+	if (brushScrollY < 0) brushScrollY = 0;
 
 	float visibleH = GetContentAreaBottom() - GetContentAreaTop();
 	float maxScroll = areaContentH - visibleH;
@@ -4131,6 +4275,10 @@ void AetherApp::ClampScrollOffsets() {
 	maxScroll = settingsContentH - visibleH;
 	if (maxScroll < 0) maxScroll = 0;
 	if (settingsScrollY > maxScroll) settingsScrollY = maxScroll;
+
+	maxScroll = brushContentH - visibleH;
+	if (maxScroll < 0) maxScroll = 0;
+	if (brushScrollY > maxScroll) brushScrollY = maxScroll;
 }
 
 void AetherApp::DrawBackground() {
@@ -4339,13 +4487,22 @@ void AetherApp::DrawBackground() {
 			if (s.x < Theme::Size::SidebarWidth - 5) s.x = w;
 			if (s.x > w + 5) s.x = Theme::Size::SidebarWidth;
 
-			D2D1_COLOR_F glow = Theme::AccentSecondary();
-			glow.a = s.alpha * 0.4f;
-			renderer.FillCircle(s.x, s.y, s.size * 2.5f, glow);
+			D2D1_COLOR_F glow = D2D1::ColorF(0xB9D9FF, s.alpha * 0.22f);
+			renderer.FillCircle(s.x, s.y, s.size * 3.0f, glow);
 
-			D2D1_COLOR_F core = Theme::TextPrimary();
-			core.a = s.alpha;
-			renderer.FillCircle(s.x, s.y, s.size, core);
+			D2D1_COLOR_F core = D2D1::ColorF(0xFFFFFF, s.alpha * 1.4f);
+			renderer.FillCircle(s.x, s.y, s.size * 0.6f, core);
+
+			if (s.size > 1.6f) {
+				float arm = s.size * 2.2f;
+				D2D1_COLOR_F armCol = D2D1::ColorF(0xFFFFFF, s.alpha * 1.0f);
+				float k = 3.14159265f / 3.0f;
+				float c = cosf(k) * arm;
+				float sn = sinf(k) * arm;
+				renderer.DrawLine(s.x - arm, s.y, s.x + arm, s.y, armCol, 0.8f);
+				renderer.DrawLine(s.x - c, s.y - sn, s.x + c, s.y + sn, armCol, 0.8f);
+				renderer.DrawLine(s.x - c, s.y + sn, s.x + c, s.y - sn, armCol, 0.8f);
+			}
 		}
 	}
 }
@@ -5182,6 +5339,13 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	f << "JitterStabEnabled=" << (int)filters.jitterStabEnabled.value << "\n";
 	f << "JitterStabRadius=" << filters.jitterStabRadius.value << "\n";
 	f << "JitterStabRelease=" << filters.jitterStabRelease.value << "\n";
+	f << "LazyMouseEnabled=" << (int)filters.lazyMouseEnabled.value << "\n";
+	f << "LazyMouseRadius=" << filters.lazyMouseRadius.value << "\n";
+	f << "LazyMouseSmooth=" << filters.lazyMouseSmooth.value << "\n";
+	f << "PressureCurveEnabled=" << (int)filters.pressureCurveEnabled.value << "\n";
+	f << "PressureExponent=" << filters.pressureExponent.value << "\n";
+	f << "PressureMin=" << filters.pressureMin.value << "\n";
+	f << "PressureMax=" << filters.pressureMax.value << "\n";
 
 	f << "AdaptiveEnabled=" << (int)filters.adaptiveEnabled.value << "\n";
 	f << "AdaptiveProcessNoise=" << filters.adaptiveProcessNoise.value << "\n";
@@ -5210,6 +5374,10 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	for (int i = 0; i < kConfigHotkeyCount; ++i) {
 		f << "HotkeySlot" << (i + 1) << "="
 		  << configHotkeys[i].mods << " " << configHotkeys[i].vk << "\n";
+	}
+	for (int i = 0; i < kActionHotkeyCount; ++i) {
+		f << "ActionHotkey" << (i + 1) << "="
+		  << actionHotkeys[i].actionIndex << " " << actionHotkeys[i].mods << " " << actionHotkeys[i].vk << "\n";
 	}
 	f << "Visualizer=" << (int)visualizerToggle.value << "\n";
 	f << "ParticleStyle=" << particleStyle << "\n";
@@ -5362,6 +5530,13 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		else if (key == "JitterStabEnabled") filters.jitterStabEnabled.value = (val > 0.5f);
 		else if (key == "JitterStabRadius") filters.jitterStabRadius.value = val;
 		else if (key == "JitterStabRelease") filters.jitterStabRelease.value = val;
+		else if (key == "LazyMouseEnabled") filters.lazyMouseEnabled.value = (val > 0.5f);
+		else if (key == "LazyMouseRadius") filters.lazyMouseRadius.value = val;
+		else if (key == "LazyMouseSmooth") filters.lazyMouseSmooth.value = val;
+		else if (key == "PressureCurveEnabled") filters.pressureCurveEnabled.value = (val > 0.5f);
+		else if (key == "PressureExponent") filters.pressureExponent.value = val;
+		else if (key == "PressureMin") filters.pressureMin.value = val;
+		else if (key == "PressureMax") filters.pressureMax.value = val;
 		else if (key == "AdaptiveEnabled") filters.adaptiveEnabled.value = (val > 0.5f);
 		else if (key == "AdaptiveProcessNoise") filters.adaptiveProcessNoise.value = val;
 		else if (key == "AdaptiveMeasNoise") filters.adaptiveMeasNoise.value = val;
@@ -5390,6 +5565,17 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 				if (sscanf_s(rawValue.c_str(), "%u %u", &m, &vk) == 2) {
 					configHotkeys[slot - 1].mods = m;
 					configHotkeys[slot - 1].vk   = vk;
+				}
+			}
+		}
+		else if (key.rfind("ActionHotkey", 0) == 0) {
+			int slot = atoi(key.c_str() + 12);
+			if (slot >= 1 && slot <= kActionHotkeyCount) {
+				int ai = 0; unsigned int m = 0, vk = 0;
+				if (sscanf_s(rawValue.c_str(), "%d %u %u", &ai, &m, &vk) == 3) {
+					actionHotkeys[slot - 1].actionIndex = ai;
+					actionHotkeys[slot - 1].mods = m;
+					actionHotkeys[slot - 1].vk = vk;
 				}
 			}
 		}
@@ -6032,6 +6218,7 @@ void AetherApp::DrawFilterPanel() {
 		&filters.snapRadius, &filters.snapSmooth,
 		&filters.reconStrength, &filters.reconVelSmooth,
 		&filters.reconEmaWeight, &filters.jitterStabRadius, &filters.jitterStabRelease,
+		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&filters.adaptiveProcessNoise, &filters.adaptiveMeasNoise, &filters.adaptiveVelWeight
 	};
 	for (Slider* slider : filterSliders) {
@@ -6406,6 +6593,196 @@ void AetherApp::DrawAboutPanel() {
 	renderer.DrawText(L"Reconstructor \x2022 Adaptive Filter \x2022 Aether Smooth", cx, y, cw, 18, Theme::TextAccent(), renderer.pFontSmall, Renderer::AlignCenter);
 	y += 22;
 	renderer.DrawText(L"Live Cursor \x2022 Input Visualizer \x2022 Theme Presets \x2022 Config Manager", cx, y, cw, 18, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
+}
+
+void AetherApp::DrawBrushPanel() {
+	bool changed = false;
+	float cx = Theme::Size::SidebarWidth + Theme::Size::Padding;
+	float cw = std::max(220.0f, Theme::Runtime::WindowWidth - Theme::Size::SidebarWidth - Theme::Size::Padding * 2);
+	bool single = cw < 640.0f;
+	float gap = single ? 0.0f : 16.0f;
+	float hw = single ? cw : (cw - gap) * 0.5f;
+	float rightX = single ? cx : cx + hw + gap;
+	float yStart = Theme::Size::HeaderHeight + Theme::Size::Padding;
+	float y = yStart - brushScrollY;
+
+	SectionHeader sec;
+
+	filters.lazyMouseRadius.width = hw;
+	filters.lazyMouseSmooth.width = hw;
+	filters.pressureExponent.width = hw;
+	filters.pressureMin.width = hw * 0.5f;
+	filters.pressureMax.width = hw * 0.5f;
+
+	sec.Layout(cx, y, cw, L"LAZY MOUSE (ROPE)");
+	y += sec.Draw(renderer);
+	renderer.DrawText(L"Drawing smoothing. The cursor trails the pen by a fixed rope length, absorbing hand jitter for clean strokes.",
+		cx, y, cw, 32, Theme::TextMuted(), renderer.pFontSmall);
+	y += 38;
+
+	filters.lazyMouseEnabled.y = y; filters.lazyMouseEnabled.x = cx;
+	changed |= filters.lazyMouseEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.lazyMouseEnabled.Draw(renderer); y += 32;
+
+	if (filters.lazyMouseEnabled.value) {
+		filters.lazyMouseRadius.y = y; filters.lazyMouseRadius.x = cx;
+		changed |= filters.lazyMouseRadius.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.lazyMouseRadius.Draw(renderer);
+		if (single) y += 48;
+		filters.lazyMouseSmooth.y = y; filters.lazyMouseSmooth.x = rightX;
+		changed |= filters.lazyMouseSmooth.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.lazyMouseSmooth.Draw(renderer);
+		y += 56;
+	} else {
+		y += 8;
+	}
+
+	sec.Layout(cx, y, cw, L"PRESSURE CURVE");
+	y += sec.Draw(renderer);
+	renderer.DrawText(L"Remaps pen pressure with a power (gamma) curve. Exponent < 1 = firmer (full pressure easier), > 1 = softer (needs more force).",
+		cx, y, cw, 32, Theme::TextMuted(), renderer.pFontSmall);
+	y += 38;
+
+	filters.pressureCurveEnabled.y = y; filters.pressureCurveEnabled.x = cx;
+	changed |= filters.pressureCurveEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.pressureCurveEnabled.Draw(renderer); y += 32;
+
+	if (filters.pressureCurveEnabled.value) {
+		float floorW = hw * 0.5f;
+		float ceilX = single ? cx : cx + floorW + gap;
+
+		filters.pressureExponent.y = y; filters.pressureExponent.x = cx;
+		changed |= filters.pressureExponent.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.pressureExponent.Draw(renderer);
+		y += 48;
+
+		filters.pressureMin.width = floorW;
+		filters.pressureMin.y = y; filters.pressureMin.x = cx;
+		changed |= filters.pressureMin.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.pressureMin.Draw(renderer);
+		filters.pressureMax.width = floorW;
+		filters.pressureMax.y = y; filters.pressureMax.x = ceilX;
+		changed |= filters.pressureMax.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.pressureMax.Draw(renderer);
+		y += 56;
+	} else {
+		y += 8;
+	}
+
+	sec.Layout(cx, y, cw, L"ACTION HOTKEYS");
+	y += sec.Draw(renderer);
+	renderer.DrawText(L"Bind a key combo to toggle a filter on/off from anywhere. Click the action box to pick a filter, click the key box to capture. Esc clears.",
+		cx, y, cw, 32, Theme::TextMuted(), renderer.pFontSmall);
+	y += 38;
+
+	float actionW = cw * 0.42f;
+	float clearW = 26.0f;
+	float keyW = cw - actionW - clearW - 16.0f;
+	float keyX = cx + actionW + 8.0f;
+	float clearX = keyX + keyW + 4.0f;
+	float rowH = 30.0f;
+	float rowGap = 6.0f;
+
+	float openDdY = 0.0f;
+	int openDdSlot = -1;
+
+	for (int i = 0; i < kActionHotkeyCount; ++i) {
+		ActionHotkey& h = actionHotkeys[i];
+		float rowY = y;
+
+		const wchar_t* cur = (h.actionIndex >= 0 && h.actionIndex < kActionHotkeyNameCount)
+			? kActionHotkeyNames[h.actionIndex] : L"(none)";
+
+		bool actHover = PointInRect(mouseX, mouseY, cx, rowY, actionW, rowH);
+		bool isOpen = (openActionDropdown == i);
+		D2D1_COLOR_F actBg = isOpen ? Theme::AccentDim() : (actHover ? Theme::BgHover() : Theme::BgElevated());
+		renderer.FillRoundedRect(cx, rowY, actionW, rowH, 5, actBg);
+		renderer.DrawRoundedRect(cx, rowY, actionW, rowH, 5, isOpen ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(cur, cx + 10, rowY, actionW - 26, rowH, Theme::TextPrimary(), renderer.pFontSmall);
+		float arrowX = cx + actionW - 20;
+		renderer.DrawText(isOpen ? L"\xE70E" : L"\xE70D", arrowX, rowY, 16, rowH,
+			Theme::TextMuted(), renderer.pFontIcon, Renderer::AlignCenter);
+
+		bool capturing = (capturingActionHotkey == i);
+		std::wstring label = capturing ? L"press keys..." : ActionHotkeyLabel(i);
+		bool hasKey = (h.vk != 0);
+		bool keyHover = PointInRect(mouseX, mouseY, keyX, rowY, keyW, rowH);
+		D2D1_COLOR_F keyBg = capturing ? Theme::AccentPrimary()
+			: (keyHover && hasKey ? Theme::AccentPrimary() : (hasKey ? Theme::AccentDim() : Theme::BgElevated()));
+		renderer.FillRoundedRect(keyX, rowY, keyW, rowH, 5, keyBg);
+		renderer.DrawRoundedRect(keyX, rowY, keyW, rowH, 5,
+			(capturing || (keyHover && hasKey)) ? Theme::BorderAccent() : Theme::BorderSubtle());
+		renderer.DrawText(label.c_str(), keyX, rowY, keyW, rowH,
+			(capturing || (keyHover && hasKey)) ? D2D1::ColorF(0xFFFFFF) : Theme::TextMuted(),
+			renderer.pFontSmall, Renderer::AlignCenter);
+
+		bool canClear = hasKey && !capturing;
+		bool clrHover = canClear && PointInRect(mouseX, mouseY, clearX, rowY, clearW, rowH);
+		D2D1_COLOR_F clrBg = clrHover ? Theme::Error() : Theme::BgElevated();
+		clrBg.a = clrHover ? 0.9f : 0.6f;
+		renderer.FillRoundedRect(clearX, rowY, clearW, rowH, 5, clrBg);
+		renderer.DrawRoundedRect(clearX, rowY, clearW, rowH, 5, Theme::BorderSubtle());
+		renderer.DrawText(L"\xE711", clearX, rowY, clearW, rowH,
+			D2D1::ColorF(0xFFFFFF), renderer.pFontIcon, Renderer::AlignCenter);
+
+		if (mouseClicked) {
+			if (actHover) {
+				openActionDropdown = (openActionDropdown == i) ? -1 : i;
+				capturingActionHotkey = -1;
+				break;
+			}
+			if (openActionDropdown >= 0 && openActionDropdown != i) {
+				openActionDropdown = -1;
+			}
+			if (keyHover) {
+				capturingActionHotkey = (capturingActionHotkey == i) ? -1 : i;
+				openActionDropdown = -1;
+				break;
+			}
+			if (clrHover) {
+				h.vk = 0;
+				h.mods = 0;
+				openActionDropdown = -1;
+				capturingActionHotkey = -1;
+				SendActionHotkeysToDriver();
+				AutoSaveConfig();
+				break;
+			}
+		}
+
+		if (isOpen) { openDdY = rowY + rowH + 2.0f; openDdSlot = i; }
+		y += rowH + rowGap;
+	}
+
+	if (openDdSlot >= 0) {
+		float ddY = openDdY;
+		float ddH = kActionHotkeyNameCount * 26.0f;
+		renderer.FillRoundedRect(cx, ddY, actionW, ddH, 5, Theme::BgElevated());
+		renderer.DrawRoundedRect(cx, ddY, actionW, ddH, 5, Theme::BorderAccent());
+		bool ddClickedItem = false;
+		for (int j = 0; j < kActionHotkeyNameCount; ++j) {
+			float itemY = ddY + j * 26.0f;
+			float itemH = 26.0f;
+			bool itemHover = PointInRect(mouseX, mouseY, cx, itemY, actionW, itemH);
+			if (itemHover) {
+				D2D1_COLOR_F hl = Theme::AccentPrimary(); hl.a = 0.25f;
+				renderer.FillRoundedRect(cx + 2, itemY + 1, actionW - 4, itemH - 2, 4, hl);
+			}
+			bool isSel = (actionHotkeys[openDdSlot].actionIndex == j);
+			D2D1_COLOR_F tc = isSel ? Theme::AccentPrimary() : (itemHover ? Theme::TextPrimary() : Theme::TextSecondary());
+			renderer.DrawText(kActionHotkeyNames[j], cx + 12, itemY, actionW - 20, itemH, tc, renderer.pFontSmall);
+			if (itemHover && mouseClicked) {
+				actionHotkeys[openDdSlot].actionIndex = j;
+				openActionDropdown = -1;
+				SendActionHotkeysToDriver();
+				AutoSaveConfig();
+				ddClickedItem = true;
+			}
+		}
+		if (!ddClickedItem && mouseClicked && !PointInRect(mouseX, mouseY, cx, ddY, actionW, ddH)) {
+			openActionDropdown = -1;
+		}
+	}
+
+	brushContentH = (y + brushScrollY) - yStart + 64;
+	if (changed) {
+		ApplyAllSettings();
+	}
 }
 
 void AetherApp::DrawStatusBar() {

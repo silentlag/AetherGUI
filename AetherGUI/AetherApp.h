@@ -171,6 +171,15 @@ public:
 		Slider jitterStabRadius;
 		Slider jitterStabRelease;
 
+		Toggle lazyMouseEnabled;
+		Slider lazyMouseRadius;
+		Slider lazyMouseSmooth;
+
+		Toggle pressureCurveEnabled;
+		Slider pressureExponent;
+		Slider pressureMin;
+		Slider pressureMax;
+
 		Toggle adaptiveEnabled;
 		Slider adaptiveProcessNoise;
 		Slider adaptiveMeasNoise;
@@ -323,9 +332,11 @@ public:
 	float areaScrollY = 0;
 	float filterScrollY = 0;
 	float settingsScrollY = 0;
+	float brushScrollY = 0;
 	float areaContentH = 0;
 	float filterContentH = 0;
 	float settingsContentH = 0;
+	float brushContentH = 0;
 
 	Button displayPrevBtn;
 	Button displayNextBtn;
@@ -490,6 +501,19 @@ public:
 
 	int capturingHotkeySlot = -1;
 
+	struct ActionHotkey {
+		int actionIndex;
+		UINT mods;
+		UINT vk;
+	};
+	static const int kActionHotkeyCount = 8;
+	ActionHotkey actionHotkeys[kActionHotkeyCount];
+	int capturingActionHotkey = -1;
+	int openActionDropdown = -1;
+
+	void SendActionHotkeysToDriver();
+	std::wstring ActionHotkeyLabel(int slot) const;
+
 	void RegisterConfigHotkeys();
 	void UnregisterConfigHotkeys();
 	std::wstring HotkeyLabelForSlot(int oneBasedIndex) const;
@@ -585,6 +609,8 @@ private:
 	void DrawSettingsPanel();
 
 	void DrawAboutPanel();
+
+	void DrawBrushPanel();
 
 	void DrawStatusBar();
 

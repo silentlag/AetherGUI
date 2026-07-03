@@ -13,6 +13,7 @@
 #include "TabletFilterAetherSmooth.h"
 #include "TabletFilterClickStabilizer.h"
 #include "TabletFilterJitterStabilizer.h"
+#include "TabletFilterLazyMouse.h"
 #include "TabletFilterPlugin.h"
 #include "TabletBenchmark.h"
 #include "Vector2D.h"
@@ -71,6 +72,13 @@ public:
 	TabletFilterClickStabilizer clickStabilizer;
 
 	TabletFilterJitterStabilizer jitterStabilizer;
+
+	TabletFilterLazyMouse lazyMouse;
+
+	bool pressureCurveEnabled;
+	double pressureExponent;
+	double pressureMin;
+	double pressureMax;
 
 	std::vector<TabletFilterPlugin*> pluginFilters;
 

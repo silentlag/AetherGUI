@@ -2,6 +2,7 @@
 #include "ProcessCommand.h"
 #include "AetherPluginManager.h"
 #include "Platform.h"
+#include "HotkeyManager.h"
 
 #define LOG_MODULE ""
 #include "Logger.h"
@@ -1071,6 +1072,49 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
+	else if (cmd->is("LazyMouse")) {
+		if (!CheckTablet()) return true;
+
+		tablet->lazyMouse.isEnabled = cmd->GetBoolean(0, tablet->lazyMouse.isEnabled);
+		double r = cmd->GetDouble(1, tablet->lazyMouse.radius);
+		double s = cmd->GetDouble(2, tablet->lazyMouse.smooth);
+		if (r < 0.0) r = 0.0;
+		if (r > 50.0) r = 50.0;
+		if (s < 0.0) s = 0.0;
+		if (s > 0.95) s = 0.95;
+		tablet->lazyMouse.radius = r;
+		tablet->lazyMouse.smooth = s;
+		if (tablet->lazyMouse.isEnabled) {
+			LOG_INFO("Lazy Mouse = on (radius %0.2f mm, smooth %0.2f)\n", r, s);
+		} else {
+			LOG_INFO("Lazy Mouse = off\n");
+		}
+	}
+
+	else if (cmd->is("PressureCurve")) {
+		if (!CheckTablet()) return true;
+
+		tablet->pressureCurveEnabled = cmd->GetBoolean(0, tablet->pressureCurveEnabled);
+		double e = cmd->GetDouble(1, tablet->pressureExponent);
+		double mn = cmd->GetDouble(2, tablet->pressureMin);
+		double mx = cmd->GetDouble(3, tablet->pressureMax);
+		if (e < 0.1) e = 0.1;
+		if (e > 4.0) e = 4.0;
+		if (mn < 0.0) mn = 0.0;
+		if (mn > 0.95) mn = 0.95;
+		if (mx < 0.05) mx = 0.05;
+		if (mx > 1.0) mx = 1.0;
+		if (mn > mx) mn = mx;
+		tablet->pressureExponent = e;
+		tablet->pressureMin = mn;
+		tablet->pressureMax = mx;
+		if (tablet->pressureCurveEnabled) {
+			LOG_INFO("Pressure Curve = on (exp %0.2f, min %0.2f, max %0.2f)\n", e, mn, mx);
+		} else {
+			LOG_INFO("Pressure Curve = off\n");
+		}
+	}
+
 	else if (cmd->is("Adaptive")) {
 		if (!CheckTablet()) return true;
 
@@ -1438,6 +1482,122 @@ bool ProcessCommand(CommandLine *cmd) {
 	else if (cmd->is("Exit") || cmd->is("Quit")) {
 		LOG_INFO("Bye!\n");
 		CleanupAndExit(0);
+	}
+
+	else if (cmd->is("Toggle") || cmd->is("HotkeyToggle")) {
+		if (!CheckTablet()) return true;
+		string name = cmd->GetStringLower(0, "");
+		lock_guard<mutex> lock(tabletStateMutex);
+		if (name == "lazymouse") {
+			tablet->lazyMouse.isEnabled = !tablet->lazyMouse.isEnabled;
+			LOG_INFO("Toggle: Lazy Mouse = %s\n", tablet->lazyMouse.isEnabled ? "on" : "off");
+		}
+		else if (name == "pressurecurve" || name == "pressure") {
+			tablet->pressureCurveEnabled = !tablet->pressureCurveEnabled;
+			LOG_INFO("Toggle: Pressure Curve = %s\n", tablet->pressureCurveEnabled ? "on" : "off");
+		}
+		else if (name == "reconstructor" || name == "recon") {
+			tablet->reconstructor.isEnabled = !tablet->reconstructor.isEnabled;
+			LOG_INFO("Toggle: Reconstructor = %s\n", tablet->reconstructor.isEnabled ? "on" : "off");
+		}
+		else if (name == "jitterstabilizer" || name == "jitter") {
+			tablet->jitterStabilizer.isEnabled = !tablet->jitterStabilizer.isEnabled;
+			LOG_INFO("Toggle: Jitter Stabilizer = %s\n", tablet->jitterStabilizer.isEnabled ? "on" : "off");
+		}
+		else if (name == "noise" || name == "noisereduction") {
+			tablet->noise.isEnabled = !tablet->noise.isEnabled;
+			LOG_INFO("Toggle: Noise Reduction = %s\n", tablet->noise.isEnabled ? "on" : "off");
+		}
+		else if (name == "aethersmooth" || name == "aether") {
+			tablet->aetherSmooth.isEnabled = !tablet->aetherSmooth.isEnabled;
+			LOG_INFO("Toggle: Aether Smooth = %s\n", tablet->aetherSmooth.isEnabled ? "on" : "off");
+		}
+		else if (name == "clickstabilizer" || name == "click") {
+			tablet->clickStabilizer.isEnabled = !tablet->clickStabilizer.isEnabled;
+			LOG_INFO("Toggle: Click Stabilizer = %s\n", tablet->clickStabilizer.isEnabled ? "on" : "off");
+		}
+		else if (name == "smoothing") {
+			tablet->smoothing.isEnabled = !tablet->smoothing.isEnabled;
+			LOG_INFO("Toggle: Smoothing = %s\n", tablet->smoothing.isEnabled ? "on" : "off");
+		}
+		else {
+			LOG_WARNING("Toggle: unknown filter '%s'\n", name.c_str());
+		}
+	}
+
+	else if (cmd->is("Hotkey")) {
+		if (hotkeyManager == NULL) {
+			LOG_WARNING("Hotkey manager not running.\n");
+			return true;
+		}
+		int id = cmd->GetInt(0, 0);
+		int mods = cmd->GetInt(1, 0);
+		int vk = cmd->GetInt(2, 0);
+		string action = cmd->GetString(3, "");
+		if (id < 1 || id > 32 || vk == 0 || action.empty()) {
+			LOG_WARNING("Hotkey requires: <id 1-32> <mods> <vk> <action>\n");
+			return true;
+		}
+		hotkeyManager->Bind(id, mods, vk, action);
+	}
+
+	else if (cmd->is("HotkeyClear")) {
+		if (hotkeyManager != NULL) hotkeyManager->Clear();
+		LOG_INFO("All hotkeys cleared.\n");
+	}
+
+	else if (cmd->is("HotkeyList")) {
+		if (hotkeyManager == NULL) { LOG_INFO("Hotkey manager not running.\n"); return true; }
+		auto list = hotkeyManager->GetBindings();
+		if (list.empty()) { LOG_INFO("No hotkeys bound.\n"); return true; }
+		LOG_INFO("Hotkeys (%d):\n", (int)list.size());
+		for (auto& b : list) {
+			LOG_INFO("  id=%d mods=0x%X vk=0x%X -> %s\n", b.id, b.modifiers, b.vk, b.action.c_str());
+		}
+	}
+
+	else if (cmd->is("PluginSecurity") || cmd->is("PluginSafeMode")) {
+		string mode = cmd->GetStringLower(0, "");
+		if (mode == "on" || mode == "true" || mode == "1") {
+			g_pluginSecurity.clampRadiusMm = cmd->GetDouble(1, 50.0);
+			if (g_pluginSecurity.clampRadiusMm < 0.0) g_pluginSecurity.clampRadiusMm = 0.0;
+			g_pluginSecurity.buttonGate = true;
+			g_pluginSecurity.pressureGate = true;
+			LOG_INFO("Plugin security ON: clamp %.2f mm, button gate, pressure gate.\n", g_pluginSecurity.clampRadiusMm);
+		}
+		else if (mode == "allowlist" || mode == "strict") {
+			g_pluginSecurity.allowlistEnabled = true;
+			ReloadPluginAllowlist();
+			LOG_INFO("Plugin allowlist enforcement ON. Only hashed DLLs in plugins/allowlist.txt will load.\n");
+		}
+		else if (mode == "allowlistoff" || mode == "noallowlist") {
+			g_pluginSecurity.allowlistEnabled = false;
+			LOG_INFO("Plugin allowlist enforcement OFF.\n");
+		}
+		else if (mode == "off" || mode == "false" || mode == "0") {
+			g_pluginSecurity.clampRadiusMm = 1e9;
+			g_pluginSecurity.buttonGate = false;
+			g_pluginSecurity.pressureGate = false;
+			LOG_WARNING("Plugin security OFF: plugins can teleport cursor, synthesize clicks, inflate pressure. NOT recommended.\n");
+		}
+		else {
+			LOG_INFO("Plugin security: clamp=%.2fmm buttonGate=%d pressureGate=%d allowlist=%d\n",
+				g_pluginSecurity.clampRadiusMm, (int)g_pluginSecurity.buttonGate, (int)g_pluginSecurity.pressureGate, (int)g_pluginSecurity.allowlistEnabled);
+			LOG_INFO("Usage: PluginSecurity on [clampMm] | off | allowlist | allowlistoff\n");
+		}
+	}
+
+	else if (cmd->is("PluginHash") || cmd->is("PluginHashOf")) {
+		string p = cmd->GetString(0, "");
+		if (p.empty()) { LOG_WARNING("PluginHash requires a DLL path.\n"); return true; }
+		std::wstring wpath = Utf8ToWideService(p);
+		std::string h = ComputeFileSha256Hex(wpath);
+		if (h.empty()) LOG_ERROR("Failed to hash %s\n", p.c_str());
+		else LOG_INFO("sha256(%s) = %s\n  add this line to plugins/allowlist.txt\n", p.c_str(), h.c_str());
+	}
+
+	else if (cmd->is("PluginAllowlistReload") || cmd->is("ReloadAllowlist")) {
+		ReloadPluginAllowlist();
 	}
 
 	else if (cmd->isValid) {

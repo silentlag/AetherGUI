@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "TabletFilterPlugin.h"
+#include "AetherPluginManager.h"
 
 #define LOG_MODULE "Plugin"
 #include "Logger.h"
@@ -107,6 +108,11 @@ TabletFilterPlugin::~TabletFilterPlugin() {
 
 bool TabletFilterPlugin::Load(const std::wstring& dllPath) {
 	Unload();
+
+	if (!PluginAllowlistCheck(dllPath)) {
+		LOG_ERROR("Plugin rejected by allowlist: %ls\n", dllPath.c_str());
+		return false;
+	}
 
 	module = platform::DynLibLoad(dllPath.c_str());
 	if (!platform::DynLibValid(module)) {
@@ -281,6 +287,11 @@ void TabletFilterPlugin::Update() {
 	point.tiltX = 0;
 	point.tiltY = 0;
 
+	double realX = target.x;
+	double realY = target.y;
+	double realPressure = pressure;
+	BYTE realButtons = buttons;
+
 	if (!SafePluginProcess(processFn, instance, &point)) {
 		LOG_ERROR("Plugin process crashed, disabling: %s\n", name.c_str());
 		isEnabled = false;
@@ -295,6 +306,34 @@ void TabletFilterPlugin::Update() {
 		isValid = false;
 		position.Set(target);
 		return;
+	}
+
+	double dx = point.x - realX;
+	double dy = point.y - realY;
+	double dist = sqrt(dx * dx + dy * dy);
+	double maxR = g_pluginSecurity.clampRadiusMm;
+	if (maxR < 0.0) maxR = 0.0;
+	if (dist > maxR && dist > 0.0) {
+		double scale = maxR / dist;
+		point.x = realX + dx * scale;
+		point.y = realY + dy * scale;
+		LOG_WARNING("Plugin output clamped: moved %.2f mm > %.2f mm limit (%s)\n", dist, maxR, name.c_str());
+	}
+
+	if (g_pluginSecurity.pressureGate) {
+		if (point.pressure < 0.0) point.pressure = 0.0;
+		if (point.pressure > realPressure + 1e-9) {
+			point.pressure = realPressure;
+		}
+	}
+
+	if (g_pluginSecurity.buttonGate) {
+		BYTE allowed = realButtons;
+		if (point.buttons & ~allowed) {
+			LOG_WARNING("Plugin tried to synthesize buttons 0x%X (real 0x%X), masked (%s)\n",
+				point.buttons, realButtons, name.c_str());
+			point.buttons = point.buttons & allowed;
+		}
 	}
 
 	position.x = point.x;

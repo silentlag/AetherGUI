@@ -42,6 +42,8 @@ extern VMulti *vmulti;
 extern Tablet *tablet;
 extern ScreenMapper *mapper;
 extern std::thread *tabletThread;
+class HotkeyManager;
+extern HotkeyManager *hotkeyManager;
 extern void CleanupAndExit(int code);
 extern std::mutex tabletStateMutex;
 extern bool overclockActive;

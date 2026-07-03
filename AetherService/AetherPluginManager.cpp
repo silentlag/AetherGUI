@@ -1,6 +1,11 @@
 #include "stdafx.h"
 #include "AetherPluginManager.h"
 #include "AetherPluginApi.h"
+#include <algorithm>
+
+#if defined(_WIN32)
+#pragma comment(lib, "bcrypt.lib")
+#endif
 
 #define LOG_MODULE "Plugin"
 #include "Logger.h"
@@ -279,3 +284,108 @@ bool InstallAetherPluginDll(const std::wstring& sourcePath, std::wstring* instal
 }
 
 #endif
+
+PluginSecurityPolicy g_pluginSecurity = { 50.0, true, true, false };
+
+static std::vector<std::string> g_allowlistHashes;
+
+std::string ComputeFileSha256Hex(const std::wstring& path) {
+	std::string result;
+#if defined(_WIN32)
+	HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) return result;
+
+	BCRYPT_ALG_HANDLE hAlg = NULL;
+	BCRYPT_HASH_HANDLE hHash = NULL;
+	BYTE* hashBuf = NULL;
+	bool ok = false;
+
+	if (BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0) == 0) {
+		if (BCryptCreateHash(hAlg, &hHash, NULL, 0, NULL, 0, 0) == 0) {
+			BYTE buf[65536];
+			DWORD bytesRead = 0;
+			bool readOk = true;
+			while (true) {
+				if (!ReadFile(hFile, buf, sizeof(buf), &bytesRead, NULL) || bytesRead == 0) break;
+				if (BCryptHashData(hHash, buf, bytesRead, 0) != 0) { readOk = false; break; }
+			}
+			if (readOk) {
+				DWORD cbHash = 0;
+				BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PUCHAR)&cbHash, sizeof(cbHash), &cbHash, 0);
+				hashBuf = new BYTE[cbHash];
+				if (BCryptFinishHash(hHash, hashBuf, cbHash, 0) == 0) {
+					static const char* hex = "0123456789abcdef";
+					result.reserve(cbHash * 2);
+					for (DWORD i = 0; i < cbHash; i++) {
+						result.push_back(hex[(hashBuf[i] >> 4) & 0xF]);
+						result.push_back(hex[hashBuf[i] & 0xF]);
+					}
+					ok = true;
+				}
+			}
+		}
+	}
+	if (hashBuf) delete[] hashBuf;
+	if (hHash) BCryptDestroyHash(hHash);
+	if (hAlg) BCryptCloseAlgorithmProvider(hAlg, 0);
+	CloseHandle(hFile);
+	if (!ok) result.clear();
+#endif
+	return result;
+}
+
+void ReloadPluginAllowlist() {
+	g_allowlistHashes.clear();
+#if defined(_WIN32)
+	std::wstring path = GetAetherPluginDirectory() + L"allowlist.txt";
+	HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) return;
+	char buf[8192];
+	DWORD bytesRead = 0;
+	std::string content;
+	while (ReadFile(hFile, buf, sizeof(buf), &bytesRead, NULL) && bytesRead > 0)
+		content.append(buf, bytesRead);
+	CloseHandle(hFile);
+
+	std::string cur;
+	for (char ch : content) {
+		if (ch == '\n' || ch == '\r' || ch == ' ' || ch == '\t') {
+			if (!cur.empty()) {
+				std::transform(cur.begin(), cur.end(), cur.begin(), ::tolower);
+				g_allowlistHashes.push_back(cur);
+				cur.clear();
+			}
+		}
+		else cur.push_back(ch);
+	}
+	if (!cur.empty()) {
+		std::transform(cur.begin(), cur.end(), cur.begin(), ::tolower);
+		g_allowlistHashes.push_back(cur);
+	}
+	LOG_INFO("Plugin allowlist: %d hash(es) loaded.\n", (int)g_allowlistHashes.size());
+#endif
+}
+
+bool IsPluginHashAllowed(const std::string& sha256HexLower) {
+	if (sha256HexLower.empty()) return false;
+	for (const auto& h : g_allowlistHashes) {
+		if (h == sha256HexLower) return true;
+	}
+	return false;
+}
+
+bool PluginAllowlistCheck(const std::wstring& dllPath) {
+	if (!g_pluginSecurity.allowlistEnabled) return true;
+	std::string hash = ComputeFileSha256Hex(dllPath);
+	std::transform(hash.begin(), hash.end(), hash.begin(), ::tolower);
+	if (hash.empty()) {
+		LOG_ERROR("Plugin allowlist ON: failed to hash %ls\n", dllPath.c_str());
+		return false;
+	}
+	if (!IsPluginHashAllowed(hash)) {
+		LOG_ERROR("Plugin allowlist ON: %ls (sha256 %s) not in allowlist.txt\n", dllPath.c_str(), hash.c_str());
+		return false;
+	}
+	LOG_INFO("Plugin allowlist: %s OK\n", hash.c_str());
+	return true;
+}

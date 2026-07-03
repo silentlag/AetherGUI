@@ -11,6 +11,7 @@
 #include "ProcessCommand.h"
 #include "EmbeddedConfig.h"
 #include "StatusSharedWriter.h"
+#include "HotkeyManager.h"
 
 StatusSharedWriter g_statusShmem;
 #include "AetherPluginManager.h"
@@ -43,6 +44,7 @@ StatusSharedWriter g_statusShmem;
 Tablet *tablet;
 VMulti *vmulti;
 ScreenMapper *mapper;
+HotkeyManager *hotkeyManager = NULL;
 thread *tabletThread;
 chrono::high_resolution_clock::time_point timeBegin = chrono::high_resolution_clock::now();
 chrono::high_resolution_clock::time_point lastMovement = chrono::high_resolution_clock::now();
@@ -693,6 +695,20 @@ void RunTabletThread() {
 			}
 		}
 
+		if (tablet->pressureCurveEnabled && tablet->state.pressure > 0.0) {
+			double p = tablet->state.pressure;
+			if (p < 0.0) p = 0.0;
+			if (p > 1.0) p = 1.0;
+			double e = tablet->pressureExponent;
+			if (e < 0.1) e = 0.1;
+			if (e > 4.0) e = 4.0;
+			p = pow(p, e);
+			p = tablet->pressureMin + p * (tablet->pressureMax - tablet->pressureMin);
+			if (p < 0.0) p = 0.0;
+			if (p > 1.0) p = 1.0;
+			tablet->state.pressure = p;
+		}
+
 		PublishTabletState(
 			tablet->state.position.x,
 			tablet->state.position.y,
@@ -1015,6 +1031,11 @@ static bool StartServiceRuntime(bool *running) {
 
 	mapper->tablet = tablet;
 
+	if (hotkeyManager == NULL) {
+		hotkeyManager = new HotkeyManager();
+		hotkeyManager->Start();
+	}
+
 	if (running != NULL)
 		*running = true;
 
@@ -1188,6 +1209,12 @@ int main(int argc, char**argv) {
 
 void CleanupAndExit(int code) {
 	StopOverclockTimer();
+
+	if (hotkeyManager != NULL) {
+		hotkeyManager->Stop();
+		delete hotkeyManager;
+		hotkeyManager = NULL;
+	}
 
 	if (tablet != NULL) {
 		if (tablet->filterTimedCount != 0) {

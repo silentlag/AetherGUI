@@ -196,6 +196,8 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClInclude Include="TabletFilterAetherSmooth.h" />
     <ClInclude Include="TabletFilterClickStabilizer.h" />
     <ClInclude Include="TabletFilterJitterStabilizer.h" />
+    <ClInclude Include="TabletFilterLazyMouse.h" />
+    <ClInclude Include="HotkeyManager.h" />
     <ClInclude Include="AetherShared.h" />
     <ClInclude Include="StatusSharedWriter.h" />
     <ClInclude Include="Version.h" />
@@ -227,6 +229,8 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClCompile Include="TabletFilterAetherSmooth.cpp" />
     <ClCompile Include="TabletFilterClickStabilizer.cpp" />
     <ClCompile Include="TabletFilterJitterStabilizer.cpp" />
+    <ClCompile Include="TabletFilterLazyMouse.cpp" />
+    <ClCompile Include="HotkeyManager.cpp" />
     <ClCompile Include="StatusSharedWriter.cpp" />
     <ClCompile Include="TabletFilterPlugin.cpp" />
     <ClCompile Include="TabletFilterSmoothing.cpp" />
