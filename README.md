@@ -23,10 +23,11 @@
 </p>
 
 <p>
-  <strong>Latest update (1.0.7):</strong> brought back the Anti-chatter filter (optimized, distance-adaptive
-  weight with a stable fallback near zero distance), added a ported <strong>Temporal Resampler</strong>
-  filter from OpenTabletDriver (Kalman prediction, reverse-EMA hardware-smoothing removal, follow radius,
-  trajectory interpolation) replacing the old Adaptive Filter, and cleaned up the Smoothing filter code.
+  <strong>Latest update (1.0.8):</strong> rebuilt action hotkeys on a low-level keyboard hook so the bound
+  key stays printable in every other app while the hotkey fires, fixed the unbind bug and the toggle that
+  did not update the GUI, made the Temporal Resampler stable in real reports (adaptive Kalman, no more
+  jitter), brought Anti-chatter back, simplified Smoothing and Reconstructor to single sliders, and added
+  a Visual C++ runtime self-check that opens a download page when the required DLLs are missing.
 </p>
 
 <p>
