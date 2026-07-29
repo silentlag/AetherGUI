@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "TabletFilterSmoothing.h"
+#include <cmath>
 
 TabletFilterSmoothing::TabletFilterSmoothing() {
 	latency = 2.0;
@@ -52,28 +53,27 @@ bool TabletFilterSmoothing::GetPosition(Vector2D *outputVector) {
 
 void TabletFilterSmoothing::Update() {
 
-	double deltaX, deltaY, distance, weightModifier, predictionModifier;
+	double deltaX, deltaY, distance;
 
-	if (PredictionEnabled)
-	{
-
-		if (prev_target.x != target.x or prev_target.y != target.y)
-		{
-
+	if (PredictionEnabled) {
+		if (prev_target.x != target.x or prev_target.y != target.y) {
 			deltaX = target.x - prev_target.x;
 			deltaY = target.y - prev_target.y;
 			double distSq = deltaX * deltaX + deltaY * deltaY;
-			distance = (distSq > 0) ? sqrt(distSq) : 0;
-			predictionModifier = 1 / cosh((distance - PredictionOffsetX) * PredictionSharpness) * PredictionStrength + PredictionOffsetY;
+			distance = (distSq > 0.0) ? sqrt(distSq) : 0.0;
 
-			deltaX *= predictionModifier;
-			deltaY *= predictionModifier;
+			double arg = (distance - PredictionOffsetX) * PredictionSharpness;
+			double predictionModifier = 1.0 / cosh(arg) * PredictionStrength + PredictionOffsetY;
 
-			calculated_target.x = target.x + deltaX;
-			calculated_target.y = target.y + deltaY;
+			calculated_target.x = target.x + deltaX * predictionModifier;
+			calculated_target.y = target.y + deltaY * predictionModifier;
 
 			prev_target.x = target.x;
 			prev_target.y = target.y;
+		}
+		else {
+			calculated_target.x = target.x;
+			calculated_target.y = target.y;
 		}
 	}
 	else {
@@ -84,27 +84,34 @@ void TabletFilterSmoothing::Update() {
 	deltaX = calculated_target.x - position.x;
 	deltaY = calculated_target.y - position.y;
 	double distSq = deltaX * deltaX + deltaY * deltaY;
-	distance = (distSq > 0.0) ? sqrt(distSq) : 0.0;
 
 	if (!AntichatterEnabled) {
 		position.x += deltaX * weight;
 		position.y += deltaY * weight;
+		return;
+	}
+
+	distance = (distSq > 0.0) ? sqrt(distSq) : 0.0;
+
+	double base = distance + antichatterOffsetX;
+	if (base < 1e-6) base = 1e-6;
+
+	double weightModifier;
+	if (antichatterStrength <= 0.001) {
+		weightModifier = weight;
 	}
 	else {
-
-		double base = distance + antichatterOffsetX;
-		if (base < 1e-6) base = 1e-6;
 		double shaped = pow(base, -antichatterStrength) * antichatterMultiplier;
-		double denom  = shaped + antichatterOffsetY;
-		if (denom < 0.0) denom = 0.0;
-
-		weightModifier = (denom > 1e-9) ? (weight / denom) : 1.0;
-		if (weightModifier > 1.0) weightModifier = 1.0;
-		else if (weightModifier < 0.0) weightModifier = 0.0;
-
-		position.x += deltaX * weightModifier;
-		position.y += deltaY * weightModifier;
+		double denom = shaped + antichatterOffsetY;
+		if (denom < 1e-9) denom = 1e-9;
+		weightModifier = weight / denom;
 	}
+
+	if (weightModifier > 1.0) weightModifier = 1.0;
+	else if (weightModifier < 0.0) weightModifier = 0.0;
+
+	position.x += deltaX * weightModifier;
+	position.y += deltaY * weightModifier;
 }
 
 void TabletFilterSmoothing::SetPosition(double x, double y, double h) {
@@ -114,8 +121,16 @@ void TabletFilterSmoothing::SetPosition(double x, double y, double h) {
 }
 
 double TabletFilterSmoothing::GetLatency(double filterWeight, double interval, double threshold) {
+	if (interval <= 0.0) interval = 2.0;
+	if (filterWeight <= 0.0) return 0.0;
+	if (filterWeight >= 1.0) return 0.0;
 	double target = 1 - threshold;
-	double stepCount = -log(1 / target) / log(1 - filterWeight);
+	if (target <= 0.0) return 0.0;
+	if (target >= 1.0) return 0.0;
+	double denom = log(1 - filterWeight);
+	if (denom == 0.0) return 0.0;
+	double stepCount = -log(1 / target) / denom;
+	if (stepCount < 0.0) stepCount = 0.0;
 	return stepCount * interval;
 }
 double TabletFilterSmoothing::GetLatency(double filterWeight) {
@@ -126,8 +141,13 @@ double TabletFilterSmoothing::GetLatency() {
 }
 
 double TabletFilterSmoothing::GetWeight(double latency, double interval, double threshold) {
+	if (interval <= 0.0) interval = 2.0;
+	if (latency <= 0.0) return 1.0;
 	double stepCount = latency / interval;
+	if (stepCount <= 0.0) return 1.0;
 	double target = 1 - threshold;
+	if (target <= 0.0) return 1.0;
+	if (target >= 1.0) return 0.0;
 	return 1 - 1 / pow(1 / target, 1 / stepCount);
 }
 double TabletFilterSmoothing::GetWeight(double latency) {

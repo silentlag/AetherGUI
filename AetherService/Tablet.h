@@ -9,11 +9,12 @@
 #include "TabletFilterSmoothing.h"
 #include "TabletFilterNoiseReduction.h"
 #include "TabletFilterReconstructor.h"
-#include "TabletFilterAdaptive.h"
+#include "TabletFilterTemporalResampler.h"
 #include "TabletFilterAetherSmooth.h"
 #include "TabletFilterClickStabilizer.h"
 #include "TabletFilterJitterStabilizer.h"
 #include "TabletFilterLazyMouse.h"
+#include "TabletFilterTrace.h"
 #include "TabletFilterPlugin.h"
 #include "TabletBenchmark.h"
 #include "Vector2D.h"
@@ -65,7 +66,7 @@ public:
 
 	TabletFilterReconstructor reconstructor;
 
-	TabletFilterAdaptive adaptive;
+	TabletFilterTemporalResampler temporal;
 
 	TabletFilterAetherSmooth aetherSmooth;
 
@@ -74,6 +75,8 @@ public:
 	TabletFilterJitterStabilizer jitterStabilizer;
 
 	TabletFilterLazyMouse lazyMouse;
+
+	TabletFilterTrace trace;
 
 	bool pressureCurveEnabled;
 	double pressureExponent;

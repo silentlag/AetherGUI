@@ -1,11 +1,11 @@
-<div align="center">
+<center>
 
 <img src="AetherGUI/assets/aether_logo.png" width="13%" alt="AetherGUI logo"/>
 
 <h1>AetherGUI</h1>
 
 <p>
-  <strong>Low-latency Windows tablet driver with a native control panel</strong>
+  <strong>A low-latency Windows tablet driver with a native control panel</strong>
   <br/>
   Native GUI · HID / Raw Input · Wacom support · High polling output · Adaptive filtering
 </p>
@@ -23,9 +23,10 @@
 </p>
 
 <p>
-  <strong>Latest update:</strong> fixed area scaling on the tablet preview, fixed XP-Pen device
-  detection, added pre-launch diagnostic logging before <code>AetherService.exe</code> starts,
-  lowered end-to-end input latency, and shipped a broad pass of hot-path optimizations.
+  <strong>Latest update (1.0.7):</strong> brought back the Anti-chatter filter (optimized, distance-adaptive
+  weight with a stable fallback near zero distance), added a ported <strong>Temporal Resampler</strong>
+  filter from OpenTabletDriver (Kalman prediction, reverse-EMA hardware-smoothing removal, follow radius,
+  trajectory interpolation) replacing the old Adaptive Filter, and cleaned up the Smoothing filter code.
 </p>
 
 <p>
@@ -47,16 +48,16 @@
     <td align="center"><strong>Multiple Output Modes</strong><br/>Absolute · Relative · Windows Ink / Digitizer through VMulti</td>
   </tr>
   <tr>
-    <td align="center"><strong>High Polling Output</strong><br/>Sub-millisecond scheduling with targets up to 2000 Hz</td>
-    <td align="center"><strong>Advanced Filters</strong><br/>Smoothing · antichatter · noise reduction · adaptive prediction · Aether Smooth</td>
+    <td align="center"><strong>High Polling Rate</strong><br/>Sub-millisecond scheduling with targets up to 2000 Hz</td>
+    <td align="center"><strong>Advanced Filters</strong><br/>Smoothing · noise reduction · adaptive prediction · Aether Smooth · Reconstructor · Aether Trace · Lazy Mouse</td>
   </tr>
   <tr>
-    <td align="center"><strong>Embedded Tablet Configs</strong><br/>Fallback device database when external configs are missing</td>
+    <td align="center"><strong>Built-in Tablet List</strong><br/>Knows your tablet out of the box, even if no external config files are present</td>
     <td align="center"><strong>Raw Input Fixes</strong><br/>Relative-mode resets · invalid-position handling · reduced event coalescing</td>
   </tr>
   <tr>
     <td align="center"><strong>Native Plugin Manager</strong><br/>Aether Filters catalog · install DLL filters · build source filters</td>
-    <td align="center"><strong>Modern Quality-of-Life</strong><br/>Safe area bounds · themed updater · tray controls · DPI scaling · undo · autosave</td>
+    <td align="center"><strong>Comfort things</strong><br/>Safe area bounds · themed updater · tray controls · DPI scaling · undo · autosave</td>
   </tr>
 </table>
 
@@ -65,7 +66,7 @@
 <h2>· How AetherGUI Compares ·</h2>
 
 <p>
-  There are already great open-source tablet drivers — most notably <a href="https://opentabletdriver.net">OpenTabletDriver</a> — and AetherGUI is not a replacement for them. The two projects make different engineering tradeoffs, and which one fits better depends on your setup. This section is here so you can make an informed choice instead of guessing from screenshots.
+  There are already great open-source tablet drivers — most notably <a href="https://opentabletdriver.net">OpenTabletDriver</a> — and AetherGUI is not a replacement for them. The two projects take different approaches, and which one fits better depends on your setup. This section is here so you can pick the right one instead of guessing from screenshots.
 </p>
 
 <table align="center">
@@ -75,24 +76,24 @@
     <th align="center">OpenTabletDriver</th>
   </tr>
   <tr>
-    <td align="center"><strong>Language / runtime</strong></td>
-    <td align="center">Native C++17, no managed runtime</td>
+    <td align="center"><strong>Language</strong></td>
+    <td align="center">Plain C++17, no .NET runtime</td>
     <td align="center">C# / .NET</td>
   </tr>
   <tr>
-    <td align="center"><strong>GUI</strong></td>
+    <td align="center"><strong>User interface</strong></td>
     <td align="center">Native Direct2D + DirectWrite, no Electron / no GTK / no .NET UI stack</td>
     <td align="center">Eto.Forms (WPF on Windows, GTK on Linux, AppKit on macOS)</td>
   </tr>
   <tr>
-    <td align="center"><strong>Process model</strong></td>
+    <td align="center"><strong>How it runs</strong></td>
     <td align="center">Two native processes: <code>AetherGUI.exe</code> (control panel) and <code>AetherService.exe</code> (driver), connected through a stdin/stdout pipe</td>
     <td align="center">Daemon + UX over IPC</td>
   </tr>
   <tr>
-    <td align="center"><strong>Hot path</strong></td>
+    <td align="center"><strong>How the tablet is read</strong></td>
     <td align="center">Report thread runs at <code>THREAD_PRIORITY_TIME_CRITICAL</code> registered with MMCSS <em>Pro Audio</em>, packet filters share a lock-free <code>IsTimedOutputEnabled</code> snapshot, status output is written without CRT flushes</td>
-    <td align="center">.NET-managed input pipeline; quality is excellent, but the language imposes a GC and a JIT</td>
+    <td align="center">.NET-managed input pipeline; quality is excellent, but the language brings a garbage collector and JIT</td>
   </tr>
   <tr>
     <td align="center"><strong>Output backends</strong></td>
@@ -100,7 +101,7 @@
     <td align="center">Absolute / Relative / Artist mode through native platform pointers and OTD's own filter pipeline</td>
   </tr>
   <tr>
-    <td align="center"><strong>Tablet database</strong></td>
+    <td align="center"><strong>Tablet support list</strong></td>
     <td align="center">Embedded fallback database compiled into the service — the driver works even without external config files</td>
     <td align="center">External JSON configurations shipped alongside the daemon</td>
   </tr>
@@ -110,19 +111,19 @@
     <td align="center">Cross-platform: Windows, Linux, macOS</td>
   </tr>
   <tr>
-    <td align="center"><strong>Footprint</strong></td>
+    <td align="center"><strong>Size on disk</strong></td>
     <td align="center">Small native binaries, no .NET runtime install required</td>
     <td align="center">Requires the .NET runtime</td>
   </tr>
   <tr>
-    <td align="center"><strong>Diagnostics</strong></td>
+    <td align="center"><strong>Troubleshooting</strong></td>
     <td align="center">Persistent <code>AetherGUI.log</code> next to the exe with bridge / service / status tags, including <code>CreateProcess</code> errors and exit codes</td>
     <td align="center">OTD daemon and console logs through its own pipeline</td>
   </tr>
 </table>
 
 <p>
-  In short: <strong>AetherGUI focuses on low-level, native code paths.</strong> The whole input chain — HID read, filtering, screen mapping, VMulti write — stays inside one C++ binary, with thread priorities and MMCSS scheduling tuned for low-latency games like osu!. There is no managed runtime in the hot path, no JIT warmup, and no garbage collector to time around.
+  In short: <strong>AetherGUI is built around plain C++ all the way down.</strong> The whole input chain — HID read, filtering, screen mapping, VMulti write — stays inside one C++ binary, with thread priorities tuned for fast games like osu!. There's no .NET runtime to install, no JIT warmup, and no garbage collector that could pause you at a bad moment.
  </p>
 
 <p>
@@ -550,6 +551,17 @@
     <td align="center">Look at the <code>[BRIDGE] Service process exited with code ...</code> line in <code>AetherGUI.log</code> and the surrounding <code>[SVC]</code> lines. <code>Tablet init failed after retries</code> almost always means another driver is blocking the HID interface (see the row above).</td>
   </tr>
   <tr>
+    <td align="center"><strong>Service crashes immediately / Windows shows <code>0xc000007b</code> or <code>msvcp140.dll / vcruntime140.dll not found</code></strong></td>
+    <td align="center">AetherService.exe and AetherGUI.exe are native MSVC binaries and dynamically link the Visual C++ runtime. On a fresh or stripped-down Windows install, a missing <code>MSVCP140.dll</code> / <code>VCRUNTIME140.dll</code> / <code>VCRUNTIME140_1.dll</code> (or the UCRT <code>api-ms-win-crt-*</code> shims) is the single most common reason the driver crashes before the GUI can even speak to it.<br/><br/>
+    <strong>What AetherService actually needs at runtime:</strong><br/>
+    &bull; Visual C++ 2015-2022 Redistributable (x64) &mdash; ships <code>MSVCP140.dll</code>, <code>VCRUNTIME140.dll</code>, <code>VCRUNTIME140_1.dll</code><br/>
+    &bull; Universal CRT (UCRT) &mdash; built into Windows 10 / 11, also installed by the VC++ redist<br/>
+    &bull; <code>HID.DLL</code>, <code>SETUPAPI.dll</code>, <code>WINUSB.DLL</code>, <code>AVRT.dll</code>, <code>WINMM.dll</code>, <code>ole32.dll</code>, <code>bcrypt.dll</code> &mdash; all part of Windows, no extra install needed<br/>
+    &bull; Optional: <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a> only if you use Windows Ink / Digitizer output<br/><br/>
+    <strong>How to install:</strong> grab the <a href="https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/">Visual C++ Redistributable Runtimes All-in-One</a> pack from TechPowerUp (it bundles every x86 + x64 version from 2005 to 2015-2022), run <code>install_all.bat</code> or just install the <strong>Visual C++ 2015-2022 x64</strong> redist, then reboot and restart AetherGUI. After that the service should start and report <code>Tablet found!</code> in the Console tab.<br/><br/>
+    A fast check: open the install folder in File Explorer, right-click <code>AetherService.exe</code> &rarr; Properties &rarr; Details; if Windows immediately pops <em>"This app can't run on your PC"</em> or <em>"The code execution cannot proceed because MSVCP140.dll was not found"</em>, it is a runtime dependency, not a bug in the driver. A <code>[BRIDGE] CreateProcess failed with error 0x000000C1</code> / <code>0x0000007E</code> line in <code>AetherGUI.log</code> usually means the same thing.</td>
+  </tr>
+  <tr>
     <td align="center"><strong>Windows Ink does not work</strong></td>
     <td align="center">Install VMulti and restart AetherGUI. Absolute and Relative modes do not require VMulti.</td>
   </tr>
@@ -624,3 +636,4 @@ AetherGUI and AetherService are unsigned and do two things antivirus heuristics 
 - The source is open &mdash; anything an AV report claims the binary does can be verified directly in the tree.
 
 Long-term the only real fix is signing the binaries with an Authenticode certificate. That is on the roadmap.
+

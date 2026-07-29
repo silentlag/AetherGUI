@@ -154,7 +154,7 @@ struct OverclockInterp {
 		if (initialized) {
 			double deltaMs = (now - lastReportTime).count() / 1000000.0;
 			if (deltaMs > 0.5 && deltaMs < 150.0)
-				reportMsAvg += (deltaMs - reportMsAvg) * 0.1;
+				reportMsAvg += (deltaMs - reportMsAvg) * 0.25;
 		}
 		lastReportTime = now;
 
@@ -181,6 +181,14 @@ struct OverclockInterp {
 		if (alpha < 0.0) alpha = 0.0;
 		if (alpha > 1.0) alpha = 1.0;
 
+		double staleAlpha = alpha;
+		if (reportMsAvg > 0.1 && elapsedMs > reportMsAvg) {
+			double overMs = elapsedMs - reportMsAvg;
+			double fade = 1.0 - overMs / (reportMsAvg * 2.0);
+			if (fade < 0.0) fade = 0.0;
+			staleAlpha = alpha * fade;
+		}
+
 		double vx = currX - prevX;
 		double vy = currY - prevY;
 
@@ -206,8 +214,9 @@ struct OverclockInterp {
 
 		double stepLen = sqrt(vx * vx + vy * vy);
 		double leadLen = sqrt(leadX * leadX + leadY * leadY);
-		if (leadLen > stepLen && leadLen > 1e-9) {
-			double s = stepLen / leadLen;
+		double leadCap = stepLen * 1.3;
+		if (leadLen > leadCap && leadLen > 1e-9) {
+			double s = leadCap / leadLen;
 			leadX *= s; leadY *= s;
 		}
 
@@ -215,11 +224,13 @@ struct OverclockInterp {
 		double nextY = currY + leadY;
 		double nextP = currP + (currP - prevP);
 		if (nextP < 0) nextP = 0;
+		if (nextP > 1) nextP = 1;
 
-		*outX = currX + (nextX - currX) * alpha;
-		*outY = currY + (nextY - currY) * alpha;
-		*outP = currP + (nextP - currP) * alpha;
+		*outX = currX + (nextX - currX) * staleAlpha;
+		*outY = currY + (nextY - currY) * staleAlpha;
+		*outP = currP + (nextP - currP) * staleAlpha;
 		if (*outP < 0) *outP = 0;
+		if (*outP > 1) *outP = 1;
 	}
 
 	bool HasSample() const {
@@ -313,7 +324,7 @@ static void OverclockTimerLoop() {
 	if (intervalNs < 1) intervalNs = 1;
 
 	int64_t spinThresholdNs = intervalNs / 4;
-	if (spinThresholdNs > 100000) spinThresholdNs = 100000;
+	if (spinThresholdNs > 20000) spinThresholdNs = 20000;
 	if (spinThresholdNs < 5000)   spinThresholdNs = 5000;
 
 	int64_t nextTickNs = platform::MonotonicNs();
@@ -322,8 +333,9 @@ static void OverclockTimerLoop() {
 		nextTickNs += intervalNs;
 
 		int64_t now = platform::MonotonicNs();
-		if (now > nextTickNs + intervalNs * 4) {
+		if (now > nextTickNs + intervalNs * 2) {
 			nextTickNs = now + intervalNs;
+			platform::SleepMs(0);
 		}
 
 		platform::SleepUntilNs(nextTickNs, spinThresholdNs);
@@ -369,7 +381,7 @@ static void PenRateTimerLoop() {
 	if (intervalNs < 1) intervalNs = 1;
 
 	int64_t spinThresholdNs = intervalNs / 4;
-	if (spinThresholdNs > 100000) spinThresholdNs = 100000;
+	if (spinThresholdNs > 20000) spinThresholdNs = 20000;
 	if (spinThresholdNs < 5000)   spinThresholdNs = 5000;
 
 	int64_t nextTickNs = platform::MonotonicNs();
@@ -378,8 +390,9 @@ static void PenRateTimerLoop() {
 		nextTickNs += intervalNs;
 
 		int64_t now = platform::MonotonicNs();
-		if (now > nextTickNs + intervalNs * 4) {
+		if (now > nextTickNs + intervalNs * 2) {
 			nextTickNs = now + intervalNs;
+			platform::SleepMs(0);
 		}
 
 		platform::SleepUntilNs(nextTickNs, spinThresholdNs);
@@ -438,10 +451,10 @@ int WritePenReport(bool force) {
 		if (hz < 30.0) hz = 30.0;
 		if (hz > 1000.0) hz = 1000.0;
 
-		auto interval = chrono::duration_cast<chrono::steady_clock::duration>(
-			chrono::duration<double, milli>(1000.0 / hz));
+		auto halfInterval = chrono::duration_cast<chrono::steady_clock::duration>(
+			chrono::duration<double, milli>(500.0 / hz));
 		lock_guard<mutex> lock(penRateLimitMutex);
-		if (now - lastPenOutputTime < interval)
+		if (now - lastPenOutputTime < halfInterval)
 			return 0;
 		lastPenOutputTime = now;
 	}
@@ -560,7 +573,22 @@ void RunTabletThread() {
 
 	chrono::high_resolution_clock::time_point timeNow = chrono::high_resolution_clock::now();
 
+
+	chrono::high_resolution_clock::time_point lastReinitAttempt = chrono::high_resolution_clock::now();
+	const chrono::seconds reinitInterval(3);
+
 	while (true) {
+
+		if (!tablet->isOpen) {
+			auto sinceLast = chrono::high_resolution_clock::now() - lastReinitAttempt;
+			if (sinceLast >= reinitInterval) {
+				lastReinitAttempt = chrono::high_resolution_clock::now();
+				LOG_INFO("Tablet not open — re-running init (watchdog, tablet may have just been plugged in).\n");
+				tablet->Init();
+			}
+			platform::SleepMs(200);
+			continue;
+		}
 
 		status = tablet->ReadPosition();
 
@@ -973,7 +1001,7 @@ static void FilterTimerCallback(unsigned int wTimerID, unsigned int msg,
 
 			vmulti->CreateReport(buttons, interpX, interpY, interpPressure);
 
-			if (stateValid) {
+			if (stateValid && (vmulti->HasReportChanged() || vmulti->buttonsChanged)) {
 				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 			}
 		}
@@ -992,7 +1020,10 @@ static void FilterTimerCallback(unsigned int wTimerID, unsigned int msg,
 				pressure
 			);
 
-			if ((vmulti->HasReportChanged() || vmulti->buttonsChanged) && stateValid) {
+			if (penRateLimitActive && stateValid) {
+				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
+			}
+			else if ((vmulti->HasReportChanged() || vmulti->buttonsChanged) && stateValid) {
 				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
 			}
 		}

@@ -105,11 +105,13 @@ void Tablet::ResetPacketFilters() {
 	filterPacketCount = 0;
 	filterPacket[filterPacketCount++] = &noise;
 	filterPacket[filterPacketCount++] = &reconstructor;
-	filterPacket[filterPacketCount++] = &adaptive;
+	filterPacket[filterPacketCount++] = &temporal;
 	filterPacket[filterPacketCount++] = &aetherSmooth;
 	filterPacket[filterPacketCount++] = &lazyMouse;
 
 	filterPacket[filterPacketCount++] = &jitterStabilizer;
+
+	filterPacket[filterPacketCount++] = &trace;
 
 	filterPacket[filterPacketCount++] = &clickStabilizer;
 }

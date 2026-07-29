@@ -29,7 +29,7 @@ int CommandLine::Parse(string line) {
 	string item = "";
 	vector<string> items;
 
-	int lineLength = line.size();
+	int lineLength = (int)line.size();
 	int itemLength = 0;
 	int itemCount = 0;
 	int index = 0;
@@ -149,7 +149,7 @@ int CommandLine::Parse(string line) {
 		values.push_back(items[i]);
 	}
 
-	valueCount = values.size();
+	valueCount = (int)values.size();
 	return valueCount;
 }
 

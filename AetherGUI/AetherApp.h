@@ -143,29 +143,14 @@ public:
 		Toggle antichatterEnabled;
 		Slider antichatterStrength;
 		Slider antichatterMultiplier;
-		Slider antichatterOffsetX;
-		Slider antichatterOffsetY;
 
 		Toggle noiseEnabled;
 		Slider noiseBuffer;
 		Slider noiseThreshold;
 		Slider noiseIterations;
 
-		Toggle velCurveEnabled;
-		Slider velCurveMinSpeed;
-		Slider velCurveMaxSpeed;
-		Slider velCurveSmoothing;
-		Slider velCurveSharpness;
-
-		Toggle snapEnabled;
-		Slider snapRadius;
-		Slider snapSmooth;
-
 		Toggle reconstructorEnabled;
 		Slider reconStrength;
-		Slider reconVelSmooth;
-		Toggle reconInverseEma;
-		Slider reconEmaWeight;
 
 		Toggle jitterStabEnabled;
 		Slider jitterStabRadius;
@@ -175,15 +160,17 @@ public:
 		Slider lazyMouseRadius;
 		Slider lazyMouseSmooth;
 
+		Toggle temporalEnabled;
+		Slider temporalPrediction;
+		Slider temporalSmoothing;
+		Slider temporalReverseEma;
+		Slider temporalFollow;
+
 		Toggle pressureCurveEnabled;
 		Slider pressureExponent;
 		Slider pressureMin;
 		Slider pressureMax;
 
-		Toggle adaptiveEnabled;
-		Slider adaptiveProcessNoise;
-		Slider adaptiveMeasNoise;
-		Slider adaptiveVelWeight;
 	} filters;
 
 	RadioGroup outputMode;
@@ -192,6 +179,11 @@ public:
 	CycleSelector buttonTip;
 	CycleSelector buttonBottom;
 	CycleSelector buttonTop;
+	int openButtonDropdown = -1;
+	int capturingButtonMap = -1;
+	float buttonDropdownY = 0.0f;
+	float buttonDropdownBoxX = 0.0f;
+	float buttonDropdownBoxW = 0.0f;
 
 	Toggle forceFullArea;
 	Toggle areaClipping;
@@ -208,6 +200,8 @@ public:
 	Button loadConfigBtn;
 	Button updateOpenBtn;
 	Button updateLaterBtn;
+	Button runtimeMissingOpenBtn;
+	Button runtimeMissingLaterBtn;
 	Button installPluginBtn;
 	Button installSourcePluginBtn;
 	Button reloadPluginBtn;
@@ -276,6 +270,10 @@ public:
 	std::wstring updateLatestTag;
 	std::wstring updateCurrentVersion;
 	std::wstring updateReleaseUrl;
+	bool runtimeMissingModalOpen = false;
+	std::wstring missingRuntimeNames;
+	bool CheckVCRedist();
+	void DrawRuntimeMissingModal();
 	float pluginCatalogScrollY = 0.0f;
 	float pluginCatalogDragStartY = 0.0f;
 	float pluginCatalogDragStartOffset = 0.0f;
@@ -311,6 +309,7 @@ public:
 	int commandHistoryIdx = 0;
 
 	Button startStopBtn;
+	Button autoStartBtn;
 	std::wstring servicePath;
 	bool autoStartAttempted = false;
 	bool vmultiInstalled = false;
@@ -351,14 +350,6 @@ public:
 		Toggle snappingEnabled;
 		Slider snappingInner;
 		Slider snappingOuter;
-		Toggle rhythmFlowEnabled;
-		Slider rhythmFlowStrength;
-		Slider rhythmFlowRelease;
-		Slider rhythmFlowJitter;
-		Toggle suppressionEnabled;
-		Slider suppressionTime;
-		Toggle pressureGateEnabled;
-		Slider pressureGateAmount;
 	} aether;
 
 	struct {
@@ -510,6 +501,15 @@ public:
 	ActionHotkey actionHotkeys[kActionHotkeyCount];
 	int capturingActionHotkey = -1;
 	int openActionDropdown = -1;
+	float actionDropdownY = 0.0f;
+	float actionDropdownX = 0.0f;
+	float actionDropdownW = 0.0f;
+#if defined(_WIN32)
+	HHOOK actionHotkeyHook = NULL;
+#endif
+	void InstallActionHotkeyHook();
+	void UninstallActionHotkeyHook();
+	void FireActionHotkey(int slot);
 
 	void SendActionHotkeysToDriver();
 	std::wstring ActionHotkeyLabel(int slot) const;
@@ -614,6 +614,10 @@ private:
 
 	void DrawStatusBar();
 
+	void DrawButtonDropdownOverlay();
+
+	void DrawActionHotkeyDropdownOverlay();
+
 	void DrawLiveCursor(float previewX, float previewY, float previewW, float previewH, float fullW, float fullH);
 
 	void DrawInputVisualizer(float x, float y, float w, float h);
@@ -634,6 +638,9 @@ private:
 
 public:
 	bool StartDriverService();
+
+	void toggleAutoStart();
+	bool isAutoStartEnabled() const;
 
 	void ShowUpdateModal(const std::wstring& latestTag, const std::wstring& currentVersion, const std::wstring& releaseUrl);
 

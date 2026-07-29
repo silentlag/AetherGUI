@@ -362,6 +362,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		return 0;
 	}
 
+	case WM_APP + 7: {
+		app.FireActionHotkey((int)wParam);
+		return 0;
+	}
+
 	case WM_SIZE:
 		if (wParam == SIZE_MINIMIZED) {
 			MinimizeToTray(hWnd);
@@ -452,6 +457,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 	case WM_DESTROY:
 		app.UnregisterConfigHotkeys();
+		app.UninstallActionHotkeyHook();
 		RemoveTrayIcon();
 		isRunning = false;
 		PostQuitMessage(0);
@@ -589,6 +595,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	}
 
 	app.RegisterConfigHotkeys();
+	app.InstallActionHotkeyHook();
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
@@ -634,6 +641,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		}
 	}
 
+	app.UninstallActionHotkeyHook();
 	app.Shutdown();
 	if (hMutex) {
 		ReleaseMutex(hMutex);

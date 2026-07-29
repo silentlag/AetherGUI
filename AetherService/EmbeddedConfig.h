@@ -11,19 +11,6 @@ LogDirect true
 
 # === tablet.cfg ===
 
-# Wacom CTL-470 (Wacom drivers installed)
-Tablet 0x056a 0x00dd 0xFF00 0x000A
-Name "Wacom CTL-470 (Wacom drivers installed)"
-ReportId 0x02
-ReportLength 11
-DetectMask 0x40
-MaxX 14720
-MaxY 9200
-MaxPressure 1023
-Width 147.2
-Height 92.0
-Type WacomDrivers
-
 # Wacom CTL-470
 Tablet 0x056a 0x00dd 0x0D 0x01
 Name "Wacom CTL-470"
@@ -36,6 +23,19 @@ MaxPressure 1023
 Width 147.2
 Height 92.0
 InitFeature 0x02 0x02
+
+# Wacom CTL-470 (Wacom drivers installed)
+Tablet 0x056a 0x00dd 0xFF00 0x000A
+Name "Wacom CTL-470 (Wacom drivers installed)"
+ReportId 0x02
+ReportLength 11
+DetectMask 0x40
+MaxX 14720
+MaxY 9200
+MaxPressure 1023
+Width 147.2
+Height 92.0
+Type WacomDrivers
 
 # Wacom CTH-470
 Tablet 0x056a 0x00de 0x0D 0x01
@@ -63,18 +63,6 @@ Width 216.48
 Height 137.0
 InitFeature 0x02 0x02
 
-# Wacom CTL-471 (Wacom drivers installed)
-Tablet 0x056a 0x0300 0xFF00 0x000A
-Name "Wacom CTL-471 (Wacom drivers installed)"
-ReportLength 11
-DetectMask 0x40
-MaxX 15200
-MaxY 9500
-MaxPressure 1023
-Width 152.00
-Height 95.00
-Type WacomDrivers
-
 # Wacom CTL-471
 Tablet 0x056a 0x0300 0xFF0D 0x01
 Name "Wacom CTL-471"
@@ -87,6 +75,18 @@ Width 152.00
 Height 95.00
 InitFeature 0x02 0x02
 
+# Wacom CTL-471 (Wacom drivers installed)
+Tablet 0x056a 0x0300 0xFF00 0x000A
+Name "Wacom CTL-471 (Wacom drivers installed)"
+ReportLength 11
+DetectMask 0x40
+MaxX 15200
+MaxY 9500
+MaxPressure 1023
+Width 152.00
+Height 95.00
+Type WacomDrivers
+
 # Wacom CTL-671
 Tablet 0x056a 0x0301 0xFF0D 0x01
 Name "Wacom CTL-671"
@@ -97,6 +97,19 @@ MaxY 13530
 MaxPressure 1023
 Width 216.48
 Height 135.30
+InitFeature 0x02 0x02
+
+# Wacom CTL-472
+Tablet 0x056a 0x037a 0xFF0D 0x0001
+Name "Wacom CTL-472"
+ReportId 0x02
+ReportLength 10
+DetectMask 0x40
+MaxX 15200
+MaxY 9500
+MaxPressure 2047
+Width 152.0
+Height 95.0
 InitFeature 0x02 0x02
 
 # Wacom CTL-472 (Wacom drivers installed)
@@ -111,19 +124,6 @@ MaxPressure 2047
 Width 152.0
 Height 95.0
 Type WacomDrivers
-
-# Wacom CTL-472
-Tablet 0x056a 0x037a 0xFF0D 0x0001
-Name "Wacom CTL-472"
-ReportId 0x02
-ReportLength 10
-DetectMask 0x40
-MaxX 15200
-MaxY 9500
-MaxPressure 2047
-Width 152.0
-Height 95.0
-InitFeature 0x02 0x02
 
 # Wacom CTL-672
 Tablet 0x056a 0x037b 0xFF0D 0x0001
@@ -153,18 +153,6 @@ InitFeature 0x02 0x02
 
 # Wacom CTL-480 (Wacom drivers installed)
 Tablet 0x056a 0x030e 0x0000 0x0000 11
-Tablet 0x056a 0x030e 0xFF00 0x000A
-Name "Wacom CTL-480 (Wacom drivers installed)"
-ReportId 0x02
-ReportLength 11
-DetectMask 0x40
-MaxX 15200
-MaxY 9500
-MaxPressure 1023
-Width 152.0
-Height 95.0
-Type WacomDrivers
-
 # Wacom CTL-480
 Tablet 0x056a 0x030e 0xFF0D 0x0001
 Name "Wacom CTL-480"
@@ -177,6 +165,18 @@ MaxPressure 1023
 Width 152.0
 Height 95.0
 InitFeature 0x02 0x02
+
+Tablet 0x056a 0x030e 0xFF00 0x000A
+Name "Wacom CTL-480 (Wacom drivers installed)"
+ReportId 0x02
+ReportLength 11
+DetectMask 0x40
+MaxX 15200
+MaxY 9500
+MaxPressure 1023
+Width 152.0
+Height 95.0
+Type WacomDrivers
 
 # Wacom CTH-480 (native match)
 Tablet 0x056a 0x0302 0x0000 0x0000 10
@@ -193,18 +193,6 @@ InitFeature 0x02 0x02
 
 # Wacom CTH-480 (Wacom drivers installed)
 Tablet 0x056a 0x0302 0x0000 0x0000 11
-Tablet 0x056a 0x0302 0xFF00 0x000A
-Name "Wacom CTH-480 (Wacom drivers installed)"
-ReportId 0x02
-ReportLength 11
-DetectMask 0x40
-MaxX 15200
-MaxY 9500
-MaxPressure 1023
-Width 152.0
-Height 95.0
-Type WacomDrivers
-
 # Wacom CTH-480
 Tablet 0x056a 0x0302 0xFF0D 0x0001
 Name "Wacom CTH-480"
@@ -217,6 +205,18 @@ MaxPressure 1023
 Width 152.0
 Height 95.0
 InitFeature 0x02 0x02
+
+Tablet 0x056a 0x0302 0xFF00 0x000A
+Name "Wacom CTH-480 (Wacom drivers installed)"
+ReportId 0x02
+ReportLength 11
+DetectMask 0x40
+MaxX 15200
+MaxY 9500
+MaxPressure 1023
+Width 152.0
+Height 95.0
+Type WacomDrivers
 
 # Wacom CTL-680
 Tablet 0x056a 0x0323 0xFF0D 0x0001
@@ -1965,7 +1965,8 @@ Type WacomBamboo
 
 # Wacom CTE-650
 Tablet 0x056A 0x0018 0x0000 0x0000 11
-Tablet 0x056A 0x0018 0xFF00 0x000A
+# Wacom CTE-650
+Tablet 0x056A 0x0018 0xFF0D 0x0001
 Tablet 0x056A 0x0018 0xFF00 0x0001
 Tablet 0x056A 0x0018 0xFF00 0x0002
 Name "Wacom CTE-650 (Wacom drivers installed)"
@@ -1979,8 +1980,7 @@ Width 216.480
 Height 135.300
 Type WacomDrivers
 
-# Wacom CTE-650
-Tablet 0x056A 0x0018 0xFF0D 0x0001
+Tablet 0x056A 0x0018 0xFF00 0x000A
 Tablet 0x056A 0x0018 0x000D 0x0001
 Name "Wacom CTE-650"
 ReportId 0x02

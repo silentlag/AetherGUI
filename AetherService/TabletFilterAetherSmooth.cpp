@@ -12,14 +12,14 @@ TabletFilterAetherSmooth::TabletFilterAetherSmooth() {
 	isFirstReport = true;
 
 	enableSmoothing = true;
-	stability = 1.0;
-	speedSensitivity = 0.015;
+	stability = 3.0;
+	speedSensitivity = 0.1;
 
-	enableRadialFollow = true;
+	enableRadialFollow = false;
 	radialInner = 0.5;
 	radialOuter = 3.0;
 
-	enableDebounce = true;
+	enableDebounce = false;
 	debounceMs = 5.0;
 
 	enableRhythmFlow = false;

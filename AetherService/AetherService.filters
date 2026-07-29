@@ -84,7 +84,7 @@
     <ClInclude Include="HotkeyManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TabletFilterAdaptive.h">
+    <ClInclude Include="TabletFilterTemporalResampler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TabletFilterAetherSmooth.h">
@@ -164,7 +164,7 @@
     <ClCompile Include="HotkeyManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TabletFilterAdaptive.cpp">
+    <ClCompile Include="TabletFilterTemporalResampler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabletFilterAetherSmooth.cpp">

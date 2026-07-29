@@ -192,11 +192,12 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClInclude Include="TabletFilter.h" />
     <ClInclude Include="TabletFilterNoiseReduction.h" />
     <ClInclude Include="TabletFilterReconstructor.h" />
-    <ClInclude Include="TabletFilterAdaptive.h" />
+    <ClInclude Include="TabletFilterTemporalResampler.h" />
     <ClInclude Include="TabletFilterAetherSmooth.h" />
     <ClInclude Include="TabletFilterClickStabilizer.h" />
     <ClInclude Include="TabletFilterJitterStabilizer.h" />
     <ClInclude Include="TabletFilterLazyMouse.h" />
+    <ClInclude Include="TabletFilterTrace.h" />
     <ClInclude Include="HotkeyManager.h" />
     <ClInclude Include="AetherShared.h" />
     <ClInclude Include="StatusSharedWriter.h" />
@@ -225,11 +226,12 @@ copy /Y "$(TargetPath)" "$(ProjectDir)..\bin\$(Configuration)\"</Command>
     <ClCompile Include="TabletFilter.cpp" />
     <ClCompile Include="TabletFilterNoiseReduction.cpp" />
     <ClCompile Include="TabletFilterReconstructor.cpp" />
-    <ClCompile Include="TabletFilterAdaptive.cpp" />
+    <ClCompile Include="TabletFilterTemporalResampler.cpp" />
     <ClCompile Include="TabletFilterAetherSmooth.cpp" />
     <ClCompile Include="TabletFilterClickStabilizer.cpp" />
     <ClCompile Include="TabletFilterJitterStabilizer.cpp" />
     <ClCompile Include="TabletFilterLazyMouse.cpp" />
+    <ClCompile Include="TabletFilterTrace.cpp" />
     <ClCompile Include="HotkeyManager.cpp" />
     <ClCompile Include="StatusSharedWriter.cpp" />
     <ClCompile Include="TabletFilterPlugin.cpp" />

@@ -7,7 +7,7 @@
 #include "Logger.h"
 
 TabletFilterReconstructor::TabletFilterReconstructor() {
-	reconstructionStrength = 0.5;
+	reconstructionStrength = 0.8;
 	velocitySmoothing = 0.6;
 
 	useInverseEma = false;
@@ -122,7 +122,7 @@ void TabletFilterReconstructor::Update() {
 	if (alpha > 1.0) alpha = 1.0;
 	smoothedSpeed = smoothedSpeed * velocitySmoothing + instSpeed * alpha;
 
-	double velocityScale = smoothedSpeed / 100.0;
+	double velocityScale = smoothedSpeed / 50.0;
 	if (velocityScale < 0.0) velocityScale = 0.0;
 	if (velocityScale > 1.0) velocityScale = 1.0;
 
@@ -144,7 +144,7 @@ void TabletFilterReconstructor::Update() {
 	if (nStep > 1e-9 && nPrev > 1e-9) {
 		double cosA = (stepX * prevStepX + stepY * prevStepY) / (nStep * nPrev);
 		if (cosA < 0.0) cosA = 0.0;
-		curvGain = cosA * cosA;
+		curvGain = 0.3 + 0.7 * cosA * cosA;
 	}
 
 	double gain = 1.0 + reconstructionStrength * velocityScale * curvGain;
@@ -152,7 +152,7 @@ void TabletFilterReconstructor::Update() {
 	double dx = stepX * gain;
 	double dy = stepY * gain;
 
-	double maxLead = instStep * (1.0 + reconstructionStrength) + 0.01;
+	double maxLead = instStep * (1.0 + reconstructionStrength * 2.0) + 0.01;
 	double leadDist = sqrt(dx * dx + dy * dy);
 	if (leadDist > maxLead && leadDist > 0.0) {
 		double scale = maxLead / leadDist;

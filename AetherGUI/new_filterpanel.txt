@@ -1,0 +1,190 @@
+void AetherApp::DrawFilterPanel() {
+	bool filterChanged = false;
+	float cx = Theme::Size::SidebarWidth + Theme::Size::Padding;
+	float cw = std::max(220.0f, Theme::Runtime::WindowWidth - Theme::Size::SidebarWidth - Theme::Size::Padding * 2);
+	bool filterSingleColumn = cw < 640.0f;
+	float filterGap = filterSingleColumn ? 0.0f : 16.0f;
+	float hw = filterSingleColumn ? cw : (cw - filterGap) * 0.5f;
+	float filterRightX = filterSingleColumn ? cx : cx + hw + filterGap;
+	float yStart = Theme::Size::HeaderHeight + Theme::Size::Padding;
+	float y = yStart - filterScrollY;
+
+	SectionHeader sec;
+	Slider* filterSliders[] = {
+		&filters.smoothingLatency, &filters.smoothingInterval,
+		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
+		&filters.reconStrength, &filters.reconSmooth,
+		&filters.temporalPrediction, &filters.temporalSmoothing, &filters.temporalFollow,
+		&filters.jitterStabRadius, &filters.jitterStabRelease,
+		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
+		&aether.stabilizerStability, &aether.stabilizerSensitivity,
+		&aether.snappingInner, &aether.snappingOuter,
+		&clickStabilize.holdMs,
+	};
+	for (Slider* slider : filterSliders) {
+		slider->width = hw;
+	}
+
+	// SMOOTHING
+	sec.Layout(cx, y, cw, L"SMOOTHING"); y += sec.Draw(renderer);
+	filters.smoothingEnabled.y = y; filters.smoothingEnabled.x = cx;
+	filterChanged |= filters.smoothingEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime); filters.smoothingEnabled.Draw(renderer); y += 30;
+	if (filters.smoothingEnabled.value) {
+		filters.smoothingLatency.y = y; filters.smoothingLatency.x = cx;
+		filterChanged |= filters.smoothingLatency.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.smoothingLatency.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.smoothingInterval.y = y; filters.smoothingInterval.x = filterRightX;
+		filterChanged |= filters.smoothingInterval.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.smoothingInterval.Draw(renderer);
+		y += 48;
+	}
+
+	// NOISE REDUCTION
+	sec.Layout(cx, y, cw, L"NOISE REDUCTION"); y += sec.Draw(renderer);
+	filters.noiseEnabled.y = y; filters.noiseEnabled.x = cx;
+	filterChanged |= filters.noiseEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime); filters.noiseEnabled.Draw(renderer); y += 30;
+	if (filters.noiseEnabled.value) {
+		filters.noiseBuffer.y = y; filters.noiseBuffer.x = cx;
+		filterChanged |= filters.noiseBuffer.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.noiseBuffer.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.noiseThreshold.y = y; filters.noiseThreshold.x = filterRightX;
+		filterChanged |= filters.noiseThreshold.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.noiseThreshold.Draw(renderer);
+		y += 48;
+		filters.noiseIterations.y = y; filters.noiseIterations.x = cx;
+		filterChanged |= filters.noiseIterations.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.noiseIterations.Draw(renderer);
+		y += 48;
+	}
+
+	// RECONSTRUCTOR
+	sec.Layout(cx, y, cw, L"RECONSTRUCTOR"); y += sec.Draw(renderer);
+	filters.reconstructorEnabled.y = y; filters.reconstructorEnabled.x = cx;
+	filterChanged |= filters.reconstructorEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.reconstructorEnabled.Draw(renderer); y += 30;
+	if (filters.reconstructorEnabled.value) {
+		renderer.FillRoundedRect(cx, y, cw, 24, 6, D2D1::ColorF(0.85f, 0.2f, 0.2f, 0.10f));
+		renderer.DrawRoundedRect(cx, y, cw, 24, 6, D2D1::ColorF(0.85f, 0.2f, 0.2f, 0.25f));
+		renderer.DrawText(L"\xE7BA", cx + 8, y, 16, 24, Theme::Error(), renderer.pFontIcon, Renderer::AlignCenter);
+		renderer.DrawText(L"High values may cause instability. Use at your own risk.",
+			cx + 28, y, cw - 36, 24, Theme::Error(), renderer.pFontSmall);
+		y += 30;
+		filters.reconStrength.y = y; filters.reconStrength.x = cx;
+		filterChanged |= filters.reconStrength.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.reconStrength.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.reconSmooth.y = y; filters.reconSmooth.x = filterRightX;
+		filterChanged |= filters.reconSmooth.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.reconSmooth.Draw(renderer);
+		y += 48;
+	}
+
+	// TEMPORAL RESAMPLER
+	sec.Layout(cx, y, cw, L"TEMPORAL RESAMPLER"); y += sec.Draw(renderer);
+	filters.temporalEnabled.y = y; filters.temporalEnabled.x = cx;
+	filterChanged |= filters.temporalEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.temporalEnabled.Draw(renderer); y += 30;
+	if (filters.temporalEnabled.value) {
+		filters.temporalPrediction.y = y; filters.temporalPrediction.x = cx;
+		filterChanged |= filters.temporalPrediction.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.temporalPrediction.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.temporalSmoothing.y = y; filters.temporalSmoothing.x = filterRightX;
+		filterChanged |= filters.temporalSmoothing.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.temporalSmoothing.Draw(renderer);
+		y += 48;
+		filters.temporalFollow.y = y; filters.temporalFollow.x = cx;
+		filterChanged |= filters.temporalFollow.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.temporalFollow.Draw(renderer);
+		y += 48;
+	}
+
+	// JITTER STABILIZER
+	sec.Layout(cx, y, cw, L"JITTER STABILIZER"); y += sec.Draw(renderer);
+	filters.jitterStabEnabled.y = y; filters.jitterStabEnabled.x = cx;
+	filterChanged |= filters.jitterStabEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.jitterStabEnabled.Draw(renderer); y += 30;
+	if (filters.jitterStabEnabled.value) {
+		renderer.DrawText(L"Holds the cursor still while the pen rests. Releases instantly on movement \u2014 no added lag.",
+			cx, y, cw, 30, Theme::TextMuted(), renderer.pFontSmall);
+		y += 32;
+		filters.jitterStabRadius.y = y; filters.jitterStabRadius.x = cx;
+		filterChanged |= filters.jitterStabRadius.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.jitterStabRadius.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.jitterStabRelease.y = y; filters.jitterStabRelease.x = filterRightX;
+		filterChanged |= filters.jitterStabRelease.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.jitterStabRelease.Draw(renderer);
+		y += 48;
+	}
+
+	// LAZY MOUSE
+	sec.Layout(cx, y, cw, L"LAZY MOUSE"); y += sec.Draw(renderer);
+	filters.lazyMouseEnabled.y = y; filters.lazyMouseEnabled.x = cx;
+	filterChanged |= filters.lazyMouseEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.lazyMouseEnabled.Draw(renderer); y += 30;
+	if (filters.lazyMouseEnabled.value) {
+		filters.lazyMouseRadius.y = y; filters.lazyMouseRadius.x = cx;
+		filterChanged |= filters.lazyMouseRadius.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.lazyMouseRadius.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.lazyMouseSmooth.y = y; filters.lazyMouseSmooth.x = filterRightX;
+		filterChanged |= filters.lazyMouseSmooth.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.lazyMouseSmooth.Draw(renderer);
+		y += 48;
+	}
+
+	// PRESSURE CURVE
+	sec.Layout(cx, y, cw, L"PRESSURE CURVE"); y += sec.Draw(renderer);
+	filters.pressureCurveEnabled.y = y; filters.pressureCurveEnabled.x = cx;
+	filterChanged |= filters.pressureCurveEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.pressureCurveEnabled.Draw(renderer); y += 30;
+	if (filters.pressureCurveEnabled.value) {
+		filters.pressureExponent.y = y; filters.pressureExponent.x = cx;
+		filterChanged |= filters.pressureExponent.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.pressureExponent.Draw(renderer);
+		if (filterSingleColumn) y += 48;
+		filters.pressureMin.y = y; filters.pressureMin.x = filterRightX;
+		filterChanged |= filters.pressureMin.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.pressureMin.Draw(renderer);
+		y += 48;
+		filters.pressureMax.y = y; filters.pressureMax.x = cx;
+		filterChanged |= filters.pressureMax.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.pressureMax.Draw(renderer);
+		y += 48;
+	}
+
+	// AETHER SMOOTH
+	sec.Layout(cx, y, cw, L"AETHER SMOOTH"); y += sec.Draw(renderer);
+	aether.enabled.y = y; aether.enabled.x = cx;
+	filterChanged |= aether.enabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	aether.enabled.Draw(renderer); y += 30;
+	if (aether.enabled.value) {
+		aether.stabilizerEnabled.y = y; aether.stabilizerEnabled.x = cx;
+		filterChanged |= aether.stabilizerEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+		aether.stabilizerEnabled.Draw(renderer); y += 30;
+		if (aether.stabilizerEnabled.value) {
+			aether.stabilizerStability.y = y; aether.stabilizerStability.x = cx;
+			filterChanged |= aether.stabilizerStability.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.stabilizerStability.Draw(renderer);
+			if (filterSingleColumn) y += 48;
+			aether.stabilizerSensitivity.y = y; aether.stabilizerSensitivity.x = filterRightX;
+			filterChanged |= aether.stabilizerSensitivity.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.stabilizerSensitivity.Draw(renderer);
+			y += 48;
+		}
+		aether.snappingEnabled.y = y; aether.snappingEnabled.x = cx;
+		filterChanged |= aether.snappingEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+		aether.snappingEnabled.Draw(renderer); y += 30;
+		if (aether.snappingEnabled.value) {
+			aether.snappingInner.y = y; aether.snappingInner.x = cx;
+			filterChanged |= aether.snappingInner.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.snappingInner.Draw(renderer);
+			if (filterSingleColumn) y += 48;
+			aether.snappingOuter.y = y; aether.snappingOuter.x = filterRightX;
+			filterChanged |= aether.snappingOuter.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); aether.snappingOuter.Draw(renderer);
+			y += 48;
+		}
+	}
+
+	// CLICK STABILIZER
+	sec.Layout(cx, y, cw, L"CLICK STABILIZER"); y += sec.Draw(renderer);
+	clickStabilize.enabled.y = y; clickStabilize.enabled.x = cx;
+	filterChanged |= clickStabilize.enabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	clickStabilize.enabled.Draw(renderer); y += 30;
+	if (clickStabilize.enabled.value) {
+		clickStabilize.holdMs.y = y; clickStabilize.holdMs.x = cx;
+		filterChanged |= clickStabilize.holdMs.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); clickStabilize.holdMs.Draw(renderer);
+		y += 48;
+	}
+
+	if (filterChanged) {
+		filterScrollTarget = 0;
+		SendFilterSettings();
+	}
+
+	filterContentH = y - yStart + filterScrollY;
+}
+

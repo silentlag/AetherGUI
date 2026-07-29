@@ -1115,36 +1115,41 @@ bool ProcessCommand(CommandLine *cmd) {
 		}
 	}
 
-	else if (cmd->is("Adaptive")) {
+	else if (cmd->is("Temporal")) {
 		if (!CheckTablet()) return true;
 
 		string stringValue = cmd->GetStringLower(0, "");
 
 		if (stringValue == "off" || stringValue == "false") {
-			tablet->adaptive.isEnabled = false;
-			LOG_INFO("Adaptive = off\n");
+			tablet->temporal.isEnabled = false;
+			LOG_INFO("Temporal Resampler = off\n");
 		}
 		else {
-			double procNoise = cmd->GetDouble(0, tablet->adaptive.processNoise);
-			double measNoise = cmd->GetDouble(1, tablet->adaptive.measurementNoise);
-			double velWeight = cmd->GetDouble(2, tablet->adaptive.velocityWeight);
+			double prediction   = cmd->GetDouble(0, tablet->temporal.predictionRatio);
+			double smoothing    = cmd->GetDouble(1, tablet->temporal.smoothingLatency);
+			double reverseEma   = cmd->GetDouble(2, tablet->temporal.reverseEma);
+			double followRadius = cmd->GetDouble(3, tablet->temporal.followRadius);
 
-			if (procNoise < 0.001) procNoise = 0.001;
-			else if (procNoise > 10.0) procNoise = 10.0;
+			if (prediction < 0.0) prediction = 0.0;
+			else if (prediction > 1.0) prediction = 1.0;
 
-			if (measNoise < 0.001) measNoise = 0.001;
-			else if (measNoise > 50.0) measNoise = 50.0;
+			if (smoothing < 0.0) smoothing = 0.0;
+			else if (smoothing > 50.0) smoothing = 50.0;
 
-			if (velWeight < 0) velWeight = 0;
-			else if (velWeight > 5.0) velWeight = 5.0;
+			if (reverseEma < 0.001) reverseEma = 0.001;
+			else if (reverseEma > 1.0) reverseEma = 1.0;
 
-			tablet->adaptive.processNoise = procNoise;
-			tablet->adaptive.measurementNoise = measNoise;
-			tablet->adaptive.velocityWeight = velWeight;
+			if (followRadius < 0.0) followRadius = 0.0;
+			else if (followRadius > 5.0) followRadius = 5.0;
 
-			tablet->adaptive.isEnabled = true;
-			LOG_INFO("Adaptive = processNoise %0.4f, measurementNoise %0.4f, velocityWeight %0.2f\n",
-				procNoise, measNoise, velWeight);
+			tablet->temporal.predictionRatio = prediction;
+			tablet->temporal.smoothingLatency = smoothing;
+			tablet->temporal.reverseEma = reverseEma;
+			tablet->temporal.followRadius = followRadius;
+
+			tablet->temporal.isEnabled = true;
+			LOG_INFO("Temporal Resampler = prediction %0.3f, smoothing %0.2f, reverseEma %0.3f, followRadius %0.2f\n",
+				prediction, smoothing, reverseEma, followRadius);
 		}
 	}
 
@@ -1520,6 +1525,14 @@ bool ProcessCommand(CommandLine *cmd) {
 			tablet->smoothing.isEnabled = !tablet->smoothing.isEnabled;
 			LOG_INFO("Toggle: Smoothing = %s\n", tablet->smoothing.isEnabled ? "on" : "off");
 		}
+		else if (name == "antichatter") {
+			tablet->smoothing.AntichatterEnabled = !tablet->smoothing.AntichatterEnabled;
+			LOG_INFO("Toggle: Antichatter = %s\n", tablet->smoothing.AntichatterEnabled ? "on" : "off");
+		}
+		else if (name == "temporal" || name == "temporalresampler") {
+			tablet->temporal.isEnabled = !tablet->temporal.isEnabled;
+			LOG_INFO("Toggle: Temporal Resampler = %s\n", tablet->temporal.isEnabled ? "on" : "off");
+		}
 		else {
 			LOG_WARNING("Toggle: unknown filter '%s'\n", name.c_str());
 		}
@@ -1533,7 +1546,11 @@ bool ProcessCommand(CommandLine *cmd) {
 		int id = cmd->GetInt(0, 0);
 		int mods = cmd->GetInt(1, 0);
 		int vk = cmd->GetInt(2, 0);
-		string action = cmd->GetString(3, "");
+		string action;
+		for (int k = 3; k < cmd->valueCount; k++) {
+			if (k > 3) action += " ";
+			action += cmd->GetString(k, "");
+		}
 		if (id < 1 || id > 32 || vk == 0 || action.empty()) {
 			LOG_WARNING("Hotkey requires: <id 1-32> <mods> <vk> <action>\n");
 			return true;

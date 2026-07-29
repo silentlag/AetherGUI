@@ -478,10 +478,25 @@ struct Slider {
 		float norm = range > 0.0001f ? (animValue - minVal) / range : 0.0f;
 		norm = Clamp(norm, 0.0f, 1.0f);
 		float filledW = width * norm;
-		if (filledW > 2) r.FillRoundedRect(x, trackY, filledW, trackH, trackH * 0.5f, Theme::AccentPrimary());
+
+		if (isHovered || isDragging) {
+			D2D1_COLOR_F hg = Theme::AccentPrimary(); hg.a = 0.12f * (isDragging ? 1.0f : hoverT);
+			r.FillRoundedRect(x, trackY, width, trackH, trackH * 0.5f, hg);
+		}
+
+		if (filledW > 2) {
+			float r0 = trackH * 0.5f;
+			float fw = filledW > r0 * 2 ? filledW : r0 * 2;
+			r.FillRoundedRect(x, trackY, fw, trackH, r0, Theme::AccentPrimary());
+		}
 
 		float thumbX = x + filledW, thumbY = trackY + trackH * 0.5f;
 		float tr = Lerp(thumbR * 0.85f, thumbR, hoverT);
+		if (isDragging || hoverT > 0.01f) {
+			D2D1_COLOR_F glow = Theme::AccentPrimary();
+			glow.a = 0.35f * (isDragging ? 1.0f : hoverT);
+			r.FillCircle(thumbX, thumbY, tr + 4.0f, glow);
+		}
 		r.FillCircle(thumbX, thumbY, tr, Theme::TextPrimary());
 		if (isDragging) r.FillCircle(thumbX, thumbY, tr * 0.35f, Theme::AccentPrimary());
 	}
