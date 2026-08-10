@@ -38,6 +38,7 @@ public:
 	void BeginFrame();
 
 	void EndFrame();
+	void InvalidateResources();
 
 	void FillRect(float x, float y, float w, float h, D2D1_COLOR_F color);
 	void FillRoundedRect(float x, float y, float w, float h, float radius, D2D1_COLOR_F color);

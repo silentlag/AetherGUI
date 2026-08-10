@@ -22,6 +22,8 @@ TabletFilterTemporalResampler::TabletFilterTemporalResampler() {
 	pressure = 0.0;
 	sPressure = 0.0;
 
+	kfLastMeasuredX = 0.0;
+	kfLastMeasuredY = 0.0;
 	kfInitialized = false;
 }
 
@@ -52,15 +54,17 @@ void TabletFilterTemporalResampler::ResetValues(Vector2D p0, double p) {
 	rpsAvg = 200.0;
 	tOffset = 0.0;
 	hasPrevReport = false;
-	KfReset(p0);
+	KfReset(p0.x, p0.y);
 	lastReportTimeS = GetCurrentTimeS();
 }
 
 static inline void Kalman1D(
 	double& x0, double& x1, double& x2, double& x3,
 	double P[4][4],
-	double measuredPos, double measuredVel, double dt,
-	double Q, double R) {
+	double measuredPos, double measuredVel, double dt) {
+
+	const double Q = 1.0;
+	const double R = 0.0001;
 
 	double dt2 = dt * dt;
 	double dt3 = dt2 * dt;
@@ -91,7 +95,7 @@ static inline void Kalman1D(
 			for (int k = 0; k < 4; k++) s += AP[i][k] * A[j][k];
 			newP[i][j] = s;
 		}
-	
+
 	newP[0][0] += Q; newP[1][1] += Q; newP[2][2] += Q; newP[3][3] += Q;
 
 	double innov0 = measuredPos - px0;
@@ -131,70 +135,48 @@ static inline void Kalman1D(
 			P[i][j] = newP[i][j];
 }
 
-void TabletFilterTemporalResampler::KfReset(Vector2D pos) {
+void TabletFilterTemporalResampler::KfReset(double px, double py) {
 	for (int i = 0; i < 4; i++) {
-		kfX[i].Set(0, 0);
+		kfX[i] = 0.0;
+		kfY[i] = 0.0;
 		for (int j = 0; j < 4; j++) { kfPx[i][j] = 0.0; kfPy[i][j] = 0.0; }
 	}
-	kfX[0].Set(pos);
+	kfX[0] = px;
+	kfY[0] = py;
 	for (int i = 0; i < 4; i++) { kfPx[i][i] = 1.0; kfPy[i][i] = 1.0; }
-	kfLastMeasured.Set(pos);
+	kfLastMeasuredX = px;
+	kfLastMeasuredY = py;
 	kfInitialized = true;
 }
 
-Vector2D TabletFilterTemporalResampler::KfUpdate(Vector2D measured, double dt) {
+double TabletFilterTemporalResampler::KfUpdate(double measured, double dt, int axis) {
 	if (!kfInitialized) {
-		KfReset(measured);
+		if (axis == 0) KfReset(measured, kfLastMeasuredY);
+		else           KfReset(kfLastMeasuredX, measured);
 		return measured;
 	}
 	if (dt <= 0.0 || dt > 0.1) dt = 0.001;
 
-	double measuredVelX = (measured.x - kfLastMeasured.x) / dt;
-	double measuredVelY = (measured.y - kfLastMeasured.y) / dt;
+	double lastM = (axis == 0) ? kfLastMeasuredX : kfLastMeasuredY;
+	double measuredVel = (measured - lastM) / dt;
+	if (axis == 0) kfLastMeasuredX = measured;
+	else           kfLastMeasuredY = measured;
 
-	double predX = kfX[0].x + kfX[1].x * dt;
-	double predY = kfX[0].y + kfX[1].y * dt;
-	double innovDistX = measured.x - predX;
-	double innovDistY = measured.y - predY;
-	double innovMag = sqrt(innovDistX * innovDistX + innovDistY * innovDistY);
+	double* x = (axis == 0) ? kfX : kfY;
+	double (*P)[4] = (axis == 0) ? kfPx : kfPy;
 
-	double speed = sqrt(measuredVelX * measuredVelX + measuredVelY * measuredVelY);
-
-	kfLastMeasured.Set(measured);
-
-	double Q = 0.5 + 2.5 * predictionRatio;
-	double R = 0.0002 + 0.02 / (1.0 + speed * 0.5);
-
-	double scale = 1.0;
-	if (innovMag > 0.5) {
-		scale = 0.5 / innovMag;
-		measured.x = predX + innovDistX * scale;
-		measured.y = predY + innovDistY * scale;
-		measuredVelX *= scale;
-		measuredVelY *= scale;
-		R *= 4.0;
-	}
-
-	double Px[4][4], Py[4][4];
+	double x0 = x[0], x1 = x[1], x2 = x[2], x3 = x[3];
+	double Pc[4][4];
 	for (int i = 0; i < 4; i++)
-		for (int j = 0; j < 4; j++) {
-			Px[i][j] = kfPx[i][j];
-			Py[i][j] = kfPy[i][j];
-		}
+		for (int j = 0; j < 4; j++) Pc[i][j] = P[i][j];
 
-	Kalman1D(kfX[0].x, kfX[1].x, kfX[2].x, kfX[3].x, Px, measured.x, measuredVelX, dt, Q, R);
-	Kalman1D(kfX[0].y, kfX[1].y, kfX[2].y, kfX[3].y, Py, measured.y, measuredVelY, dt, Q, R);
+	Kalman1D(x0, x1, x2, x3, Pc, measured, measuredVel, dt);
 
+	x[0] = x0; x[1] = x1; x[2] = x2; x[3] = x3;
 	for (int i = 0; i < 4; i++)
-		for (int j = 0; j < 4; j++) {
-			kfPx[i][j] = Px[i][j];
-			kfPy[i][j] = Py[i][j];
-		}
+		for (int j = 0; j < 4; j++) P[i][j] = Pc[i][j];
 
-	Vector2D result;
-	result.x = kfX[0].x;
-	result.y = kfX[0].y;
-	return result;
+	return x0;
 }
 
 Vector2D TabletFilterTemporalResampler::Trajectory(double t, Vector2D v3, Vector2D v2, Vector2D v1) {
@@ -269,12 +251,9 @@ void TabletFilterTemporalResampler::Update() {
 		lastConsumeTimeS = nowS;
 	}
 
-	if (consumeDelta < 0.0001) {
+	if (consumeDelta < 0.0001 || consumeDelta > 0.03) {
+		ResetValues(target, pressure);
 		return;
-	}
-	if (consumeDelta > 0.03) {
-		consumeDelta = 1.0 / rpsAvg;
-		lastConsumeTimeS = nowS - consumeDelta;
 	}
 
 	Vector2D real = target;
@@ -287,25 +266,17 @@ void TabletFilterTemporalResampler::Update() {
 	Vector2D smoothed = real;
 	if (reverseEma < 1.0) {
 		double r = reverseEma;
-		if (r < 0.2) r = 0.2;
-		double gain = (1.0 - r) / r;
-		if (gain > 4.0) gain = 4.0;
-		Vector2D prev;
-		prev.x = smoothed.x - bE.x;
-		prev.y = smoothed.y - bE.y;
-		double dist = sqrt(prev.x * prev.x + prev.y * prev.y);
-		double cap = 0.5;
-		if (dist * gain > cap) gain = cap / dist;
-		smoothed.x = bE.x + prev.x * (1.0 + gain);
-		smoothed.y = bE.y + prev.y * (1.0 + gain);
+		if (r < 0.001) r = 0.001;
+		smoothed.x = bE.x + (smoothed.x - bE.x) / r;
+		smoothed.y = bE.y + (smoothed.y - bE.y) / r;
 	}
 	bE.Set(real);
 
+	double smoothingWeight = exp(msAvg / -smoothingLatency);
 	if (smoothingLatency > 0.0) {
-		double sw = exp(msAvg / -smoothingLatency);
-		smoothed.x += (sC.x - smoothed.x) * sw;
-		smoothed.y += (sC.y - smoothed.y) * sw;
-		pressure += (sPressure - pressure) * sw;
+		smoothed.x += (sC.x - smoothed.x) * smoothingWeight;
+		smoothed.y += (sC.y - smoothed.y) * smoothingWeight;
+		pressure += (sPressure - pressure) * smoothingWeight;
 	}
 	sC.Set(smoothed);
 	sPressure = pressure;
@@ -315,10 +286,13 @@ void TabletFilterTemporalResampler::Update() {
 
 	Vector2D predict = smoothedPoints[0];
 	if (predictionRatio > 0.0) {
-		predict = KfUpdate(smoothedPoints[0], secAvg);
+		double px = KfUpdate(smoothedPoints[0].x, secAvg, 0);
+		double py = KfUpdate(smoothedPoints[0].y, secAvg, 1);
+		predict.x = px;
+		predict.y = py;
 
-		double followUnits = followRadius;
 		double predictCoe = 1.0;
+		double followUnits = followRadius;
 		if (followUnits > 0.0) {
 			double dx = smoothedPoints[0].x - smoothedPoints[2].x;
 			double dy = smoothedPoints[0].y - smoothedPoints[2].y;
@@ -327,7 +301,7 @@ void TabletFilterTemporalResampler::Update() {
 			if (predictCoe < 0.0) predictCoe = 0.0;
 			if (predictCoe > 1.0) predictCoe = 1.0;
 		}
-		double sw = (smoothingLatency > 0.0) ? exp(msAvg / -smoothingLatency) : 0.0;
+		double sw = (smoothingLatency > 0.0) ? smoothingWeight : 0.0;
 		predictCoe += (1.0 - predictCoe) * sw;
 
 		double blend = 1.0 - predictCoe * predictionRatio;

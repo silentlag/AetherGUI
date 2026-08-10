@@ -285,6 +285,13 @@ void Renderer::EndFrame() {
 	}
 }
 
+void Renderer::InvalidateResources() {
+	deviceResourcesValid = false;
+	SafeRelease(&pLogoBitmap);
+	SafeRelease(&pBrush);
+	SafeRelease(&pRT);
+}
+
 void Renderer::FillRect(float x, float y, float w, float h, D2D1_COLOR_F color) {
 	if (!pRT || !pBrush) return;
 	pBrush->SetColor(color);

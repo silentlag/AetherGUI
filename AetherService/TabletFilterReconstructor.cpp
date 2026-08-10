@@ -2,19 +2,23 @@
 #include "TabletFilterReconstructor.h"
 #include "Platform.h"
 #include <chrono>
+#include <cmath>
 
 #define LOG_MODULE "Reconstructor"
 #include "Logger.h"
 
 TabletFilterReconstructor::TabletFilterReconstructor() {
-	reconstructionStrength = 0.8;
-	velocitySmoothing = 0.6;
+	reconstructionStrength = 0.3;
+	velocitySmoothing = 0.5;
 
 	useInverseEma = false;
-	emaWeight = 0.5;
+	emaWeight = 1.0;
+
+	predictionRatio = 0.0;
 
 	smoothedSpeed = 0.0;
 	isFirstReport = true;
+	hasPrevTmp = false;
 	lastTimestamp = 0.0;
 
 	prevStepX = 0.0;
@@ -23,6 +27,7 @@ TabletFilterReconstructor::TabletFilterReconstructor() {
 	position.Set(0, 0);
 	target.Set(0, 0);
 	prevTarget.Set(0, 0);
+	prevTmp.Set(0, 0);
 }
 
 TabletFilterReconstructor::~TabletFilterReconstructor() {
@@ -36,8 +41,10 @@ void TabletFilterReconstructor::Reset(Vector2D pos) {
 	position.Set(pos);
 	target.Set(pos);
 	prevTarget.Set(pos);
+	prevTmp.Set(pos);
 	smoothedSpeed = 0.0;
 	isFirstReport = true;
+	hasPrevTmp = false;
 	lastTimestamp = GetCurrentTimeMs();
 	prevStepX = 0.0;
 	prevStepY = 0.0;
@@ -59,7 +66,7 @@ bool TabletFilterReconstructor::GetPosition(Vector2D *outputVector) {
 
 void TabletFilterReconstructor::Update() {
 
-	if (reconstructionStrength <= 0.001 && !useInverseEma) {
+	if (reconstructionStrength <= 0.001 && !useInverseEma && predictionRatio <= 0.001) {
 		position.Set(target);
 		prevTarget.Set(target);
 		return;
@@ -70,52 +77,23 @@ void TabletFilterReconstructor::Update() {
 	if (isFirstReport) {
 		position.Set(target);
 		prevTarget.Set(target);
+		prevTmp.Set(target);
 		smoothedSpeed = 0.0;
 		prevStepX = 0.0;
 		prevStepY = 0.0;
 		lastTimestamp = now;
 		isFirstReport = false;
+		hasPrevTmp = false;
 		return;
 	}
 
-	if (useInverseEma) {
-		double w = emaWeight;
-		if (w < 0.15) w = 0.15;
-		if (w > 1.0)  w = 1.0;
+	double dtMs = now - lastTimestamp;
+	lastTimestamp = now;
+	if (dtMs <= 0.0 || dtMs > 100.0) dtMs = 1.0;
+	double dtSec = dtMs / 1000.0;
 
-		double dx = (target.x - prevTarget.x) / w;
-		double dy = (target.y - prevTarget.y) / w;
-
-		double instStep = target.Distance(prevTarget);
-		double maxLead = instStep / w + 0.01;
-		double leadDist = sqrt(dx * dx + dy * dy);
-		if (leadDist > maxLead && leadDist > 0.0) {
-			double scale = maxLead / leadDist;
-			dx *= scale;
-			dy *= scale;
-		}
-
-		position.x = prevTarget.x + dx;
-		position.y = prevTarget.y + dy;
-		prevTarget.Set(target);
-		return;
-	}
-
-	double dtSec;
-	double instSpeed;
 	double instStep = target.Distance(prevTarget);
-	if (hasHostTiming) {
-		dtSec = hostDtSec;
-		if (dtSec <= 0.0 || dtSec > 0.1) dtSec = 0.001;
-		instSpeed = hostRawSpeed;
-		lastTimestamp = now;
-	} else {
-		double dtMs = now - lastTimestamp;
-		lastTimestamp = now;
-		if (dtMs <= 0.0 || dtMs > 100.0) dtMs = 1.0;
-		dtSec = dtMs / 1000.0;
-		instSpeed = instStep / dtSec;
-	}
+	double instSpeed = instStep / dtSec;
 
 	double alpha = 1.0 - velocitySmoothing;
 	if (alpha < 0.0) alpha = 0.0;
@@ -127,7 +105,7 @@ void TabletFilterReconstructor::Update() {
 	if (velocityScale > 1.0) velocityScale = 1.0;
 
 	const double kSpeedDeadZone = 0.5;
-	if (smoothedSpeed < kSpeedDeadZone) {
+	if (smoothedSpeed < kSpeedDeadZone && predictionRatio <= 0.001) {
 		position.Set(target);
 		prevTarget.Set(target);
 		prevStepX = 0.0;
@@ -160,8 +138,46 @@ void TabletFilterReconstructor::Update() {
 		dy *= scale;
 	}
 
-	position.x = prevTarget.x + dx;
-	position.y = prevTarget.y + dy;
+	double reconX = prevTarget.x + dx;
+	double reconY = prevTarget.y + dy;
+
+	if (useInverseEma && emaWeight < 1.0) {
+		double w = emaWeight;
+		if (w < 0.001) w = 0.001;
+		double ex = (reconX - prevTmp.x) / w;
+		double ey = (reconY - prevTmp.y) / w;
+
+		double lead = sqrt(ex * ex + ey * ey);
+		double maxLeadE = instStep / w + 0.01;
+		if (lead > maxLeadE && lead > 0.0) {
+			double sc = maxLeadE / lead;
+			ex *= sc;
+			ey *= sc;
+		}
+		reconX = prevTmp.x + ex;
+		reconY = prevTmp.y + ey;
+	}
+
+	if (predictionRatio > 0.001 && hasPrevTmp) {
+		double vx = reconX - prevTmp.x;
+		double vy = reconY - prevTmp.y;
+		double lead = predictionRatio * dtSec * smoothedSpeed;
+		double vMag = sqrt(vx * vx + vy * vy);
+		if (vMag > 1e-9) {
+			double nx = vx / vMag;
+			double ny = vy / vMag;
+			reconX += nx * lead;
+			reconY += ny * lead;
+		} else {
+			reconX += stepX * predictionRatio;
+			reconY += stepY * predictionRatio;
+		}
+	}
+	prevTmp.Set(reconX, reconY);
+	hasPrevTmp = true;
+
+	position.x = reconX;
+	position.y = reconY;
 
 	prevStepX = stepX;
 	prevStepY = stepY;

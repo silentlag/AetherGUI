@@ -12,10 +12,10 @@ TabletFilterAetherSmooth::TabletFilterAetherSmooth() {
 	isFirstReport = true;
 
 	enableSmoothing = true;
-	stability = 3.0;
-	speedSensitivity = 0.1;
+	stability = 1.0;
+	speedSensitivity = 0.015;
 
-	enableRadialFollow = false;
+	enableRadialFollow = true;
 	radialInner = 0.5;
 	radialOuter = 3.0;
 

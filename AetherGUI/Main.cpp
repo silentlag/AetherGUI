@@ -336,6 +336,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		app.OnMouseWheel((float)GET_WHEEL_DELTA_WPARAM(wParam) / 120.0f);
 		return 0;
 
+	case WM_XBUTTONDOWN:
+		SetCapture(hWnd);
+		app.OnXMouseDown(GET_XBUTTON_WPARAM(wParam));
+		return 0;
+
+	case WM_XBUTTONUP:
+		ReleaseCapture();
+		return 0;
+
 	case WM_CHAR:
 		app.OnChar((wchar_t)wParam);
 		return 0;
@@ -451,6 +460,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 
 	case WM_ACTIVATE:
+		if (LOWORD(wParam) != WA_INACTIVE)
+			app.renderer.InvalidateResources();
+		InvalidateRect(hWnd, nullptr, FALSE);
+		return DefWindowProcW(hWnd, message, wParam, lParam);
+
 	case WM_SETTINGCHANGE:
 
 		return DefWindowProcW(hWnd, message, wParam, lParam);
@@ -614,9 +628,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		}
 		if (!isRunning) break;
 
-		if (windowHidden) {
+		if (windowHidden || !IsWindowVisible(hWnd) || IsIconic(hWnd)) {
 
-			MsgWaitForMultipleObjectsEx(0, nullptr, 50, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			nextFrameTime = std::chrono::steady_clock::now();
 			continue;
 		}
@@ -630,6 +644,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 				nextFrameTime = std::chrono::steady_clock::now();
 			} else {
+				MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 				nextFrameTime = now + std::chrono::milliseconds(16);
 			}
 		} else {

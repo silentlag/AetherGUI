@@ -23,11 +23,13 @@
 </p>
 
 <p>
-  <strong>Latest update (1.0.8):</strong> rebuilt action hotkeys on a low-level keyboard hook so the bound
-  key stays printable in every other app while the hotkey fires, fixed the unbind bug and the toggle that
-  did not update the GUI, made the Temporal Resampler stable in real reports (adaptive Kalman, no more
-  jitter), brought Anti-chatter back, simplified Smoothing and Reconstructor to single sliders, and added
-  a Visual C++ runtime self-check that opens a download page when the required DLLs are missing.
+  <strong>Latest update (1.0.9):</strong> rebuilt action hotkeys on a low-level keyboard hook (on its own
+  thread) so the bound key stays printable in every other app while the hotkey fires, fixed the unbind bug
+  and the toggle that did not update the GUI, rewrote the Temporal Resampler as a faithful OTD Kalman port
+  (no more jitter), brought Anti-chatter back, brought Prediction back as a standalone filter with
+  instability + ban-risk warnings, made Reconstructor fully configurable (strength / smoothing / reverse
+  EMA), added per-config auto-save toggles, fixed the Center Y corruption bug, reverted the service timer
+  to fix freezes and input lag, and added a Visual C++ runtime self-check with a Download button.
 </p>
 
 <p>
@@ -50,7 +52,7 @@
   </tr>
   <tr>
     <td align="center"><strong>High Polling Rate</strong><br/>Sub-millisecond scheduling with targets up to 2000 Hz</td>
-    <td align="center"><strong>Advanced Filters</strong><br/>Smoothing · noise reduction · adaptive prediction · Aether Smooth · Reconstructor · Aether Trace · Lazy Mouse</td>
+    <td align="center"><strong>Advanced Filters</strong><br/>Smoothing · Anti-chatter · Noise reduction · Prediction · Reconstructor · Temporal Resampler · Jitter Stabilizer · Aether Smooth · Aether Trace · Lazy Mouse</td>
   </tr>
   <tr>
     <td align="center"><strong>Built-in Tablet List</strong><br/>Knows your tablet out of the box, even if no external config files are present</td>

@@ -1,4 +1,6 @@
 #include "AetherApp.h"
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
 #include "Version.h"
 
 #include <SetupAPI.h>
@@ -1129,7 +1131,13 @@ void AetherApp::InitControls() {
 	filters.noiseIterations.Layout(cx, 0, hw, L"Iterations", 1, 50, 10, L"Number of averaging passes. More = heavier smoothing");
 	filters.noiseIterations.format = L"%.0f";
 
-	filters.reconStrength.Layout(cx, 0, cw, L"Strength", 0.0f, 1.0f, 0.3f, L"Latency compensation lead. 0 = off, 1 = max prediction. Smoothstep-curved so 0.3-0.5 is the sweet spot. Pairs well with Overclock.");
+	filters.reconStrength.Layout(cx, 0, hw, L"Strength", 0.0f, 1.0f, 0.3f, L"Latency compensation lead. 0 = off, 1 = max prediction. Smoothstep-curved so 0.3-0.5 is the sweet spot.");
+	filters.reconSmooth.Layout(cx + hw + 16, 0, hw, L"Smoothing", 0.0f, 1.0f, 0.5f, L"Velocity smoothing for the reconstruction. Higher = steadier but laggier.");
+	filters.reconReverseEma.Layout(cx, 0, hw, L"Reverse EMA", 0.001f, 1.0f, 1.0f, L"Strips hardware EMA. 1.0 = off. Lower = more aggressive.");
+
+	filters.predictionEnabled.Layout(cx, 0, L"Prediction", L"Standalone position prediction filter. Extrapolates cursor ahead by velocity. High values cause overshoot and instability.");
+	filters.predictionStrength.Layout(cx, 0, hw, L"Strength", 0.0f, 5.0f, 1.1f, L"How far ahead to predict. 0 = off. High values overshoot and draw past the target.");
+	filters.predictionSharpness.Layout(cx + hw + 16, 0, hw, L"Sharpness", 0.0f, 5.0f, 1.0f, L"How quickly the prediction responds. Lower = smoother/laggier, higher = snappier but jittery.");
 
 	filters.reconstructorEnabled.Layout(cx, 0, L"Reconstructor", L"Latency compensation: predicts where the cursor should be. High values may cause instability.");
 	filters.jitterStabEnabled.Layout(cx, 0, L"Jitter Stabilizer", L"Stops the cursor shaking while the pen rests, with zero added lag during movement. Great paired with lag removal / overclock.");
@@ -1310,7 +1318,8 @@ void AetherApp::CaptureSettingsSnapshot(SettingsSnapshot& snapshot) const {
 	slider(filters.smoothingLatency); slider(filters.smoothingInterval);
 	slider(filters.antichatterStrength); slider(filters.antichatterMultiplier);
 	slider(filters.noiseBuffer); slider(filters.noiseThreshold); slider(filters.noiseIterations);
-	slider(filters.reconStrength);
+	slider(filters.reconStrength); slider(filters.reconSmooth); slider(filters.reconReverseEma);
+	slider(filters.predictionStrength); slider(filters.predictionSharpness);
 	slider(filters.jitterStabRadius); slider(filters.jitterStabRelease);
 	slider(filters.lazyMouseRadius); slider(filters.lazyMouseSmooth); slider(filters.temporalPrediction); slider(filters.temporalSmoothing); slider(filters.temporalReverseEma); slider(filters.temporalFollow);
 	slider(filters.pressureExponent); slider(filters.pressureMin); slider(filters.pressureMax);
@@ -1375,7 +1384,8 @@ void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
 	setSlider(tipThreshold); setSlider(overclockHz); setSlider(penRateLimitHz); setSlider(dpiScale);
 	setSlider(filters.smoothingLatency); setSlider(filters.smoothingInterval);
 	setSlider(filters.antichatterStrength); setSlider(filters.antichatterMultiplier);
-	setSlider(filters.noiseBuffer); setSlider(filters.noiseThreshold); setSlider(filters.noiseIterations); setSlider(filters.reconStrength);
+	setSlider(filters.noiseBuffer); setSlider(filters.noiseThreshold); setSlider(filters.noiseIterations); setSlider(filters.reconStrength); setSlider(filters.reconSmooth); setSlider(filters.reconReverseEma);
+	setSlider(filters.predictionStrength); setSlider(filters.predictionSharpness);
 	setSlider(filters.jitterStabRadius); setSlider(filters.jitterStabRelease);
 	setSlider(filters.lazyMouseRadius); setSlider(filters.lazyMouseSmooth);
 	setSlider(filters.pressureExponent); setSlider(filters.pressureMin); setSlider(filters.pressureMax);
@@ -1390,7 +1400,7 @@ void AetherApp::ApplySettingsSnapshot(const SettingsSnapshot& snapshot) {
 	setToggle(area.customValues); setToggle(area.autoCenter); setToggle(area.lockAspect);
 	setToggle(forceFullArea); setToggle(areaClipping); setToggle(areaLimiting);
 	setToggle(overclockEnabled); setToggle(penRateLimitEnabled);
-	setToggle(filters.smoothingEnabled); setToggle(filters.antichatterEnabled); setToggle(filters.reconstructorEnabled); setToggle(filters.jitterStabEnabled); setToggle(filters.temporalEnabled);
+	setToggle(filters.smoothingEnabled); setToggle(filters.antichatterEnabled); setToggle(filters.reconstructorEnabled); setToggle(filters.jitterStabEnabled); setToggle(filters.temporalEnabled); setToggle(filters.predictionEnabled);
 	setToggle(filters.lazyMouseEnabled); setToggle(filters.pressureCurveEnabled);
 	setToggle(aether.enabled); setToggle(aether.stabilizerEnabled);
 	setToggle(clickStabilize.enabled);
@@ -1485,7 +1495,8 @@ bool AetherApp::IsTextEditingActive() const {
 		&filters.smoothingLatency, &filters.smoothingInterval,
 		&filters.antichatterStrength, &filters.antichatterMultiplier,
 		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
-		&filters.reconStrength,
+		&filters.reconStrength, &filters.reconSmooth, &filters.reconReverseEma,
+		&filters.predictionStrength, &filters.predictionSharpness,
 		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&aether.stabilizerStability, &aether.stabilizerSensitivity,
 	};
@@ -1532,12 +1543,18 @@ bool AetherApp::FocusNextEditableRow(bool reverse) {
 		}
 		if (filters.reconstructorEnabled.value) {
 			add(filters.reconStrength);
+			add(filters.reconSmooth);
+			add(filters.reconReverseEma);
 		}
 		if (filters.temporalEnabled.value) {
 			add(filters.temporalPrediction);
 			add(filters.temporalSmoothing);
 			add(filters.temporalReverseEma);
 			add(filters.temporalFollow);
+		}
+		if (filters.predictionEnabled.value) {
+			add(filters.predictionStrength);
+			add(filters.predictionSharpness);
 		}
 		if (filters.jitterStabEnabled.value) {
 			add(filters.jitterStabRadius);
@@ -1687,6 +1704,16 @@ void AetherApp::OnMouseDown() {
 		SetFocus(hWnd);
 	mouseDown = true;
 	mouseClicked = true;
+	if (capturingButtonMap >= 0) {
+		CycleSelector* btns[3] = { &buttonTip, &buttonBottom, &buttonTop };
+		CycleSelector& btn = *btns[capturingButtonMap];
+		btn.selected = 1;
+		capturingButtonMap = -1;
+		ApplyAllSettings();
+		AutoSaveConfig();
+		mouseDown = false;
+		mouseClicked = false;
+	}
 }
 void AetherApp::OnMouseUp() {
 	mouseDown = false;
@@ -1700,6 +1727,15 @@ void AetherApp::OnMouseUp() {
 
 void AetherApp::OnMiddleMouseDown() {
 	middleMouseDown = true;
+	if (capturingButtonMap >= 0) {
+		CycleSelector* btns[3] = { &buttonTip, &buttonBottom, &buttonTop };
+		CycleSelector& btn = *btns[capturingButtonMap];
+		btn.selected = 3;
+		capturingButtonMap = -1;
+		ApplyAllSettings();
+		AutoSaveConfig();
+		middleMouseDown = false;
+	}
 
 	if (mouseX > Theme::Size::SidebarWidth && mouseY > GetContentAreaTop() && mouseY < GetContentAreaBottom()) {
 		isDragScrolling = true;
@@ -1721,6 +1757,15 @@ void AetherApp::OnMiddleMouseUp() {
 
 void AetherApp::OnRightMouseDown() {
 	rightMouseDown = true;
+	if (capturingButtonMap >= 0) {
+		CycleSelector* btns[3] = { &buttonTip, &buttonBottom, &buttonTop };
+		CycleSelector& btn = *btns[capturingButtonMap];
+		btn.selected = 2;
+		capturingButtonMap = -1;
+		ApplyAllSettings();
+		AutoSaveConfig();
+		rightMouseDown = false;
+	}
 
 	if (mouseX > Theme::Size::SidebarWidth && mouseY > GetContentAreaTop() && mouseY < GetContentAreaBottom()) {
 		isDragScrolling = true;
@@ -1738,6 +1783,16 @@ void AetherApp::OnRightMouseDown() {
 void AetherApp::OnRightMouseUp() {
 	rightMouseDown = false;
 	isDragScrolling = false;
+}
+void AetherApp::OnXMouseDown(int xbutton) {
+	if (capturingButtonMap >= 0) {
+		CycleSelector* btns[3] = { &buttonTip, &buttonBottom, &buttonTop };
+		CycleSelector& btn = *btns[capturingButtonMap];
+		btn.selected = (xbutton == XBUTTON1) ? 4 : 5;
+		capturingButtonMap = -1;
+		ApplyAllSettings();
+		AutoSaveConfig();
+	}
 }
 void AetherApp::RefreshDetectedScreen() {
 	int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -2028,8 +2083,9 @@ void AetherApp::ClampTabletAreaToFull(float fullTabletW, float fullTabletH) {
 }
 
 void AetherApp::ApplyAspectLock(bool preserveHeight) {
-	float fullTabletW = (driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f;
-	float fullTabletH = (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f;
+	if (driver.tabletWidth <= 1.0f || driver.tabletHeight <= 1.0f) return;
+	float fullTabletW = driver.tabletWidth;
+	float fullTabletH = driver.tabletHeight;
 
 	if (area.lockAspect.value) {
 		float aspect = GetScreenAspectRatio();
@@ -2133,7 +2189,8 @@ void AetherApp::OnChar(wchar_t ch) {
 	filterCommitted |= filters.smoothingLatency.OnChar(ch); filterCommitted |= filters.smoothingInterval.OnChar(ch);
 	filterCommitted |= filters.antichatterStrength.OnChar(ch); filterCommitted |= filters.antichatterMultiplier.OnChar(ch);
 	filterCommitted |= filters.noiseBuffer.OnChar(ch); filterCommitted |= filters.noiseThreshold.OnChar(ch); filterCommitted |= filters.noiseIterations.OnChar(ch);
-	filterCommitted |= filters.reconStrength.OnChar(ch);
+	filterCommitted |= filters.reconStrength.OnChar(ch); filterCommitted |= filters.reconSmooth.OnChar(ch); filterCommitted |= filters.reconReverseEma.OnChar(ch);
+	filterCommitted |= filters.predictionStrength.OnChar(ch); filterCommitted |= filters.predictionSharpness.OnChar(ch);
 	filterCommitted |= filters.jitterStabRadius.OnChar(ch); filterCommitted |= filters.jitterStabRelease.OnChar(ch);
 	filterCommitted |= filters.lazyMouseRadius.OnChar(ch); filterCommitted |= filters.lazyMouseSmooth.OnChar(ch);
 	filterCommitted |= filters.temporalPrediction.OnChar(ch); filterCommitted |= filters.temporalSmoothing.OnChar(ch); filterCommitted |= filters.temporalReverseEma.OnChar(ch); filterCommitted |= filters.temporalFollow.OnChar(ch); filterCommitted |= filters.pressureExponent.OnChar(ch); filterCommitted |= filters.pressureMin.OnChar(ch); filterCommitted |= filters.pressureMax.OnChar(ch);
@@ -2363,7 +2420,8 @@ void AetherApp::OnKeyDown(int vk) {
 		&area.rotation, &area.aspectRatio, &dpiScale, &tipThreshold, &overclockHz, &penRateLimitHz,
 		&filters.smoothingLatency, &filters.smoothingInterval,
 		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
-		&filters.reconStrength,
+		&filters.reconStrength, &filters.reconSmooth, &filters.reconReverseEma,
+		&filters.predictionStrength, &filters.predictionSharpness,
 		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&clickStabilize.holdMs
@@ -2450,9 +2508,11 @@ void AetherApp::Tick() {
 	if (pendingStartupSettingsTimer >= 0.0f) {
 		pendingStartupSettingsTimer -= deltaTime;
 		if (pendingStartupSettingsTimer <= 0.0f) {
-			pendingStartupSettingsTimer = -1.0f;
 			if (driver.isConnected) {
+				pendingStartupSettingsTimer = -1.0f;
 				SendStartupSettingsToDriver();
+			} else {
+				pendingStartupSettingsTimer = 0.3f;
 			}
 		}
 	}
@@ -2464,8 +2524,6 @@ void AetherApp::Tick() {
 		lastSeenTabletWidth  = driver.tabletWidth;
 		lastSeenTabletHeight = driver.tabletHeight;
 		if (changed) {
-			ClampScreenArea();
-			ApplyAspectLock(false);
 			ApplyAllSettings();
 			pendingTabletInfoResync = false;
 		}
@@ -2703,7 +2761,7 @@ void AetherApp::SendFilterSettings() {
 		
 		float rs = filters.reconStrength.value;
 		float curved = rs * rs * (3.0f - 2.0f * rs);
-		sprintf_s(cmd, "Reconstructor %.4f %.4f", curved, 0.35f + 0.45f * curved);
+		sprintf_s(cmd, "Reconstructor %.4f %.4f %.4f %.4f", curved, filters.reconSmooth.value, filters.reconReverseEma.value, 0.0f);
 		driver.SendCommand(cmd);
 	} else {
 		driver.SendCommand("Reconstructor off");
@@ -2717,6 +2775,18 @@ void AetherApp::SendFilterSettings() {
 		driver.SendCommand(cmd);
 	} else {
 		driver.SendCommand("Temporal off");
+	}
+
+	
+	if (filters.predictionEnabled.value) {
+		sprintf_s(cmd, "PredictionEnabled 1");
+		driver.SendCommand(cmd);
+		sprintf_s(cmd, "PredictionStrength %.4f", filters.predictionStrength.value);
+		driver.SendCommand(cmd);
+		sprintf_s(cmd, "PredictionSharpness %.4f", filters.predictionSharpness.value);
+		driver.SendCommand(cmd);
+	} else {
+		driver.SendCommand("PredictionEnabled 0");
 	}
 
 	
@@ -2815,6 +2885,7 @@ void AetherApp::RefreshConfigFiles() {
 			}
 		}
 	}
+	LoadAutosaveFlags();
 	for (int i = 0; i < (int)configEntries.size(); i++) {
 		if (selectedConfigIndex < 0 && _wcsicmp(configEntries[i].path.c_str(), active.c_str()) == 0) {
 			selectedConfigIndex = i;
@@ -2830,9 +2901,17 @@ void AetherApp::AutoSaveConfig() {
 	TrackSettingsUndo();
 	EnsureConfigDirectory();
 
-	SaveConfig(GetConfigPath());
+	if (suppressNamedAutosave) {
+		suppressNamedAutosave = false;
+		SaveConfig(GetConfigPath());
+		SaveLastLoadedMarker();
+		RefreshConfigFiles();
+		return;
+	}
 
-	if (suppressNamedAutosave) suppressNamedAutosave = false;
+	if (!activeConfigPath.empty() && IsConfigAutosaveEnabled(activeConfigPath))
+		SaveConfig(activeConfigPath);
+	SaveConfig(GetConfigPath());
 
 	SaveLastLoadedMarker();
 	RefreshConfigFiles();
@@ -2870,6 +2949,69 @@ void AetherApp::AutoLoadConfig() {
 
 std::wstring AetherApp::GetLastLoadedMarkerPath() {
 	return GetConfigDirectory() + L"_last_loaded.txt";
+}
+
+std::wstring AetherApp::GetAutosaveFlagsPath() {
+	return GetConfigDirectory() + L"_autosave_flags.txt";
+}
+
+bool AetherApp::IsConfigAutosaveEnabled(const std::wstring& configPath) {
+	for (const auto& e : configEntries) {
+		if (_wcsicmp(e.path.c_str(), configPath.c_str()) == 0)
+			return e.autoSave;
+	}
+	return true;
+}
+
+void AetherApp::LoadAutosaveFlags() {
+	std::wstring path = GetAutosaveFlagsPath();
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return;
+	fseek(f, 0, SEEK_END);
+	long sz = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	if (sz <= 0 || sz > 64 * 1024) { fclose(f); return; }
+	std::string buf(sz, 0);
+	fread(buf.data(), 1, sz, f);
+	fclose(f);
+
+	std::istringstream iss(buf);
+	std::string line;
+	while (std::getline(iss, line)) {
+		size_t tab = line.find('\t');
+		if (tab == std::string::npos) continue;
+		std::string namePart = line.substr(0, tab);
+		std::string flagPart = line.substr(tab + 1);
+		int cw = MultiByteToWideChar(CP_UTF8, 0, namePart.c_str(), -1, nullptr, 0);
+		if (cw <= 0) continue;
+		std::wstring wname(cw - 1, 0);
+		MultiByteToWideChar(CP_UTF8, 0, namePart.c_str(), -1, wname.data(), cw);
+		bool enabled = (flagPart.find("1") != std::string::npos);
+		for (auto& e : configEntries) {
+			size_t slash = e.path.find_last_of(L"\\/");
+			std::wstring ename = (slash == std::wstring::npos) ? e.path : e.path.substr(slash + 1);
+			if (_wcsicmp(ename.c_str(), wname.c_str()) == 0)
+				e.autoSave = enabled;
+		}
+	}
+}
+
+void AetherApp::SaveAutosaveFlags() {
+	EnsureConfigDirectory();
+	std::wstring path = GetAutosaveFlagsPath();
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return;
+	for (const auto& e : configEntries) {
+		size_t slash = e.path.find_last_of(L"\\/");
+		std::wstring ename = (slash == std::wstring::npos) ? e.path : e.path.substr(slash + 1);
+		int cb = WideCharToMultiByte(CP_UTF8, 0, ename.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		if (cb <= 0) continue;
+		std::string utf8(cb - 1, 0);
+		WideCharToMultiByte(CP_UTF8, 0, ename.c_str(), -1, utf8.data(), cb, nullptr, nullptr);
+		std::string line = utf8 + "\t" + (e.autoSave ? "1" : "0") + "\n";
+		fwrite(line.data(), 1, line.size(), f);
+	}
+	fclose(f);
 }
 
 void AetherApp::SaveLastLoadedMarker() {
@@ -2949,7 +3091,8 @@ void AetherApp::SyncLoadedControlVisuals() {
 		&dpiScale, &tipThreshold, &overclockHz, &penRateLimitHz,
 		&filters.smoothingLatency, &filters.smoothingInterval,
 		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
-		&filters.reconStrength,
+		&filters.reconStrength, &filters.reconSmooth, &filters.reconReverseEma,
+		&filters.predictionStrength, &filters.predictionSharpness,
 		&filters.lazyMouseRadius, &filters.lazyMouseSmooth, &filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
 		&aether.stabilizerStability, &aether.stabilizerSensitivity,
 		&aether.snappingInner, &aether.snappingOuter,
@@ -2962,7 +3105,7 @@ void AetherApp::SyncLoadedControlVisuals() {
 		&area.customValues, &area.autoCenter, &area.lockAspect,
 		&forceFullArea, &areaClipping, &areaLimiting,
 		&overclockEnabled, &penRateLimitEnabled,
-		&filters.reconstructorEnabled, &filters.jitterStabEnabled, &filters.temporalEnabled,
+		&filters.reconstructorEnabled, &filters.jitterStabEnabled, &filters.temporalEnabled, &filters.predictionEnabled,
 		&aether.enabled, &aether.stabilizerEnabled,
 		&clickStabilize.enabled,
 		&visualizerToggle
@@ -3108,7 +3251,8 @@ static const wchar_t* kActionHotkeyNames[] = {
 	L"Click Stabilizer",
 	L"Smoothing",
 	L"Antichatter",
-	L"Temporal Resampler"
+	L"Temporal Resampler",
+	L"Prediction"
 };
 static const int kActionHotkeyNameCount = (int)(sizeof(kActionHotkeyNames) / sizeof(kActionHotkeyNames[0]));
 static const char* kActionHotkeyCommands[] = {
@@ -3122,7 +3266,8 @@ static const char* kActionHotkeyCommands[] = {
 	"Toggle ClickStabilizer",
 	"Toggle Smoothing",
 	"Toggle Antichatter",
-	"Toggle TemporalResampler"
+	"Toggle TemporalResampler",
+	"Toggle Prediction"
 };
 static_assert(kActionHotkeyNameCount == (int)(sizeof(kActionHotkeyCommands) / sizeof(kActionHotkeyCommands[0])), "names/commands length mismatch");
 
@@ -3141,6 +3286,10 @@ extern AetherApp app;
 
 static BYTE g_hookKeyState[256] = {0};
 static DWORD g_slotLastFireTick[AetherApp::kActionHotkeyCount] = {0};
+static HHOOK g_actionHotkeyHook = NULL;
+static HANDLE g_actionHotkeyThread = NULL;
+static DWORD g_actionHotkeyThreadId = 0;
+static std::atomic<bool> g_actionHotkeyThreadRunning(false);
 
 static LRESULT CALLBACK AetherActionHotkeyHookProc(int code, WPARAM wParam, LPARAM lParam) {
 	if (code == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
@@ -3184,21 +3333,48 @@ static LRESULT CALLBACK AetherActionHotkeyHookProc(int code, WPARAM wParam, LPAR
 	return CallNextHookEx(NULL, code, wParam, lParam);
 }
 
+static DWORD WINAPI ActionHotkeyHookThreadProc(LPVOID) {
+	timeBeginPeriod(1);
+	g_actionHotkeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, AetherActionHotkeyHookProc, GetModuleHandleW(nullptr), 0);
+	wchar_t dbg[160];
+	swprintf_s(dbg, L"[Aether] InstallActionHotkeyHook: hook=%p thread=%lu (err=%lu\n", (void*)g_actionHotkeyHook, GetCurrentThreadId(), GetLastError());
+	OutputDebugStringW(dbg);
+
+	MSG msg;
+	while (g_actionHotkeyThreadRunning.load(std::memory_order_relaxed)) {
+		if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
+		} else {
+			WaitMessage();
+		}
+	}
+
+	if (g_actionHotkeyHook) {
+		UnhookWindowsHookEx(g_actionHotkeyHook);
+		g_actionHotkeyHook = NULL;
+	}
+	timeEndPeriod(1);
+	return 0;
+}
+
 void AetherApp::InstallActionHotkeyHook() {
 #if defined(_WIN32)
-	if (actionHotkeyHook) return;
-	actionHotkeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, AetherActionHotkeyHookProc, GetModuleHandleW(nullptr), 0);
-	wchar_t dbg[160];
-	swprintf_s(dbg, L"[Aether] InstallActionHotkeyHook: hook=%p (err=%lu)\n", (void*)actionHotkeyHook, GetLastError());
-	OutputDebugStringW(dbg);
+	if (g_actionHotkeyThread) return;
+	g_actionHotkeyThreadRunning.store(true, std::memory_order_relaxed);
+	g_actionHotkeyThread = CreateThread(nullptr, 0, ActionHotkeyHookThreadProc, nullptr, 0, &g_actionHotkeyThreadId);
 #endif
 }
 
 void AetherApp::UninstallActionHotkeyHook() {
 #if defined(_WIN32)
-	if (actionHotkeyHook) {
-		UnhookWindowsHookEx(actionHotkeyHook);
-		actionHotkeyHook = NULL;
+	if (g_actionHotkeyThread) {
+		g_actionHotkeyThreadRunning.store(false, std::memory_order_relaxed);
+		PostThreadMessageW(g_actionHotkeyThreadId, WM_QUIT, 0, 0);
+		WaitForSingleObject(g_actionHotkeyThread, 2000);
+		CloseHandle(g_actionHotkeyThread);
+		g_actionHotkeyThread = NULL;
+		g_actionHotkeyThreadId = 0;
 	}
 #endif
 }
@@ -3221,6 +3397,7 @@ void AetherApp::FireActionHotkey(int slot) {
 		case 8: filters.smoothingEnabled.value       = !filters.smoothingEnabled.value;       break;
 		case 9: filters.antichatterEnabled.value     = !filters.antichatterEnabled.value;     break;
 		case 10: filters.temporalEnabled.value       = !filters.temporalEnabled.value;        break;
+		case 11: filters.predictionEnabled.value      = !filters.predictionEnabled.value;      break;
 		default: return;
 	}
 	ApplyAllSettings();
@@ -5405,11 +5582,18 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 
 	f << "ReconstructorEnabled=" << (int)filters.reconstructorEnabled.value << "\n";
 	f << "ReconStrength=" << filters.reconStrength.value << "\n";
+	f << "ReconSmooth=" << filters.reconSmooth.value << "\n";
+	f << "ReconReverseEma=" << filters.reconReverseEma.value << "\n";
+	
+
 	f << "TemporalEnabled=" << (int)filters.temporalEnabled.value << "\n";
 	f << "TemporalPrediction=" << filters.temporalPrediction.value << "\n";
 	f << "TemporalSmoothing=" << filters.temporalSmoothing.value << "\n";
 	f << "TemporalReverseEma=" << filters.temporalReverseEma.value << "\n";
 	f << "TemporalFollow=" << filters.temporalFollow.value << "\n";
+	f << "PredictionEnabled=" << (int)filters.predictionEnabled.value << "\n";
+	f << "PredictionStrength=" << filters.predictionStrength.value << "\n";
+	f << "PredictionSharpness=" << filters.predictionSharpness.value << "\n";
 	f << "JitterStabEnabled=" << (int)filters.jitterStabEnabled.value << "\n";
 	f << "JitterStabRadius=" << filters.jitterStabRadius.value << "\n";
 	f << "JitterStabRelease=" << filters.jitterStabRelease.value << "\n";
@@ -5576,11 +5760,16 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 
 		else if (key == "ReconstructorEnabled") filters.reconstructorEnabled.value = (val > 0.5f);
 		else if (key == "ReconStrength") filters.reconStrength.value = val;
+		else if (key == "ReconSmooth") filters.reconSmooth.value = val;
+		else if (key == "ReconReverseEma") filters.reconReverseEma.value = val;
 		else if (key == "TemporalEnabled") filters.temporalEnabled.value = (val > 0.5f);
 		else if (key == "TemporalPrediction") filters.temporalPrediction.value = val;
 		else if (key == "TemporalSmoothing") filters.temporalSmoothing.value = val;
 		else if (key == "TemporalReverseEma") filters.temporalReverseEma.value = val;
 		else if (key == "TemporalFollow") filters.temporalFollow.value = val;
+		else if (key == "PredictionEnabled") filters.predictionEnabled.value = (val > 0.5f);
+		else if (key == "PredictionStrength") filters.predictionStrength.value = val;
+		else if (key == "PredictionSharpness") filters.predictionSharpness.value = val;
 		else if (key == "JitterStabEnabled") filters.jitterStabEnabled.value = (val > 0.5f);
 		else if (key == "JitterStabRadius") filters.jitterStabRadius.value = val;
 		else if (key == "JitterStabRelease") filters.jitterStabRelease.value = val;
@@ -6311,7 +6500,8 @@ void AetherApp::DrawFilterPanel() {
 	Slider* filterSliders[] = {
 		&filters.smoothingLatency, &filters.smoothingInterval,
 		&filters.noiseBuffer, &filters.noiseThreshold, &filters.noiseIterations,
-		&filters.reconStrength,
+		&filters.reconStrength, &filters.reconSmooth, &filters.reconReverseEma,
+		&filters.predictionStrength, &filters.predictionSharpness,
 		&filters.temporalPrediction, &filters.temporalSmoothing, &filters.temporalReverseEma, &filters.temporalFollow,
 		&filters.jitterStabRadius, &filters.jitterStabRelease,
 		&filters.pressureExponent, &filters.pressureMin, &filters.pressureMax,
@@ -6386,11 +6576,27 @@ void AetherApp::DrawFilterPanel() {
 		renderer.FillRoundedRect(cx, y, cw, 24, 6, D2D1::ColorF(0.85f, 0.2f, 0.2f, 0.10f));
 		renderer.DrawRoundedRect(cx, y, cw, 24, 6, D2D1::ColorF(0.85f, 0.2f, 0.2f, 0.25f));
 		renderer.DrawText(L"\xE7BA", cx + 8, y, 16, 24, Theme::Error(), renderer.pFontIcon, Renderer::AlignCenter);
-		renderer.DrawText(L"High values may cause instability. Use at your own risk.",
+		renderer.DrawText(L"High values may cause instability.",
 			cx + 28, y, cw - 36, 24, Theme::Error(), renderer.pFontSmall);
+		y += 30;
+		float warnW = cw;
+		bool warnHover = PointInRect(mouseX, mouseY, cx, y, warnW, 24);
+		renderer.FillRoundedRect(cx, y, warnW, 24, 6, D2D1::ColorF(0.95f, 0.6f, 0.1f, warnHover ? 0.18f : 0.10f));
+		renderer.DrawRoundedRect(cx, y, warnW, 24, 6, D2D1::ColorF(0.95f, 0.6f, 0.1f, warnHover ? 0.45f : 0.25f));
+		renderer.DrawText(L"\xE7BA", cx + 8, y, 16, 24, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
+		renderer.DrawText(L"Combining this filter with others may be forbidden on private servers.",
+			cx + 28, y, warnW - 36, 24, Theme::Warning(), renderer.pFontSmall);
+		if (warnHover) Tooltip::ShowFor(cx, y, warnW, 24, mouseX, mouseY,
+			L"Use at your own risk. Combining this filter with prediction or smoothing may be detected as cheating on private servers (e.g. osu! bancho). Use responsibly.",
+			deltaTime);
 		y += 30;
 		filters.reconStrength.y = y; filters.reconStrength.x = cx; filters.reconStrength.width = hw;
 		filterChanged |= filters.reconStrength.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.reconStrength.Draw(renderer);
+		filters.reconSmooth.y = y; filters.reconSmooth.x = filterRightX; filters.reconSmooth.width = hw;
+		filterChanged |= filters.reconSmooth.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.reconSmooth.Draw(renderer);
+		y += 48;
+		filters.reconReverseEma.y = y; filters.reconReverseEma.x = cx; filters.reconReverseEma.width = hw;
+		filterChanged |= filters.reconReverseEma.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.reconReverseEma.Draw(renderer);
 		y += 48;
 	}
 
@@ -6416,6 +6622,36 @@ void AetherApp::DrawFilterPanel() {
 		if (filterSingleColumn) y += 48;
 		filters.temporalFollow.y = y; filters.temporalFollow.x = filterRightX;
 		filterChanged |= filters.temporalFollow.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.temporalFollow.Draw(renderer);
+		y += 48;
+	}
+
+	
+	sec.Layout(cx, y, cw, L"PREDICTION"); y += sec.Draw(renderer);
+	filters.predictionEnabled.y = y; filters.predictionEnabled.x = cx;
+	filterChanged |= filters.predictionEnabled.Update(mouseX, mouseY, mouseClicked, deltaTime);
+	filters.predictionEnabled.Draw(renderer); y += 30;
+	if (filters.predictionEnabled.value) {
+		renderer.FillRoundedRect(cx, y, cw, 24, 6, D2D1::ColorF(0.85f, 0.2f, 0.2f, 0.10f));
+		renderer.DrawRoundedRect(cx, y, cw, 24, 6, D2D1::ColorF(0.85f, 0.2f, 0.2f, 0.25f));
+		renderer.DrawText(L"\xE7BA", cx + 8, y, 16, 24, Theme::Error(), renderer.pFontIcon, Renderer::AlignCenter);
+		renderer.DrawText(L"High values cause overshoot and instability.",
+			cx + 28, y, cw - 36, 24, Theme::Error(), renderer.pFontSmall);
+		y += 30;
+		float warnW = cw;
+		bool warnHover = PointInRect(mouseX, mouseY, cx, y, warnW, 24);
+		renderer.FillRoundedRect(cx, y, warnW, 24, 6, D2D1::ColorF(0.95f, 0.6f, 0.1f, warnHover ? 0.18f : 0.10f));
+		renderer.DrawRoundedRect(cx, y, warnW, 24, 6, D2D1::ColorF(0.95f, 0.6f, 0.1f, warnHover ? 0.45f : 0.25f));
+		renderer.DrawText(L"\xE7BA", cx + 8, y, 16, 24, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
+		renderer.DrawText(L"Combining prediction with smoothing/resamplers may be risky.",
+			cx + 28, y, warnW - 36, 24, Theme::Warning(), renderer.pFontSmall);
+		if (warnHover) Tooltip::ShowFor(cx, y, warnW, 24, mouseX, mouseY,
+			L"Use at your own risk. Stacking prediction with Reconstructor, Temporal Resampler, or Smoothing compounds and may be detected as cheating on private servers (e.g. osu! bancho). Use responsibly.",
+			deltaTime);
+		y += 30;
+		filters.predictionStrength.y = y; filters.predictionStrength.x = cx; filters.predictionStrength.width = hw;
+		filterChanged |= filters.predictionStrength.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.predictionStrength.Draw(renderer);
+		filters.predictionSharpness.y = y; filters.predictionSharpness.x = filterRightX; filters.predictionSharpness.width = hw;
+		filterChanged |= filters.predictionSharpness.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime); filters.predictionSharpness.Draw(renderer);
 		y += 48;
 	}
 
@@ -6786,6 +7022,8 @@ void AetherApp::DrawBrushPanel() {
 		renderer.DrawText(L"\xE711", clearX, rowY, clearW, rowH,
 			D2D1::ColorF(0xFFFFFF), renderer.pFontIcon, Renderer::AlignCenter);
 
+		y += rowH + rowGap;
+
 		if (mouseClicked) {
 			if (actHover) {
 				openActionDropdown = (openActionDropdown == i) ? -1 : i;
@@ -6810,11 +7048,10 @@ void AetherApp::DrawBrushPanel() {
 				continue;
 			}
 		}
-
-		y += rowH + rowGap;
 	}
 
 	if (ddVisible && openActionDropdown >= 0 && openActionDropdown < kActionHotkeyCount) {
+		if (renderer.pRT) renderer.pRT->PopAxisAlignedClip();
 		ActionHotkey& h = actionHotkeys[openActionDropdown];
 		renderer.FillRoundedRect(cx, ddRectY, actionW, ddRectH, 5, Theme::BgElevated());
 		renderer.DrawRoundedRect(cx, ddRectY, actionW, ddRectH, 5, Theme::BorderAccent());
@@ -6829,6 +7066,13 @@ void AetherApp::DrawBrushPanel() {
 			bool isSel = (h.actionIndex == j);
 			D2D1_COLOR_F tc = isSel ? Theme::AccentPrimary() : (itemHover ? Theme::TextPrimary() : Theme::TextSecondary());
 			renderer.DrawText(kActionHotkeyNames[j], cx + 12, itemY, actionW - 20, itemH, tc, renderer.pFontSmall);
+		}
+		if (renderer.pRT) {
+			D2D1_RECT_F clip = D2D1::RectF(
+				Theme::Size::SidebarWidth, GetContentAreaTop(),
+				Theme::Runtime::WindowWidth, GetContentAreaBottom()
+			);
+			renderer.pRT->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 		}
 	}
 
@@ -7301,23 +7545,26 @@ void AetherApp::DrawConfigManager(float x, float& y, float w) {
 		renderer.DrawRoundedRect(x, rowY, w, rowH, 6, selected ? Theme::BorderAccent() : Theme::BorderSubtle());
 
 		float miniW = 54.0f;
+		float autosaveBtnW = 36.0f;
 		float deleteBtnX = x + w - miniW - 8.0f;
 		float loadBtnX   = deleteBtnX - miniW - 6.0f;
 		float saveBtnX   = loadBtnX   - miniW - 6.0f;
+		float autosaveBtnX = saveBtnX - autosaveBtnW - 6.0f;
 		float btnY = rowY + 4.0f;
 		float btnH = rowH - 8.0f;
 		bool saveHovered   = PointInRect(mouseX, mouseY, saveBtnX,   btnY, miniW, btnH);
 		bool loadHovered   = PointInRect(mouseX, mouseY, loadBtnX,   btnY, miniW, btnH);
 		bool deleteHovered = PointInRect(mouseX, mouseY, deleteBtnX, btnY, miniW, btnH);
+		bool autosaveHovered = PointInRect(mouseX, mouseY, autosaveBtnX, btnY, autosaveBtnW, btnH);
 
 		float hotkeyW = 110.0f;
-		float hotkeyX = saveBtnX - hotkeyW - 8.0f;
+		float hotkeyX = autosaveBtnX - hotkeyW - 8.0f;
 		float hotkeyY = btnY;
 		float hotkeyH = btnH;
 		bool hotkeyHovered = (i < kConfigHotkeyCount) && PointInRect(mouseX, mouseY, hotkeyX, hotkeyY, hotkeyW, hotkeyH);
 
 		renderer.DrawText(configEntries[i].name.c_str(), x + 10, rowY,
-			(i < kConfigHotkeyCount ? hotkeyX : saveBtnX) - x - 18, rowH,
+			(i < kConfigHotkeyCount ? hotkeyX : autosaveBtnX) - x - 18, rowH,
 			selected ? Theme::TextPrimary() : Theme::TextSecondary(), renderer.pFontSmall);
 
 		if (i < kConfigHotkeyCount) {
@@ -7364,10 +7611,30 @@ void AetherApp::DrawConfigManager(float x, float& y, float w) {
 			deleteHovered ? D2D1::ColorF(0xFFFFFF) : Theme::TextPrimary(),
 			renderer.pFontSmall, Renderer::AlignCenter);
 
+		{
+			bool asOn = configEntries[i].autoSave;
+			D2D1_COLOR_F asBg = asOn ? Theme::AccentPrimary() : Theme::BgElevated();
+			asBg.a = asOn ? 1.0f : 0.6f;
+			renderer.FillRoundedRect(autosaveBtnX, btnY, autosaveBtnW, btnH, 5, asBg);
+			renderer.DrawRoundedRect(autosaveBtnX, btnY, autosaveBtnW, btnH, 5,
+				asOn ? Theme::BorderAccent() : Theme::BorderSubtle());
+			renderer.DrawText(L"A", autosaveBtnX, btnY, autosaveBtnW, btnH,
+				asOn ? D2D1::ColorF(0xFFFFFF) : Theme::TextMuted(),
+				renderer.pFontSmall, Renderer::AlignCenter);
+			if (autosaveHovered) Tooltip::ShowFor(autosaveBtnX, btnY, autosaveBtnW, btnH, mouseX, mouseY,
+				asOn ? L"Auto-save ON: changes save to this config." : L"Auto-save OFF: changes only go to _autosave.cfg",
+				deltaTime);
+		}
+
 		if (mouseClicked) {
 			if (hotkeyHovered && i < kConfigHotkeyCount) {
 
 				capturingHotkeySlot = (capturingHotkeySlot == i) ? -1 : i;
+				break;
+			}
+			if (autosaveHovered) {
+				configEntries[i].autoSave = !configEntries[i].autoSave;
+				SaveAutosaveFlags();
 				break;
 			}
 			if (saveHovered) {

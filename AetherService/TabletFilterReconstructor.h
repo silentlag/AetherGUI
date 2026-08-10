@@ -7,20 +7,23 @@ class TabletFilterReconstructor : public TabletFilter {
 public:
 
 	double reconstructionStrength;
-
 	double velocitySmoothing;
 
 	bool useInverseEma;
 	double emaWeight;
 
+	double predictionRatio;
+
 	Vector2D position;
 	Vector2D target;
 
 	Vector2D prevTarget;
+	Vector2D prevTmp;
 	double smoothedSpeed;
 	double prevStepX;
 	double prevStepY;
 	bool isFirstReport;
+	bool hasPrevTmp;
 	double lastTimestamp;
 
 	TabletFilterReconstructor();

@@ -151,6 +151,9 @@ public:
 
 		Toggle reconstructorEnabled;
 		Slider reconStrength;
+		Slider reconSmooth;
+		Slider reconReverseEma;
+		Slider reconPrediction;
 
 		Toggle jitterStabEnabled;
 		Slider jitterStabRadius;
@@ -165,6 +168,10 @@ public:
 		Slider temporalSmoothing;
 		Slider temporalReverseEma;
 		Slider temporalFollow;
+
+		Toggle predictionEnabled;
+		Slider predictionStrength;
+		Slider predictionSharpness;
 
 		Toggle pressureCurveEnabled;
 		Slider pressureExponent;
@@ -290,6 +297,7 @@ public:
 	struct ConfigEntry {
 		std::wstring name;
 		std::wstring path;
+		bool autoSave = true;
 	};
 	std::vector<ConfigEntry> configEntries;
 	std::wstring activeConfigPath;
@@ -411,6 +419,8 @@ public:
 
 	void OnRightMouseUp();
 
+	void OnXMouseDown(int xbutton);
+
 	void OnChar(wchar_t ch);
 
 	void OnKeyDown(int vk);
@@ -462,6 +472,11 @@ private:
 	std::wstring GetLastLoadedMarkerPath();
 	void SaveLastLoadedMarker();
 	std::wstring ReadLastLoadedMarker();
+
+	std::wstring GetAutosaveFlagsPath();
+	bool IsConfigAutosaveEnabled(const std::wstring& configPath);
+	void LoadAutosaveFlags();
+	void SaveAutosaveFlags();
 
 	void PrepareModalDialog();
 

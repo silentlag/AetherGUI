@@ -43,14 +43,16 @@ private:
 	Vector2D stablePointsPos[3];
 	double   stablePointsPressure[3];
 
-	Vector2D kfX[4];
+	double   kfX[4];
 	double   kfPx[4][4];
+	double   kfY[4];
 	double   kfPy[4][4];
-	Vector2D kfLastMeasured;
+	double   kfLastMeasuredX;
+	double   kfLastMeasuredY;
 	bool     kfInitialized;
 
-	void   KfReset(Vector2D pos);
-	Vector2D KfUpdate(Vector2D measured, double dt);
+	void   KfReset(double px, double py);
+	double KfUpdate(double measured, double dt, int axis);
 
 	Vector2D Trajectory(double t, Vector2D v3, Vector2D v2, Vector2D v1);
 

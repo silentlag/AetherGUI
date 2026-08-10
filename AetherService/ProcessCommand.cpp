@@ -1012,6 +1012,8 @@ bool ProcessCommand(CommandLine *cmd) {
 		else {
 			double strength = cmd->GetDouble(0, tablet->reconstructor.reconstructionStrength);
 			double velSmooth = cmd->GetDouble(1, tablet->reconstructor.velocitySmoothing);
+			double reverseEma = cmd->GetDouble(2, 1.0);
+			double prediction = cmd->GetDouble(3, 0.0);
 
 			if (strength < 0) strength = 0;
 			else if (strength > 2.0) strength = 2.0;
@@ -1019,18 +1021,21 @@ bool ProcessCommand(CommandLine *cmd) {
 			if (velSmooth < 0) velSmooth = 0;
 			else if (velSmooth > 0.99) velSmooth = 0.99;
 
+			if (reverseEma < 0.001) reverseEma = 0.001;
+			else if (reverseEma > 1.0) reverseEma = 1.0;
+
+			if (prediction < 0.0) prediction = 0.0;
+			else if (prediction > 1.0) prediction = 1.0;
+
+			tablet->reconstructor.useInverseEma = (reverseEma < 1.0);
+			tablet->reconstructor.emaWeight = reverseEma;
 			tablet->reconstructor.reconstructionStrength = strength;
 			tablet->reconstructor.velocitySmoothing = velSmooth;
 
 			if (strength > 0.001 || tablet->reconstructor.useInverseEma) {
 				tablet->reconstructor.isEnabled = true;
-				if (tablet->reconstructor.useInverseEma) {
-					LOG_INFO("Reconstructor (inverse-EMA) = weight %0.2f\n",
-						tablet->reconstructor.emaWeight);
-				} else {
-					LOG_INFO("Reconstructor (lag removal) = strength %0.2f, velSmooth %0.2f\n",
-						strength, velSmooth);
-				}
+				LOG_INFO("Reconstructor = strength %0.3f, velSmooth %0.3f, reverseEma %0.3f, prediction %0.3f\n",
+					strength, velSmooth, reverseEma, prediction);
 			}
 			else {
 				tablet->reconstructor.isEnabled = false;
@@ -1532,6 +1537,10 @@ bool ProcessCommand(CommandLine *cmd) {
 		else if (name == "temporal" || name == "temporalresampler") {
 			tablet->temporal.isEnabled = !tablet->temporal.isEnabled;
 			LOG_INFO("Toggle: Temporal Resampler = %s\n", tablet->temporal.isEnabled ? "on" : "off");
+		}
+		else if (name == "prediction") {
+			tablet->smoothing.PredictionEnabled = !tablet->smoothing.PredictionEnabled;
+			LOG_INFO("Toggle: Prediction = %s\n", tablet->smoothing.PredictionEnabled ? "on" : "off");
 		}
 		else {
 			LOG_WARNING("Toggle: unknown filter '%s'\n", name.c_str());
