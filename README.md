@@ -606,18 +606,6 @@
   </tr>
 </table>
 
-<br/>
-
-<h2>· Credits ·</h2>
-
-<p>
-  Inspired by Devocub Tablet Driver.
-  <br/>
-  Community tablet metadata and testing reports helped improve device coverage.
-</p>
-
-</div>
-
 
 
 ## Antivirus false positives
@@ -639,5 +627,17 @@ AetherGUI and AetherService are unsigned and do two things antivirus heuristics 
 - The source is open &mdash; anything an AV report claims the binary does can be verified directly in the tree.
 
 Long-term the only real fix is signing the binaries with an Authenticode certificate. That is on the roadmap.
+
+<br/>
+
+<h2>· Credits ·</h2>
+
+<p>
+  Inspired by Devocub Tablet Driver.
+  <br/>
+  Community tablet metadata and testing reports helped improve device coverage.
+</p>
+
+</div>
 
 <div align="center">
