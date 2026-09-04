@@ -43,19 +43,6 @@
 </p>
 
 <p>
-  <strong>Also new in 1.1.0:</strong> Lua 5.4 script filters (no compiler needed - the runtime is
-  built into the service), a <strong>Diagnostics</strong> tab with honest jitter and latency tests plus a one-click
-  vendor-driver conflict killer, automatic tablet reconnection (watchdog + reopen), a proper VMulti download
-  modal, area-mapping fixes (small tablet areas now map at full sensitivity, and the preview dot uses the
-  same center fallback as the drawn area), Overclock renamed to <strong>Interpolation</strong> in the UI,
-  smoothed-position status output (the preview dot and the jitter test now measure the filter output, not raw
-  reports), a single-instance restore fix (no more white window when reopening from the tray or exe),
-  rounded window corners + an accent-colored DWM border on Windows 11, and a visual customization pass:
-  12 built-in themes with a custom theme editor, breathing / rainbow accent effects, animation speed
-  control, and an optional background image with an opacity slider.
-</p>
-
-<p>
   <img src="AetherGUI/assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
 </p>
 
