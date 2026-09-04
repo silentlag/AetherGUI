@@ -13,15 +13,14 @@ public:
 	virtual void Update() = 0;
 
 	unsigned int uTimerID;
+void* timer;
 #if defined(_WIN32)
-	HANDLE timer;
-	LPTIMECALLBACK callback;
+	typedef void (CALLBACK *FilterCallback)(UINT wTimerID, UINT msg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
 #else
-	void* timer;
 	typedef void (*FilterCallback)(unsigned int wTimerID, unsigned int msg,
 								   unsigned long dwUser, unsigned long dw1, unsigned long dw2);
-	FilterCallback callback;
 #endif
+	FilterCallback callback;
 	double timerInterval;
 
 	bool isEnabled;

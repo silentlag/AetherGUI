@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Tablet.h"
+#include "TabletFilterLua.h"
 #include "Platform.h"
 
 #define LOG_MODULE "Tablet"
@@ -185,6 +186,32 @@ void Tablet::ReloadPluginFilters(const std::wstring& pluginDirectory) {
 				}
 			} while (FindNextFileW(dllFind, &dllData));
 			FindClose(dllFind);
+
+			std::wstring luaPattern = pluginDirectory + folderData.cFileName + L"\\*.lua";
+			WIN32_FIND_DATAW luaData = {};
+			HANDLE luaFind = FindFirstFileW(luaPattern.c_str(), &luaData);
+			if (luaFind != INVALID_HANDLE_VALUE) {
+				do {
+					if (luaData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+						continue;
+					if (filterPacketCount >= (int)(sizeof(filterPacket) / sizeof(filterPacket[0]))) {
+						LOG_WARNING("Plugin filter limit reached, skipping remaining Lua plugins.\n");
+						break;
+					}
+
+					std::wstring luaPath = pluginDirectory + folderData.cFileName + L"\\" + luaData.cFileName;
+					TabletFilterLua* luaPlugin = new TabletFilterLua();
+					if (luaPlugin->LoadScript(luaPath)) {
+						pluginFilters.push_back(luaPlugin);
+						filterPacket[filterPacketCount++] = luaPlugin;
+						loaded++;
+					}
+					else {
+						delete luaPlugin;
+					}
+				} while (FindNextFileW(luaFind, &luaData));
+				FindClose(luaFind);
+			}
 		} while (FindNextFileW(folderFind, &folderData));
 		FindClose(folderFind);
 	}
@@ -1089,6 +1116,20 @@ bool Tablet::Write(void *buffer, int length) {
 	else if (hidDevice != NULL) {
 		return hidDevice->Write(buffer, length);
 	}
+	return false;
+}
+
+bool Tablet::ReopenDevice() {
+	if (hidDevice2 != NULL) {
+		hidDevice2->CloseDevice();
+	}
+	if (hidDevice != NULL) {
+		if (hidDevice->Reopen()) {
+			isOpen = true;
+			return true;
+		}
+	}
+	isOpen = false;
 	return false;
 }
 

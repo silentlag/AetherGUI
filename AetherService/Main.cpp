@@ -53,6 +53,9 @@ Vector2D prevPos;
 static atomic<bool> timedOutputEnabledCache{false};
 
 static atomic<int> activeOutputMode{0};
+static atomic<double> g_outPosX{0.0};
+static atomic<double> g_outPosY{0.0};
+static atomic<long long> g_outPosStampNs{0};
 
 struct TabletStateSnapshot {
 	double posX;
@@ -570,8 +573,10 @@ void RunTabletThread() {
 			auto sinceLast = chrono::high_resolution_clock::now() - lastReinitAttempt;
 			if (sinceLast >= reinitInterval) {
 				lastReinitAttempt = chrono::high_resolution_clock::now();
-				LOG_INFO("Tablet not open — re-running init (watchdog, tablet may have just been plugged in).\n");
-				tablet->Init();
+				if (tablet->ReopenDevice() && tablet->Init()) {
+					LOG_INFO("Tablet reconnected.\n");
+					LogStatus();
+				}
 			}
 			platform::SleepMs(200);
 			continue;
@@ -606,7 +611,11 @@ void RunTabletThread() {
 		}
 		else {
 			LOG_ERROR("Tablet Read Error!\n");
-			CleanupAndExit(1);
+			tablet->CloseDevice();
+			LOG_STATUS("TABLET_STATE 0\n");
+			LOG_INFO("Tablet device closed - watchdog will re-open it when the tablet is plugged back in.\n");
+			platform::SleepMs(200);
+			continue;
 		}
 
 		if (isFirstReport) {
@@ -765,13 +774,22 @@ void RunTabletThread() {
 
 			MaybePublishLatency();
 
+			double posOutX = tablet->state.position.x;
+			double posOutY = tablet->state.position.y;
+			{
+				long long outStamp = g_outPosStampNs.load(memory_order_relaxed);
+				if (outStamp != 0 && NowNs() - outStamp < 100000000LL) {
+					posOutX = g_outPosX.load(memory_order_relaxed);
+					posOutY = g_outPosY.load(memory_order_relaxed);
+				}
+			}
 			{
 				double shmemRate = penRateLimitActive ? measuredOutputRate : measuredReportRate;
 				uint64_t tsNs = (uint64_t)(posNow - timeBegin).count();
 				g_statusShmem.PushPos(
 					tsNs,
-					(float)tablet->state.position.x,
-					(float)tablet->state.position.y,
+					(float)posOutX,
+					(float)posOutY,
 					(float)tablet->state.pressure,
 					(float)shmemRate,
 					(tablet->state.buttons & 1) != 0);
@@ -783,8 +801,8 @@ void RunTabletThread() {
 				char statusBuf[128];
 				int statusLen = snprintf(statusBuf, sizeof(statusBuf),
 					"[STATUS] POS %0.4f %0.4f %0.4f %0.1f\n",
-					tablet->state.position.x,
-					tablet->state.position.y,
+					posOutX,
+					posOutY,
 					tablet->state.pressure,
 					statusRate);
 				if (statusLen > 0) {
@@ -904,6 +922,10 @@ static void FilterTimerCallback(unsigned int wTimerID, unsigned int msg,
 
 	}
 
+	g_outPosX.store(position.x, memory_order_relaxed);
+	g_outPosY.store(position.y, memory_order_relaxed);
+	g_outPosStampNs.store(NowNs(), memory_order_relaxed);
+
 	if (noMovement > 35 && !buttonsChangedNow && !vmulti->buttonsChanged) return;
 
 	if (tablet->debugEnabled) {
@@ -1007,8 +1029,8 @@ static void FilterTimerCallback(unsigned int wTimerID, unsigned int msg,
 				pressure
 			);
 
-			if ((vmulti->HasReportChanged() || vmulti->buttonsChanged) && stateValid) {
-				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow);
+			if (vmulti->HasReportChanged() || vmulti->buttonsChanged) {
+				WritePenReport(vmulti->buttonsChanged || buttonsChangedNow || !stateValid);
 			}
 		}
 	}
@@ -1041,7 +1063,7 @@ static bool StartServiceRuntime(bool *running) {
 		LOG_ERROR("4) Disable Windows Ink in Windows Settings.\n");
 		LOG_ERROR("5) Reconnect the tablet USB cable and try again.\n");
 		LOG_ERROR("Driver will continue without init (may work with some tablets).\n");
-		LOG_WARNING("Proceeding without init — some features may not work.\n");
+		LOG_WARNING("Proceeding without init - some features may not work.\n");
 	}
 
 	mapper->tablet = tablet;
@@ -1159,7 +1181,7 @@ int main(int argc, char**argv) {
 		filename = argv[1];
 	}
 	if (!ReadCommandFile(filename)) {
-		LOG_WARNING("Can't open '%s' — using embedded tablet database\n", filename.c_str());
+		LOG_WARNING("Can't open '%s' - using embedded tablet database\n", filename.c_str());
 
 		auto embeddedCmds = EmbeddedConfig::GetAllCommands();
 		LOG_INFO("\\ Loading embedded config (%d commands)\n", (int)embeddedCmds.size());

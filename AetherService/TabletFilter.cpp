@@ -23,38 +23,6 @@ void TabletFilter::SetFrameTiming(double dtSec, double rawSpeedMmPerSec) {
 	hasHostTiming = true;
 }
 
-#if defined(_WIN32)
-
-bool TabletFilter::StartTimer() {
-	if (timer == NULL) {
-		MMRESULT result = timeSetEvent(
-			(UINT)timerInterval,
-			1,
-			callback,
-			NULL,
-			TIME_PERIODIC | TIME_KILL_SYNCHRONOUS
-		);
-		if (result == NULL) {
-			return false;
-		}
-		else {
-			timer = (HANDLE)1;
-			uTimerID = result;
-		}
-	}
-	return true;
-}
-
-bool TabletFilter::StopTimer() {
-	if (timer == NULL) return false;
-
-	MMRESULT result = timeKillEvent(uTimerID);
-
-	timer = NULL;
-	return (result == TIMERR_NOERROR);
-}
-#else
-
 bool TabletFilter::StartTimer() {
 	if (timer != nullptr) return true;
 	if (callback == nullptr) return false;
@@ -99,4 +67,3 @@ bool TabletFilter::StopTimer() {
 	timer = nullptr;
 	return true;
 }
-#endif

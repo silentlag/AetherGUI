@@ -12,6 +12,7 @@ public:
 
 	std::atomic<bool> isRunning{false};
 	std::atomic<bool> isConnected{false};
+	std::atomic<bool> tabletConnected{false};
 
 	std::mutex logMutex;
 	std::vector<std::string> logLines;

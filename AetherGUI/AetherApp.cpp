@@ -11,6 +11,8 @@
 #include <cstring>
 #include <filesystem>
 #include <winreg.h>
+#include <tlhelp32.h>
+#include "../AetherService/lua/AetherLua.h"
 #include <fstream>
 #include <map>
 #include <set>
@@ -433,6 +435,45 @@ struct PluginOptionMetadata {
 typedef int(__cdecl* AetherGuiPluginGetInfoFn)(AetherGuiPluginInfo* info);
 typedef int(__cdecl* AetherGuiPluginGetOptionCountFn)();
 typedef int(__cdecl* AetherGuiPluginGetOptionInfoFn)(int index, AetherGuiPluginOptionInfo* info);
+
+static bool ReadAetherLuaMetadata(const std::wstring& path, std::wstring& name, std::wstring& description, std::vector<PluginOptionMetadata>& options) {
+	std::string source;
+	if (!AetherLuaReadFileBytes(path, source))
+		return false;
+	lua_State* L = luaL_newstate();
+	if (!L)
+		return false;
+	AetherLuaSandbox(L);
+	std::string error;
+	if (!AetherLuaDoBuffer(L, source, error)) {
+		lua_close(L);
+		return false;
+	}
+	std::string metaName;
+	std::string metaDescription;
+	std::vector<AetherLuaOption> luaOptions;
+	bool ok = AetherLuaReadMetadata(L, metaName, metaDescription, luaOptions);
+	if (ok) {
+		if (!metaName.empty())
+			name = Utf8ToWide(metaName);
+		if (!metaDescription.empty())
+			description = Utf8ToWide(metaDescription);
+		for (const AetherLuaOption& o : luaOptions) {
+			PluginOptionMetadata m;
+			m.type = o.type;
+			m.key = o.key;
+			m.label = o.label.empty() ? Utf8ToWide(o.key) : Utf8ToWide(o.label);
+			m.minValue = (float)o.minValue;
+			m.maxValue = (float)o.maxValue;
+			m.defaultValue = (float)o.defaultValue;
+			if (!o.format.empty())
+				m.format = Utf8ToWide(o.format);
+			options.push_back(m);
+		}
+	}
+	lua_close(L);
+	return ok;
+}
 
 static bool ReadAetherPluginMetadata(const std::wstring& path, std::wstring& name, std::wstring& description, std::vector<PluginOptionMetadata>& options) {
 	name.clear();
@@ -992,6 +1033,7 @@ bool AetherApp::Initialize(HWND hwnd) {
 	sidebar.AddTab(L"Filters", L"\xE71C");
 	sidebar.AddTab(L"Settings", L"\xE713");
 	sidebar.AddTab(L"Console", L"\xE756");
+	sidebar.AddTab(L"Diagnostics", L"\xE7C3");
 	sidebar.AddTab(L"Brush", L"\xE70F");
 	sidebar.AddTab(L"About", L"\xE946");
 
@@ -1090,6 +1132,7 @@ bool AetherApp::Initialize(HWND hwnd) {
 }
 
 void AetherApp::Shutdown() {
+	if (bgReadThread.joinable()) bgReadThread.join();
 	driver.Stop();
 	renderer.Shutdown();
 }
@@ -1181,6 +1224,7 @@ void AetherApp::InitControls() {
 	outputMode.selected = 0;
 
 	dpiScale.Layout(cx, 0, cw, L"DPI Scale (%)", 75.0f, 200.0f, Clamp(GetSystemDpiScale() * 100.0f, 75.0f, 200.0f), L"Scale the interface for high-DPI and custom resolution setups");
+	bgImageOpacity.Layout(cx, 0, cw, L"Image Opacity (%)", 5.0f, 60.0f, 16.0f, L"Visibility of the background image over the interface");
 	dpiScale.format = L"%.0f";
 
 	const wchar_t* btnOpts[] = { L"Disable", L"Mouse 1", L"Mouse 2", L"Mouse 3", L"Mouse 4", L"Mouse 5", L"Mouse Wheel", L"Custom" };
@@ -1205,16 +1249,16 @@ void AetherApp::InitControls() {
 	tipThreshold.Layout(cx, 0, hw, L"Tip Threshold (%)", 0, 100, 1, L"Pressure needed to register a click. 0 = any touch, higher = harder press");
 	tipThreshold.format = L"%.0f";
 
-	overclockEnabled.Layout(cx, 0, L"Overclock", L"Boost driver timer rate for smoother cursor movement");
+	overclockEnabled.Layout(cx, 0, L"Interpolation", L"Interpolates extra output points between native tablet reports via a boosted timer. This is not a true USB polling overclock.");
 	overclockHz.Layout(cx, 0, hw, L"Target Rate (Hz)", 100, 2000, 1000, L"Target timer frequency. Higher = smoother, more CPU. Capped at 2000 Hz (0.5 ms tick) \u2014 real tablets rarely poll faster, and higher rates can starve the game thread.");
 	overclockHz.format = L"%.0f";
 	penRateLimitEnabled.Layout(cx, 0, L"Pen Rate Limit", L"Cap outgoing pen reports for tablets that feel too smooth at high Hz");
-	penRateLimitHz.Layout(cx, 0, hw, L"Limit Rate (Hz)", 30, 1000, 133, L"Output report cap \u2014 only LOWERS the rate (drops extra reports). To RAISE a slow tablet's rate, use Overclock instead. Example: 133 Hz gives Gaomon a Wacom-like cadence.");
+	penRateLimitHz.Layout(cx, 0, hw, L"Limit Rate (Hz)", 30, 1000, 133, L"Output report cap \u2014 only LOWERS the rate (drops extra reports). To RAISE a slow tablet's rate, use Interpolation instead. Example: 133 Hz gives Gaomon a Wacom-like cadence.");
 	penRateLimitHz.format = L"%.0f";
 
 	rateMode.optionCount = 0;
 	rateMode.AddOption(L"Off", L"Pass pen reports through at the tablet's native rate.");
-	rateMode.AddOption(L"Overclock", L"Raise the output rate: a high-res timer interpolates extra points between native reports. Best for slow tablets.");
+	rateMode.AddOption(L"Interpolation", L"Raise the output rate: a high-res timer interpolates extra points between native reports. Best for slow tablets.");
 	rateMode.AddOption(L"Rate Limit", L"Lower the output rate: drop extra reports to a target cadence. Best for tablets that feel too smooth at high Hz.");
 	rateMode.selected = 0;
 
@@ -1697,6 +1741,8 @@ void AetherApp::OnMouseMove(float x, float y) {
 			ClampScrollOffsets();
 		}
 	}
+	if (x != mouseX || y != mouseY)
+		lastActivityTime = std::chrono::steady_clock::now();
 	mouseX = x; mouseY = y;
 }
 void AetherApp::OnMouseDown() {
@@ -1704,6 +1750,7 @@ void AetherApp::OnMouseDown() {
 		SetFocus(hWnd);
 	mouseDown = true;
 	mouseClicked = true;
+	lastActivityTime = std::chrono::steady_clock::now();
 	if (capturingButtonMap >= 0) {
 		CycleSelector* btns[3] = { &buttonTip, &buttonBottom, &buttonTop };
 		CycleSelector& btn = *btns[capturingButtonMap];
@@ -1876,6 +1923,7 @@ void AetherApp::SendStartupSettingsToDriver() {
 		area.screenWidth.value, area.screenHeight.value,
 		actualScreenX, actualScreenY);
 	driver.SendCommand(cmd);
+	ClampTabletAreaToFull((driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f, (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f);
 	sprintf_s(cmd, "TabletArea %.2f %.2f %.2f %.2f",
 		area.tabletWidth.value, area.tabletHeight.value,
 		area.tabletX.value, area.tabletY.value);
@@ -2073,6 +2121,8 @@ void AetherApp::CenterScreenArea() {
 }
 
 void AetherApp::ClampTabletAreaToFull(float fullTabletW, float fullTabletH) {
+	if (area.tabletX.value <= 0.01f) area.tabletX.value = fullTabletW * 0.5f;
+	if (area.tabletY.value <= 0.01f) area.tabletY.value = fullTabletH * 0.5f;
 	area.tabletWidth.value = Clamp(area.tabletWidth.value, area.tabletWidth.minVal, fullTabletW);
 	area.tabletHeight.value = Clamp(area.tabletHeight.value, area.tabletHeight.minVal, fullTabletH);
 
@@ -2137,6 +2187,7 @@ void AetherApp::OnDisplayChange() {
 }
 
 void AetherApp::OnMouseWheel(float delta) {
+	lastActivityTime = std::chrono::steady_clock::now();
 	scrollDelta += delta;
 	float scrollSpeed = 40.0f;
 	if (pluginManagerOpen && !pluginSourceEditorOpen) {
@@ -2156,7 +2207,8 @@ void AetherApp::OnMouseWheel(float delta) {
 	case 0: areaScrollY -= delta * scrollSpeed; break;
 	case 1: filterScrollY -= delta * scrollSpeed; break;
 	case 2: settingsScrollY -= delta * scrollSpeed; break;
-	case 4: brushScrollY -= delta * scrollSpeed; break;
+	case 4: doctorScrollY -= delta * scrollSpeed; break;
+	case 5: brushScrollY -= delta * scrollSpeed; break;
 	}
 	if (areaScrollY < 0) areaScrollY = 0;
 	if (filterScrollY < 0) filterScrollY = 0;
@@ -2394,6 +2446,10 @@ void AetherApp::OnKeyDown(int vk) {
 		runtimeMissingModalOpen = false;
 		return;
 	}
+	if (vmultiMissingModalOpen && vk == VK_ESCAPE) {
+		vmultiMissingModalOpen = false;
+		return;
+	}
 	if (calibrationOpen && vk == VK_ESCAPE) {
 		calibrationOpen = false;
 		return;
@@ -2496,6 +2552,65 @@ void AetherApp::Tick() {
 
 	Tooltip::Reset();
 
+	// a bitmap from the old D2D device dies with it (minimize/restore, display change) - reload from the local cache;
+	// also re-decode when the window grew well past the decoded resolution
+	UINT bgWantMax = (UINT)Clamp(fmaxf(clientWidth, clientHeight), 512.0f, 2560.0f);
+	if (bgImageBitmap && (renderer.deviceGeneration != bgBitmapGen || bgWantMax > bgDecodeMax + 256)) {
+		bgImageBitmap->Release(); bgImageBitmap = nullptr;
+		bgImageLoaded = false;
+	}
+	if (!bgImagePath.empty() && !bgImageLoaded) {
+		// the disk read happens on a worker thread: a OneDrive path can stall on the network for minutes,
+		// and a stall inside Tick would freeze the window white
+		if (bgReadThread.joinable() && bgReadDone.load()) {
+			bgReadThread.join();
+			driver.DebugLog("BGIMG", "worker done ok=%d %ux%u", bgReadOk ? 1 : 0, bgPixelW, bgPixelH);
+			bgReadDone.store(false);
+			bgImageLoaded = true;
+			HRESULT imgHr = S_OK;
+			if (bgReadOk && bgPixelW && bgPixelH) {
+				ID2D1Bitmap* bmp = renderer.CreateBitmapFromPixels(bgPixels.data(), bgPixelW, bgPixelH, &imgHr);
+				if (bmp) {
+					if (bgImageBitmap) bgImageBitmap->Release();
+					bgImageBitmap = bmp;
+					bgImageFailed = false; bgImageErrorText[0] = 0;
+					bgBitmapGen = renderer.deviceGeneration; bgDecodeMax = bgWantMax;
+				} else {
+					bgImageFailed = true;
+					swprintf_s(bgImageErrorText, L"Image failed to load (0x%08X)", (unsigned)imgHr);
+					driver.DebugLog("BGIMG", "bitmap wrap failed hr=0x%08X wasCache=%d", (unsigned)imgHr, bgReadWasCache ? 1 : 0);
+				}
+			} else {
+				bgImageFailed = true;
+				swprintf_s(bgImageErrorText, L"Image failed to load (0x8007006E)");
+				driver.DebugLog("BGIMG", "decode failed wasCache=%d", bgReadWasCache ? 1 : 0);
+				// a corrupt cache should not kill the image: drop it and retry once from the source path
+				if (bgReadWasCache && !bgRetriedPath) {
+					bgRetriedPath = true;
+					DeleteFileW(GetBgCachePath().c_str());
+					bgImageLoaded = false; bgImageFailed = false;
+				}
+			}
+			bgPixels.clear();
+			bgPixels.shrink_to_fit();
+			bgPixelW = bgPixelH = 0;
+		}
+		else if (!bgReadThread.joinable()) {
+			// local cache first - it never touches the network
+			std::wstring cache = GetBgCachePath();
+			if (GetFileAttributesW(cache.c_str()) != INVALID_FILE_ATTRIBUTES) {
+				driver.DebugLog("BGIMG", "kicking cache read: %S", cache.c_str());
+				KickBgRead(cache);
+			}
+			else {
+				driver.DebugLog("BGIMG", "no cache, kicking path read: %S", bgImagePath.c_str());
+				KickBgRead(bgImagePath);
+			}
+		}
+	}
+	accentAnimT += deltaTime;
+	UpdateAccentAnimation();
+
 	if (autoStartEnabled && !driver.isConnected) {
 		autoStartRetryTimer -= deltaTime;
 		if (autoStartRetryTimer <= 0.0f) {
@@ -2542,7 +2657,7 @@ void AetherApp::Tick() {
 	DrawHeader();
 
 	int oldTab = sidebar.activeIndex;
-	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen || calibrationOpen;
+	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen || calibrationOpen || vmultiMissingModalOpen;
 	bool frameClick = mouseClicked;
 	if (modalOpen)
 		mouseClicked = false;
@@ -2577,8 +2692,9 @@ void AetherApp::Tick() {
 	case 1: DrawFilterPanel(); break;
 	case 2: DrawSettingsPanel(); break;
 	case 3: DrawConsolePanel(); break;
-	case 4: DrawBrushPanel(); break;
-	case 5: DrawAboutPanel(); break;
+	case 4: DrawDoctorPanel(); break;
+	case 5: DrawBrushPanel(); break;
+	case 6: DrawAboutPanel(); break;
 	}
 
 	if (renderer.pRT) renderer.pRT->SetTransform(oldTransform);
@@ -2593,7 +2709,8 @@ void AetherApp::Tick() {
 		case 0: contentH = areaContentH; scrollY = areaScrollY; scrollPtr = &areaScrollY; break;
 		case 1: contentH = filterContentH; scrollY = filterScrollY; scrollPtr = &filterScrollY; break;
 		case 2: contentH = settingsContentH; scrollY = settingsScrollY; scrollPtr = &settingsScrollY; break;
-		case 4: contentH = brushContentH; scrollY = brushScrollY; scrollPtr = &brushScrollY; break;
+		case 4: contentH = doctorContentH; scrollY = doctorScrollY; scrollPtr = &doctorScrollY; break;
+	case 5: contentH = brushContentH; scrollY = brushScrollY; scrollPtr = &brushScrollY; break;
 			break;
 		}
 		float visibleH = GetContentAreaBottom() - GetContentAreaTop();
@@ -2626,6 +2743,17 @@ void AetherApp::Tick() {
 	}
 
 	DrawStatusBar();
+
+	if (bgImageBitmap) {
+		// cover mode: fill the window, crop the overflow, keep the aspect - no stretching
+		float winW = (float)Theme::Runtime::WindowWidth, winH = (float)Theme::Runtime::WindowHeight;
+		D2D1_SIZE_F bs = bgImageBitmap->GetSize();
+		if (bs.width > 0.0f && bs.height > 0.0f) {
+			float s = fmaxf(winW / bs.width, winH / bs.height);
+			float dw = bs.width * s, dh = bs.height * s;
+			renderer.DrawBitmap(bgImageBitmap, (winW - dw) * 0.5f, (winH - dh) * 0.5f, dw, dh, bgImageOpacity.value / 100.0f);
+		}
+	}
 	if (pluginManagerOpen)
 		DrawPluginManagerModal();
 	if (pluginSourceEditorOpen)
@@ -2634,6 +2762,8 @@ void AetherApp::Tick() {
 		DrawUpdateModal();
 	if (runtimeMissingModalOpen)
 		DrawRuntimeMissingModal();
+	if (vmultiMissingModalOpen)
+		DrawVMultiMissingModal();
 	if (calibrationOpen)
 		DrawCalibrationModal();
 	Tooltip::Draw(renderer);
@@ -2667,6 +2797,7 @@ void AetherApp::ApplyAllSettings() {
 		driver.SendCommand(cmd);
 	}
 
+	ClampTabletAreaToFull((driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f, (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f);
 	sprintf_s(cmd, "TabletArea %.2f %.2f %.2f %.2f",
 		area.tabletWidth.value, area.tabletHeight.value,
 		area.tabletX.value, area.tabletY.value);
@@ -2923,8 +3054,10 @@ void AetherApp::AutoLoadConfig() {
 	LoadAppProfiles();
 
 	std::wstring lastNamed = ReadLastLoadedMarker();
+	driver.DebugLog("CFG", "AutoLoad: marker=[%S] len=%u", lastNamed.c_str(), (unsigned)lastNamed.size());
 	if (!lastNamed.empty()) {
 		DWORD nattrs = GetFileAttributesW(lastNamed.c_str());
+		driver.DebugLog("CFG", "named attrs=0x%08X", (unsigned)nattrs);
 		if (nattrs != INVALID_FILE_ATTRIBUTES && !(nattrs & FILE_ATTRIBUTE_DIRECTORY)) {
 			activeConfigPath = lastNamed;
 			loadingFromFile = true;
@@ -2938,6 +3071,7 @@ void AetherApp::AutoLoadConfig() {
 
 	std::wstring path = GetConfigPath();
 	DWORD attrs = GetFileAttributesW(path.c_str());
+	driver.DebugLog("CFG", "autosave attrs=0x%08X [%S]", (unsigned)attrs, path.c_str());
 	if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
 		activeConfigPath.clear();
 		loadingFromFile = true;
@@ -3953,12 +4087,10 @@ void AetherApp::RefreshPluginList() {
 			std::wstring folder = root + folderData.cFileName + L"\\";
 			WIN32_FIND_DATAW dllData = {};
 			HANDLE dllFind = FindFirstFileW((folder + L"*.dll").c_str(), &dllData);
-			if (dllFind == INVALID_HANDLE_VALUE)
-				continue;
-
-			do {
-				if (dllData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-					continue;
+			if (dllFind != INVALID_HANDLE_VALUE) {
+				do {
+					if (dllData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+						continue;
 
 				PluginEntry entry;
 				entry.key = std::wstring(folderData.cFileName) + L"\\" + dllData.cFileName;
@@ -3976,9 +4108,38 @@ void AetherApp::RefreshPluginList() {
 				}
 				ConfigurePluginDefaults(entry);
 				pluginEntries.push_back(entry);
-			} while (FindNextFileW(dllFind, &dllData));
+				} while (FindNextFileW(dllFind, &dllData));
 
 			FindClose(dllFind);
+			}
+
+			WIN32_FIND_DATAW luaData = {};
+			HANDLE luaFind = FindFirstFileW((folder + L"*.lua").c_str(), &luaData);
+			if (luaFind != INVALID_HANDLE_VALUE) {
+				do {
+					if (luaData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+						continue;
+
+					PluginEntry luaEntry;
+					luaEntry.key = std::wstring(folderData.cFileName) + L"\\" + luaData.cFileName;
+					luaEntry.name = folderData.cFileName;
+					luaEntry.dllName = luaData.cFileName;
+					luaEntry.enabled.value = true;
+					luaEntry.enabled.animT = 1.0f;
+					for (const PluginEntry& previous : previousEntries) {
+						if (_wcsicmp(previous.key.c_str(), luaEntry.key.c_str()) == 0) {
+							luaEntry.enabled.value = previous.enabled.value;
+							luaEntry.enabled.animT = previous.enabled.value ? 1.0f : 0.0f;
+							luaEntry.options = previous.options;
+							break;
+						}
+					}
+					ConfigurePluginDefaults(luaEntry);
+					pluginEntries.push_back(luaEntry);
+				} while (FindNextFileW(luaFind, &luaData));
+
+			FindClose(luaFind);
+			}
 		} while (FindNextFileW(folderFind, &folderData));
 
 		FindClose(folderFind);
@@ -4225,6 +4386,51 @@ bool AetherApp::DeleteInstalledPlugin(size_t index) {
 	return ok;
 }
 
+bool AetherApp::InstallLuaPluginWithDialog() {
+	PrepareModalDialog();
+	wchar_t filePath[MAX_PATH] = {};
+	OPENFILENAMEW ofn = {};
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFilter = L"Aether Lua Filter (*.lua)\0*.lua\0All Files (*.*)\0*.*\0";
+	ofn.lpstrFile = filePath;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrDefExt = L"lua";
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (!GetOpenFileNameW(&ofn))
+		return false;
+
+	std::wstring pluginsRoot = GetPluginDirectory();
+	wchar_t fileName[_MAX_FNAME] = {};
+	wchar_t fileExt[_MAX_EXT] = {};
+	_wsplitpath_s(filePath, nullptr, 0, nullptr, 0, fileName, _MAX_FNAME, fileExt, _MAX_EXT);
+	std::wstring destDir = pluginsRoot + L"\\" + fileName;
+	std::wstring destPath = destDir + L"\\" + fileName + fileExt;
+	CreateDirectoryW(pluginsRoot.c_str(), nullptr);
+	CreateDirectoryW(destDir.c_str(), nullptr);
+	if (!CopyFileW(filePath, destPath.c_str(), FALSE))
+		return false;
+
+	if (!driver.isConnected)
+		StartDriverService();
+
+	if (driver.isConnected) {
+		driver.SendCommand("PluginReload");
+		driver.SendCommand("PluginList");
+		Sleep(80);
+		RefreshPluginList();
+		SendPluginSettings();
+		if (pluginManagerOpen)
+			RefreshPluginCatalog();
+		else
+			UpdatePluginCatalogInstallState();
+		return true;
+	}
+
+	return false;
+}
+
 bool AetherApp::InstallPluginWithDialog() {
 	PrepareModalDialog();
 	wchar_t filePath[MAX_PATH] = {};
@@ -4469,6 +4675,7 @@ void AetherApp::ClampScrollOffsets() {
 	if (filterScrollY < 0) filterScrollY = 0;
 	if (settingsScrollY < 0) settingsScrollY = 0;
 	if (brushScrollY < 0) brushScrollY = 0;
+	if (doctorScrollY < 0) doctorScrollY = 0;
 
 	float visibleH = GetContentAreaBottom() - GetContentAreaTop();
 	float maxScroll = areaContentH - visibleH;
@@ -4486,6 +4693,216 @@ void AetherApp::ClampScrollOffsets() {
 	maxScroll = brushContentH - visibleH;
 	if (maxScroll < 0) maxScroll = 0;
 	if (brushScrollY > maxScroll) brushScrollY = maxScroll;
+
+	maxScroll = doctorContentH - visibleH;
+	if (maxScroll < 0) maxScroll = 0;
+	if (doctorScrollY > maxScroll) doctorScrollY = maxScroll;
+}
+
+static void RgbToHsv(float r, float g, float b, float& h, float& s, float& v) {
+	float mx = fmaxf(fmaxf(r, g), b), mn = fminf(fminf(r, g), b), d = mx - mn;
+	v = mx; s = mx > 0.0f ? d / mx : 0.0f; h = 0.0f;
+	if (d > 0.00001f) {
+		if (mx == r) h = (g - b) / d + (g < b ? 6.0f : 0.0f);
+		else if (mx == g) h = (b - r) / d + 2.0f;
+		else h = (r - g) / d + 4.0f;
+		h /= 6.0f;
+	}
+}
+
+static void HsvToRgb(float h, float s, float v, float& r, float& g, float& b) {
+	int i = (int)(h * 6.0f);
+	float f = h * 6.0f - i, p = v * (1.0f - s), q = v * (1.0f - f * s), t = v * (1.0f - (1.0f - f) * s);
+	i %= 6;
+	if (i == 0) { r = v; g = t; b = p; }
+	else if (i == 1) { r = q; g = v; b = p; }
+	else if (i == 2) { r = p; g = v; b = t; }
+	else if (i == 3) { r = p; g = q; b = v; }
+	else if (i == 4) { r = t; g = p; b = v; }
+	else { r = v; g = p; b = q; }
+}
+
+void AetherApp::UpdateAccentAnimation() {
+	static float lastR = -1.0f, lastG = -1.0f, lastB = -1.0f;
+	static int prevMode = 0;
+	if (accentAnimMode == 0) {
+		if (prevMode != 0) {
+			Theme::Custom::SetAccent(uiAccentBaseR, uiAccentBaseG, uiAccentBaseB);
+			accentPicker.SetRGB(uiAccentBaseR, uiAccentBaseG, uiAccentBaseB);
+		}
+		prevMode = 0;
+		uiAccentBaseR = Theme::Custom::AccentR;
+		uiAccentBaseG = Theme::Custom::AccentG;
+		uiAccentBaseB = Theme::Custom::AccentB;
+		lastR = uiAccentBaseR; lastG = uiAccentBaseG; lastB = uiAccentBaseB;
+		return;
+	}
+	if (fabsf(Theme::Custom::AccentR - lastR) > 0.001f ||
+		fabsf(Theme::Custom::AccentG - lastG) > 0.001f ||
+		fabsf(Theme::Custom::AccentB - lastB) > 0.001f) {
+		uiAccentBaseR = Theme::Custom::AccentR;
+		uiAccentBaseG = Theme::Custom::AccentG;
+		uiAccentBaseB = Theme::Custom::AccentB;
+	}
+	if (accentAnimMode == 1) {
+		float f = 1.0f + 0.18f * sinf(accentAnimT * 2.4f);
+		Theme::Custom::SetAccent(Clamp(uiAccentBaseR * f, 0.0f, 1.0f), Clamp(uiAccentBaseG * f, 0.0f, 1.0f), Clamp(uiAccentBaseB * f, 0.0f, 1.0f));
+	}
+	else {
+		float h, s, v, r, g, b;
+		RgbToHsv(uiAccentBaseR, uiAccentBaseG, uiAccentBaseB, h, s, v);
+		h = fmodf(h + accentAnimT * 0.04f, 1.0f);
+		if (s < 0.25f) s = 0.55f;
+		HsvToRgb(h, s, v, r, g, b);
+		Theme::Custom::SetAccent(r, g, b);
+	}
+	lastR = Theme::Custom::AccentR; lastG = Theme::Custom::AccentG; lastB = Theme::Custom::AccentB;
+	prevMode = accentAnimMode;
+}
+
+void AetherApp::ApplyAnimationSpeedMode() {
+	Theme::Anim::SetAnimationScale(animSpeedMode == 0 ? 1.0f : (animSpeedMode == 1 ? 0.35f : 0.0f));
+}
+
+bool AetherApp::ChooseBackgroundImage() {
+	PrepareModalDialog();
+	wchar_t filePath[MAX_PATH] = {};
+	OPENFILENAMEW ofn = {};
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = hWnd;
+	ofn.lpstrFilter = L"Image (*.png;*.jpg;*.jpeg)\0*.png;*.jpg;*.jpeg\0All Files (*.*)\0*.*\0";
+	ofn.lpstrFile = filePath;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+	if (!GetOpenFileNameW(&ofn))
+		return false;
+	if (bgImageBitmap) { bgImageBitmap->Release(); bgImageBitmap = nullptr; }
+	bgImagePath = filePath;
+	bgImageLoaded = false;
+	bgImageFailed = false;
+	bgRetriedPath = false;
+	bgImageErrorText[0] = 0;
+	// keep a local copy next to the config so startup never waits on the original path
+	if (!CopyFileW(filePath, GetBgCachePath().c_str(), FALSE))
+		DeleteFileW(GetBgCachePath().c_str());
+	AutoSaveConfig();
+	return true;
+}
+
+bool AetherApp::NeedsFullFrameRate() const {
+	if (accentAnimMode != 0) return true;
+	if (driver.penActive.load()) return true;
+	// full DWM rate for ~0.9s after the last input, then drop to ~30fps idle
+	return (std::chrono::steady_clock::now() - lastActivityTime) < std::chrono::milliseconds(900);
+}
+
+std::wstring AetherApp::GetBgCachePath() {
+	return GetConfigDirectory() + L"bgcache.img";
+}
+
+// full image pipeline on the worker thread: file read + WIC decode + scale + convert to
+// premultiplied BGRA. A 4K PNG decoded on the UI thread froze the window for seconds.
+static bool DecodeImageToPixels(const std::wstring& path, std::vector<unsigned char>& outPx, UINT& outW, UINT& outH, UINT maxSize) {
+	std::ifstream in(path, std::ios::binary);
+	if (!in.is_open()) return false;
+	in.seekg(0, std::ios::end);
+	std::streamoff len = in.tellg();
+	in.seekg(0, std::ios::beg);
+	if (len <= 0 || len > 256 * 1024 * 1024) return false;
+	std::vector<unsigned char> bytes((size_t)len);
+	in.read((char*)bytes.data(), (std::streamsize)len);
+	if (in.gcount() != (std::streamsize)len) return false;
+
+	HRESULT cohr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	bool comHere = SUCCEEDED(cohr);
+	IWICImagingFactory* f = nullptr;
+	IWICBitmapDecoder* dec = nullptr;
+	IWICBitmapFrameDecode* frame = nullptr;
+	IWICBitmapScaler* scaler = nullptr;
+	IWICFormatConverter* conv = nullptr;
+	IStream* stream = nullptr;
+	bool ok = false;
+	do {
+		HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)len);
+		if (!mem) break;
+		void* dst = GlobalLock(mem);
+		if (!dst) { GlobalFree(mem); break; }
+		memcpy(dst, bytes.data(), (size_t)len);
+		GlobalUnlock(mem);
+		if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&f)))) break;
+		if (FAILED(CreateStreamOnHGlobal(mem, TRUE, &stream))) { GlobalFree(mem); break; }
+		if (FAILED(f->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnLoad, &dec))) break;
+		if (FAILED(dec->GetFrame(0, &frame))) break;
+		IWICBitmapSource* src = frame;
+		UINT w = 0, h = 0;
+		frame->GetSize(&w, &h);
+		if (w == 0 || h == 0) break;
+		if (maxSize > 0 && (w > maxSize || h > maxSize)) {
+			UINT dw = maxSize, dh = maxSize;
+			if (w > h) dh = (UINT)((float)maxSize * h / w);
+			else if (h > w) dw = (UINT)((float)maxSize * w / h);
+			if (FAILED(f->CreateBitmapScaler(&scaler))) break;
+			if (FAILED(scaler->Initialize(frame, dw, dh, WICBitmapInterpolationModeHighQualityCubic))) break;
+			src = scaler;
+			w = dw; h = dh;
+		}
+		if (FAILED(f->CreateFormatConverter(&conv))) break;
+		if (FAILED(conv->Initialize(src, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeMedianCut))) break;
+		UINT cw = 0, ch = 0;
+		conv->GetSize(&cw, &ch);
+		UINT stride = cw * 4;
+		if (cw == 0 || ch == 0 || stride / 4 != cw) break;
+		outPx.resize((size_t)stride * ch);
+		WICRect rc = { 0, 0, (INT)cw, (INT)ch };
+		if (FAILED(conv->CopyPixels(&rc, stride, (UINT)outPx.size(), outPx.data()))) { outPx.clear(); break; }
+		outW = cw; outH = ch;
+		ok = true;
+	} while (false);
+	if (conv) conv->Release();
+	if (scaler) scaler->Release();
+	if (frame) frame->Release();
+	if (dec) dec->Release();
+	if (stream) stream->Release();
+	if (f) f->Release();
+	if (comHere) CoUninitialize();
+	return ok;
+}
+
+void AetherApp::KickBgRead(const std::wstring& path) {
+	if (bgReadThread.joinable()) return;
+	bgReadWasCache = (_wcsicmp(path.c_str(), GetBgCachePath().c_str()) == 0);
+	bgReadDone.store(false);
+	bgReadOk = false;
+	bgReadThread = std::thread([this, path]() {
+		UINT wantMax = (UINT)Clamp(fmaxf(clientWidth, clientHeight), 512.0f, 2560.0f);
+		std::vector<unsigned char> px;
+		UINT w = 0, h = 0;
+		if (DecodeImageToPixels(path, px, w, h, wantMax)) {
+			bgPixels = std::move(px);
+			bgPixelW = w; bgPixelH = h;
+			bgReadOk = true;
+		}
+		bgReadDone.store(true);
+	});
+}
+
+void AetherApp::DrawSegmentedRow(const wchar_t* const* names, int count, int* value, float x, float y, float w) {
+	float bw = (w - (count - 1) * 4.0f) / (float)count;
+	for (int i = 0; i < count; i++) {
+		float bx = x + i * (bw + 4.0f);
+		bool active = (i == *value);
+		bool hov = PointInRect(mouseX, mouseY, bx, y, bw, 26.0f);
+		if (active) {
+			renderer.FillRoundedRect(bx, y, bw, 26.0f, 6, Theme::AccentPrimary());
+			renderer.DrawText(names[i], bx, y, bw, 26.0f, D2D1::ColorF(0xFFFFFF), renderer.pFontSmall, Renderer::AlignCenter);
+		} else {
+			renderer.FillRoundedRect(bx, y, bw, 26.0f, 6, hov ? Theme::BgHover() : Theme::BgElevated());
+			renderer.DrawRoundedRect(bx, y, bw, 26.0f, 6, Theme::BorderSubtle());
+			renderer.DrawText(names[i], bx, y, bw, 26.0f, hov ? Theme::TextPrimary() : Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
+		}
+		if (hov && mouseClicked)
+			*value = i;
+	}
 }
 
 void AetherApp::DrawBackground() {
@@ -4790,12 +5207,13 @@ void AetherApp::DrawHeader() {
 	float pillW = 96.0f;
 	float pillX = startupX - pillW - 10.0f;
 	if (pillX > titleX + 220.0f) {
-		D2D1_COLOR_F pillBg = driver.isConnected ? Theme::AccentDim() : Theme::BgElevated();
-		D2D1_COLOR_F pillTxt = driver.isConnected ? Theme::Success() : Theme::TextSecondary();
-		D2D1_COLOR_F pillBorder = driver.isConnected ? Theme::BorderAccent() : Theme::BorderSubtle();
+		bool tabletOk = driver.isConnected && driver.tabletConnected.load();
+		D2D1_COLOR_F pillBg = tabletOk ? Theme::AccentDim() : Theme::BgElevated();
+		D2D1_COLOR_F pillTxt = tabletOk ? Theme::Success() : Theme::TextSecondary();
+		D2D1_COLOR_F pillBorder = tabletOk ? Theme::BorderAccent() : Theme::BorderSubtle();
 		renderer.FillRoundedRect(pillX, 11, pillW, 26, 13, pillBg);
 		renderer.DrawRoundedRect(pillX, 11, pillW, 26, 13, pillBorder, 1.0f);
-		renderer.DrawText(driver.isConnected ? L"Connected" : L"Starting",
+		renderer.DrawText(tabletOk ? L"Connected" : (driver.isConnected ? L"No Tablet" : L"Starting"),
 			pillX, 11, pillW, 26, pillTxt, renderer.pFontSmall, Renderer::AlignCenter);
 	}
 
@@ -4870,7 +5288,7 @@ void AetherApp::DrawOverclockInfo(float x, float y, float w) {
 	wchar_t latLine[160];
 	if (latN > 0) {
 		swprintf_s(latLine,
-			L"Internal latency  avg %.2f ms   worst 1%% %.2f ms   peak %.2f ms   over %d samples",
+			L"Internal latency  average %.2f ms   usually below %.2f ms   worst spike %.2f ms   over %d samples",
 			latAvg, latP99, latMax, latN);
 	}
 	else {
@@ -5046,8 +5464,19 @@ void AetherApp::DrawAreaPanel() {
 			float px = driver.penX.load();
 			float py = driver.penY.load();
 
-			float dotX = previewX + Clamp(px, 0.0f, totalScreenW) * scale;
-			float dotY = previewY + Clamp(py, 0.0f, detectedScreenH) * scale;
+			float tx = 0.0f, ty = 0.0f;
+			if (area.tabletWidth.value > 0.1f && area.tabletHeight.value > 0.1f) {
+				float fullW = (driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f;
+				float fullH = (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f;
+				float effX = (area.tabletX.value > 0.01f) ? area.tabletX.value : fullW * 0.5f;
+				float effY = (area.tabletY.value > 0.01f) ? area.tabletY.value : fullH * 0.5f;
+				tx = (px - (effX - area.tabletWidth.value * 0.5f)) / area.tabletWidth.value;
+				ty = (py - (effY - area.tabletHeight.value * 0.5f)) / area.tabletHeight.value;
+				tx = Clamp(tx, 0.0f, 1.0f);
+				ty = Clamp(ty, 0.0f, 1.0f);
+			}
+			float dotX = previewX + (area.screenX.value + tx * area.screenWidth.value) * scale;
+			float dotY = previewY + (area.screenY.value + ty * area.screenHeight.value) * scale;
 
 			float pressure = Clamp(driver.penPressure.load(), 0.0f, 1.0f);
 			float radius = 3.5f + pressure * 4.0f;
@@ -5393,6 +5822,7 @@ void AetherApp::DrawAreaPanel() {
 	if (modeBtnW < 60.0f) modeBtnW = 60.0f;
 	if (outputMode.Update(mouseX, mouseY, mouseClicked, deltaTime, modeBtnW) >= 0) {
 		ApplyAllSettings();
+		CheckVMultiModeSelected();
 	}
 	outputMode.Draw(renderer, modeBtnW);
 
@@ -5482,6 +5912,55 @@ void AetherApp::DrawSettingsPanel() {
 
 	sec.Layout(cx, y, cw, L"THEME"); y += sec.Draw(renderer);
 	DrawThemeSelector(cx, y, cw);
+
+
+	sec.Layout(cx, y, cw, L"ACCENT EFFECT"); y += sec.Draw(renderer);
+	{
+		const wchar_t* accentModes[] = { L"Static", L"Breathing", L"Rainbow" };
+		DrawSegmentedRow(accentModes, 3, &accentAnimMode, cx, y, cw);
+		y += 34;
+	}
+
+	sec.Layout(cx, y, cw, L"ANIMATION SPEED"); y += sec.Draw(renderer);
+	{
+		const wchar_t* animModes[] = { L"Full", L"Calm", L"Off" };
+		int prevAnimMode = animSpeedMode;
+		DrawSegmentedRow(animModes, 3, &animSpeedMode, cx, y, cw);
+		if (animSpeedMode != prevAnimMode) {
+			ApplyAnimationSpeedMode();
+			AutoSaveConfig();
+		}
+		y += 34;
+	}
+
+	sec.Layout(cx, y, cw, L"BACKGROUND"); y += sec.Draw(renderer);
+	{
+		bgImageOpacity.x = cx; bgImageOpacity.y = y; bgImageOpacity.width = cw;
+		if (bgImageOpacity.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime)) AutoSaveConfig();
+		bgImageOpacity.Draw(renderer);
+		y += 52;
+		bgImageBtn.Layout(cx, y, cw * 0.5f - 4.0f, 26, L"Choose Image", false);
+		if (bgImageBtn.Update(mouseX, mouseY, mouseClicked, deltaTime))
+			ChooseBackgroundImage();
+		bgImageBtn.Draw(renderer);
+		bgClearBtn.Layout(cx + cw * 0.5f + 4.0f, y, cw * 0.5f - 4.0f, 26, L"Clear Image", false);
+		if (bgClearBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+			if (bgImageBitmap) { bgImageBitmap->Release(); bgImageBitmap = nullptr; }
+			bgImagePath.clear();
+			bgImageLoaded = false;
+			DeleteFileW(GetBgCachePath().c_str());
+			AutoSaveConfig();
+		}
+		bgClearBtn.Draw(renderer);
+		y += 32;
+		if (!bgImagePath.empty()) {
+			if (bgImageFailed)
+				renderer.DrawText(bgImageErrorText, cx, y, cw, 18, Theme::Error(), renderer.pFontSmall);
+			else
+				renderer.DrawText(bgImagePath.c_str(), cx, y, cw, 18, Theme::TextMuted(), renderer.pFontSmall);
+		}
+		y += 20;
+	}
 
 	sec.Layout(cx, y, cw, L"PARTICLES"); y += sec.Draw(renderer);
 	{
@@ -5627,6 +6106,10 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 	}
 	f << "Visualizer=" << (int)visualizerToggle.value << "\n";
 	f << "ParticleStyle=" << particleStyle << "\n";
+	f << "AccentAnim=" << accentAnimMode << "\n";
+	f << "AnimSpeed=" << animSpeedMode << "\n";
+	f << "BgImage=" << WideToUtf8(bgImagePath) << "\n";
+	f << "BgImageOpacity=" << bgImageOpacity.value << "\n";
 
 	f << "\n";
 	f << "PluginRepoOwner=" << WideToUtf8(pluginRepoOwner) << "\n";
@@ -5645,8 +6128,9 @@ void AetherApp::SaveConfig(const std::wstring& path) {
 }
 
 void AetherApp::LoadConfig(const std::wstring& path) {
+	driver.DebugLog("CFG", "LoadConfig: [%S]", path.c_str());
 	std::ifstream f(path);
-	if (!f.is_open()) return;
+	if (!f.is_open()) { driver.DebugLog("CFG", "LoadConfig: FAILED to open"); return; }
 
 	float loadedAccentR = Theme::Custom::AccentR;
 	float loadedAccentG = Theme::Custom::AccentG;
@@ -5665,6 +6149,14 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		if (eq == std::string::npos) continue;
 		std::string key = line.substr(0, eq);
 		std::string rawValue = line.substr(eq + 1);
+		if (key == "BgImage") {
+			// string key: must run before the stof() gate below, or the line is silently dropped
+			bgImagePath = Utf8ToWide(rawValue);
+			bgImageLoaded = false;
+			bgRetriedPath = false;
+			driver.DebugLog("BGIMG", "config path: %S", bgImagePath.c_str());
+			continue;
+		}
 		if (key == "PluginRepoOwner") {
 			pluginRepoOwner = Utf8ToWide(rawValue);
 			continue;
@@ -5812,6 +6304,9 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 		}
 		else if (key == "Visualizer") visualizerToggle.value = (val > 0.5f);
 		else if (key == "ParticleStyle") { particleStyle = (int)val; if (particleStyle < 0 || particleStyle > 3) particleStyle = 0; }
+		else if (key == "AccentAnim") { accentAnimMode = (int)val; if (accentAnimMode < 0 || accentAnimMode > 2) accentAnimMode = 0; }
+		else if (key == "AnimSpeed") { animSpeedMode = (int)val; if (animSpeedMode < 0 || animSpeedMode > 2) animSpeedMode = 0; ApplyAnimationSpeedMode(); }
+		else if (key == "BgImageOpacity") { bgImageOpacity.value = Clamp(val, bgImageOpacity.minVal, bgImageOpacity.maxVal); bgImageOpacity.animValue = bgImageOpacity.value; }
 		else if (key.rfind("PluginEnabled.", 0) == 0) {
 			if (pluginListDirty)
 				RefreshPluginList();
@@ -5922,6 +6417,7 @@ void AetherApp::LoadConfig(const std::wstring& path) {
 
 	RegisterConfigHotkeys();
 	InstallActionHotkeyHook();
+	CheckVMultiModeSelected();
 }
 
 void AetherApp::DrawPluginFilterControls(float cx, float& y, float cw, float hw, float filterRightX, bool filterSingleColumn, bool& filterChanged) {
@@ -5930,7 +6426,7 @@ void AetherApp::DrawPluginFilterControls(float cx, float& y, float cw, float hw,
 
 	SectionHeader sec;
 	float gap = 8.0f;
-	float btnW = (cw - gap * 3.0f) / 4.0f;
+	float btnW = (cw - gap * 4.0f) / 5.0f;
 	installPluginBtn.Layout(cx, y, btnW, 28, L"Install DLL", false);
 	if (installPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 		InstallPluginWithDialog();
@@ -5938,14 +6434,21 @@ void AetherApp::DrawPluginFilterControls(float cx, float& y, float cw, float hw,
 	}
 	installPluginBtn.Draw(renderer);
 
-	installSourcePluginBtn.Layout(cx + btnW + gap, y, btnW, 28, L"Build Source", false);
+	installLuaPluginBtn.Layout(cx + (btnW + gap), y, btnW, 28, L"Install Lua", false);
+	if (installLuaPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		InstallLuaPluginWithDialog();
+		UpdatePluginCatalogInstallState();
+	}
+	installLuaPluginBtn.Draw(renderer);
+
+	installSourcePluginBtn.Layout(cx + (btnW + gap) * 2.0f, y, btnW, 28, L"Build Source", false);
 	if (installSourcePluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 		InstallPluginSourceWithDialog();
 		UpdatePluginCatalogInstallState();
 	}
 	installSourcePluginBtn.Draw(renderer);
 
-	reloadPluginBtn.Layout(cx + (btnW + gap) * 2.0f, y, btnW, 28, L"Reload", false);
+	reloadPluginBtn.Layout(cx + (btnW + gap) * 3.0f, y, btnW, 28, L"Reload", false);
 	if (reloadPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 		if (!driver.isConnected)
 			StartDriverService();
@@ -5959,7 +6462,7 @@ void AetherApp::DrawPluginFilterControls(float cx, float& y, float cw, float hw,
 	}
 	reloadPluginBtn.Draw(renderer);
 
-	listPluginBtn.Layout(cx + (btnW + gap) * 3.0f, y, btnW, 28, L"List", false);
+	listPluginBtn.Layout(cx + (btnW + gap) * 4.0f, y, btnW, 28, L"List", false);
 	if (listPluginBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 		RefreshPluginList();
 		selectedCatalogIndex = 0;
@@ -6109,6 +6612,53 @@ bool AetherApp::CheckVCRedist() {
 		missingRuntimeNames += d;
 	}
 	return missingRuntimeNames.empty();
+}
+
+void AetherApp::CheckVMultiModeSelected() {
+	if (!vmultiCheckDone || vmultiInstalled) return;
+	if (outputMode.selected != 2 && outputMode.selected != 3) return;
+	vmultiMissingModeName = (outputMode.selected == 3) ? L"Raw Absolute" : L"Windows Ink";
+	vmultiMissingModalOpen = true;
+}
+
+void AetherApp::DrawVMultiMissingModal() {
+	float overlayW = Theme::Runtime::WindowWidth;
+	float overlayH = Theme::Runtime::WindowHeight;
+	renderer.FillRect(0, 0, overlayW, overlayH, D2D1::ColorF(0, 0, 0, 0.55f));
+
+	float w = std::min(540.0f, overlayW - 36.0f);
+	float h = 240.0f;
+	float x = (overlayW - w) * 0.5f;
+	float y = (overlayH - h) * 0.5f;
+
+	renderer.FillRoundedRect(x, y, w, h, 12, Theme::BgSurface());
+	renderer.DrawRoundedRect(x, y, w, h, 12, Theme::Warning(), 1.4f);
+
+	D2D1_COLOR_F glow = Theme::Warning();
+	glow.a = 0.18f;
+	renderer.FillCircle(x + 54, y + 54, 28, glow);
+	renderer.DrawText(L"\xE7BA", x + 42, y + 40, 24, 28, Theme::Warning(), renderer.pFontIcon, Renderer::AlignCenter);
+
+	renderer.DrawText(L"VMulti driver required", x + 92, y + 24, w - 116, 28, Theme::TextPrimary(), renderer.pFontBody);
+
+	wchar_t bodyBuf[320];
+	swprintf_s(bodyBuf,
+		L"%s mode requires the VMulti driver, which is not installed on this system. Without it the mode falls back to Absolute. Click Download to get the VMulti installer, then restart the driver after installing.",
+		vmultiMissingModeName.c_str());
+	renderer.DrawText(bodyBuf, x + 92, y + 56, w - 116, 90, Theme::TextMuted(), renderer.pFontSmall);
+
+	float btnY = y + h - 50;
+	vmultiMissingLaterBtn.Layout(x + w - 250, btnY, 100, 30, L"Ignore", false);
+	if (vmultiMissingLaterBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		vmultiMissingModalOpen = false;
+	}
+	vmultiMissingLaterBtn.Draw(renderer);
+
+	vmultiMissingOpenBtn.Layout(x + w - 140, btnY, 122, 30, L"Download", true);
+	if (vmultiMissingOpenBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		OpenExternalUrl(L"https://silentlag.s-ul.eu/rWK8xAqA");
+	}
+	vmultiMissingOpenBtn.Draw(renderer);
 }
 
 void AetherApp::DrawRuntimeMissingModal() {
@@ -6766,7 +7316,7 @@ void AetherApp::DrawFilterPanel() {
 		y += 42;
 
 		renderer.DrawText(
-			L"Rate Limit only lowers the report rate. For a slow tablet that needs a higher rate, switch to Overclock.",
+			L"Rate Limit only lowers the report rate. For a slow tablet that needs a higher rate, switch to Interpolation.",
 			cx, y, cw, 32, Theme::TextMuted(), renderer.pFontSmall);
 		y += 36;
 	}
@@ -6822,6 +7372,265 @@ void AetherApp::DrawConsolePanel() {
 	consoleInput.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
 	consoleInput.Draw(renderer);
 }
+
+void AetherApp::DoctorScanConflicts() {
+	doctorConflicts.clear();
+	static const wchar_t* names[] = {
+		L"WTabletServicePro.exe", L"WTabletServiceCon.exe", L"TabletInputService.exe",
+		L"WacomHost.exe", L"PenTablet.exe", L"HuionTablet.exe",
+		L"TabletDriver.exe", L"TabletDriverGUI.exe", L"GaomonTablet.exe"
+	};
+	HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (snap == INVALID_HANDLE_VALUE) { doctorScanned = true; return; }
+	PROCESSENTRY32W pe = {};
+	pe.dwSize = sizeof(pe);
+	if (Process32FirstW(snap, &pe)) {
+		do {
+			for (size_t i = 0; i < sizeof(names)/sizeof(names[0]); i++) {
+				if (_wcsicmp(pe.szExeFile, names[i]) == 0) {
+					bool dup = false;
+					for (auto& d : doctorConflicts) if (_wcsicmp(d.c_str(), names[i]) == 0) { dup = true; break; }
+					if (!dup) doctorConflicts.push_back(names[i]);
+				}
+			}
+		} while (Process32NextW(snap, &pe));
+	}
+	CloseHandle(snap);
+	doctorScanned = true;
+}
+
+void AetherApp::DoctorKillProcess(const std::wstring& name) {
+	wchar_t args[256];
+	swprintf_s(args, L"/C taskkill /F /IM \"%s\"", name.c_str());
+	wchar_t buf[300];
+	wcscpy_s(buf, args);
+	STARTUPINFOW si = {};
+	si.cb = sizeof(si);
+	PROCESS_INFORMATION pi = {};
+	bool ok = CreateProcessW(L"C:\\Windows\\System32\\cmd.exe", buf, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) != 0;
+	if (ok) {
+		WaitForSingleObject(pi.hProcess, 5000);
+		CloseHandle(pi.hThread);
+		CloseHandle(pi.hProcess);
+	}
+}
+
+void AetherApp::DrawDoctorPanel() {
+	float cx = Theme::Size::SidebarWidth + Theme::Size::Padding;
+	float cw = Theme::Runtime::WindowWidth - Theme::Size::SidebarWidth - Theme::Size::Padding * 2;
+	float yStart = Theme::Size::HeaderHeight + Theme::Size::Padding;
+	float y = yStart - doctorScrollY;
+	SectionHeader sec;
+
+	float livePressure = driver.penActive.load() ? Clamp(driver.penPressure.load(), 0.0f, 1.0f) : 0.0f;
+	doctorPressureHistory.push_back(livePressure);
+	if ((int)doctorPressureHistory.size() > 420)
+		doctorPressureHistory.erase(doctorPressureHistory.begin(), doctorPressureHistory.begin() + ((int)doctorPressureHistory.size() - 420));
+	if (livePressure > doctorPeakPressure) doctorPeakPressure = livePressure;
+
+	sec.Layout(cx, y, cw, L"DRIVER"); y += sec.Draw(renderer);
+	wchar_t buf[256];
+
+	auto statusRow = [&](const wchar_t* label, const wchar_t* value, bool good) {
+		renderer.DrawText(label, cx + 4, y, 170, 20, Theme::TextMuted(), renderer.pFontSmall);
+		D2D1_COLOR_F col = good ? Theme::Success() : Theme::Warning();
+		renderer.FillCircle(cx + 188, y + 10, 3.0f, col);
+		D2D1_COLOR_F vcol = good ? Theme::TextSecondary() : Theme::Warning();
+		renderer.DrawText(value, cx + 200, y, cw - 210, 20, vcol, renderer.pFontSmall);
+		y += 24;
+	};
+
+	bool svc = driver.isConnected.load();
+	bool tabOk = svc && driver.tabletConnected.load();
+	statusRow(L"Service", svc ? L"Running" : L"Not running", svc);
+	if (driver.tabletName.empty()) {
+		statusRow(L"Tablet", L"-", false);
+	} else {
+		std::wstring name(driver.tabletName.begin(), driver.tabletName.end());
+		swprintf_s(buf, L"%s", name.c_str());
+		statusRow(L"Tablet", tabOk ? buf : L"Detected, not connected", tabOk);
+	}
+	swprintf_s(buf, L"%.0f Hz", driver.penHz.load());
+	statusRow(L"Report rate", buf, driver.penHz.load() > 50.0f);
+	int latN = driver.latencySamples.load();
+	if (latN > 0) {
+		swprintf_s(buf, L"Average %.2f ms | Usually below %.2f ms | Worst spike %.2f ms (%d samples)",
+			driver.latencyAvgMs.load(), driver.latencyP99Ms.load(), driver.latencyMaxMs.load(), latN);
+		statusRow(L"Latency", buf, driver.latencyAvgMs.load() < 8.0f);
+	} else {
+		statusRow(L"Latency", L"No samples yet", false);
+	}
+	bool vmultiNeeded = (outputMode.selected == 2 || outputMode.selected == 3);
+	statusRow(L"VMulti", vmultiInstalled ? L"Installed" : L"Not installed", !vmultiNeeded || vmultiInstalled);
+	if (!vmultiInstalled && vmultiNeeded) {
+		renderer.DrawText(L"Only required for Windows Ink and Raw Absolute modes.",
+			cx + 4, y, cw - 8, 18, Theme::TextMuted(), renderer.pFontSmall);
+		y += 22;
+	}
+	y += 12;
+
+	sec.Layout(cx, y, cw, L"CONFLICTING DRIVERS"); y += sec.Draw(renderer);
+	renderer.DrawText(L"Other tablet drivers (Wacom, Huion, Gaomon, XP-Pen) can grab the device or inject extra cursor input. Kill them if Aether misbehaves.",
+		cx + 4, y, cw - 8, 36, Theme::TextMuted(), renderer.pFontSmall);
+	y += 40;
+	doctorScanBtn.Layout(cx + 4, y, 110, 26, L"Scan", false);
+	if (doctorScanBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) DoctorScanConflicts();
+	doctorScanBtn.Draw(renderer);
+	y += 34;
+	if (doctorScanned) {
+		if (doctorConflicts.empty()) {
+			renderer.FillRoundedRect(cx + 4, y, cw - 8, 24, 5, D2D1::ColorF(0.2f, 0.6f, 0.3f, 0.12f));
+			renderer.DrawText(L"No conflicting tablet drivers found.", cx + 16, y, cw - 24, 24, Theme::Success(), renderer.pFontSmall);
+			y += 28;
+		} else {
+			for (size_t i = 0; i < doctorConflicts.size(); i++) {
+				const std::wstring& n = doctorConflicts[i];
+				renderer.FillRoundedRect(cx + 4, y, cw - 8, 26, 5, Theme::BgElevated());
+				renderer.DrawRoundedRect(cx + 4, y, cw - 8, 26, 5, Theme::BorderSubtle());
+				renderer.DrawText(n.c_str(), cx + 16, y, cw - 120, 26, Theme::Warning(), renderer.pFontSmall);
+				float kbX = cx + cw - 92;
+				float kbY = y + 3;
+				bool kbHover = PointInRect(mouseX, mouseY, kbX, kbY, 84, 20);
+				D2D1_COLOR_F kbBg = kbHover ? Theme::Error() : D2D1::ColorF(0.7f, 0.3f, 0.3f, 0.18f);
+				renderer.FillRoundedRect(kbX, kbY, 84, 20, 4, kbBg);
+				renderer.DrawText(L"Kill", kbX, kbY, 84, 20, Theme::TextPrimary(), renderer.pFontSmall, Renderer::AlignCenter);
+				if (mouseClicked && PointInRect(mouseX, mouseY, kbX, kbY, 84, 20)) {
+					DoctorKillProcess(n);
+					DoctorScanConflicts();
+				}
+				y += 30;
+			}
+		}
+	} else {
+		renderer.DrawText(L"Click Scan to check for running tablet drivers.", cx + 4, y, cw - 8, 20, Theme::TextMuted(), renderer.pFontSmall);
+		y += 26;
+	}
+	y += 12;
+
+	sec.Layout(cx, y, cw, L"PRESSURE TEST"); y += sec.Draw(renderer);
+	renderer.DrawText(L"Draw on the tablet while this tab is open. The graph shows filtered output pressure. Click the graph to reset the peak.",
+		cx + 4, y, cw - 8, 36, Theme::TextMuted(), renderer.pFontSmall);
+	y += 40;
+	float gH = 90.0f;
+	renderer.FillRoundedRect(cx, y, cw, gH, 6, Theme::BgElevated());
+	renderer.DrawRoundedRect(cx, y, cw, gH, 6, Theme::BorderSubtle());
+	for (float f = 0.25f; f < 1.0f; f += 0.25f) {
+		float gy = y + gH - f * gH;
+		D2D1_COLOR_F gc = Theme::BorderSubtle(); gc.a = 0.5f;
+		renderer.DrawLine(cx + 2, gy, cx + cw - 2, gy, gc, 0.6f);
+	}
+	int cap = (int)doctorPressureHistory.size();
+	if (cap >= 2) {
+		for (int i = 1; i < cap; i++) {
+			float x0 = cx + ((float)(i - 1) / (float)(cap - 1)) * cw;
+			float x1 = cx + ((float)i / (float)(cap - 1)) * cw;
+			float v0 = doctorPressureHistory[i - 1];
+			float v1 = doctorPressureHistory[i];
+			renderer.DrawLine(x0, y + gH - v0 * gH, x1, y + gH - v1 * gH, Theme::AccentPrimary(), 1.5f);
+		}
+	}
+	if (mouseClicked && PointInRect(mouseX, mouseY, cx, y, cw, gH)) doctorPeakPressure = livePressure;
+	y += gH + 8;
+	swprintf_s(buf, L"Peak %d%%   |   Now %d%%", (int)(doctorPeakPressure * 100.0f), (int)(livePressure * 100.0f));
+	renderer.DrawText(buf, cx + 4, y, cw - 8, 20, Theme::TextSecondary(), renderer.pFontSmall);
+	y += 24;
+	y += 12;
+
+	sec.Layout(cx, y, cw, L"JITTER TEST"); y += sec.Draw(renderer);
+	renderer.DrawText(L"Hold the pen still on the tablet surface, then press Start. 5 seconds of position noise. If the pen moves, the test says so instead of misreading it as jitter.",
+		cx + 4, y, cw - 8, 36, Theme::TextMuted(), renderer.pFontSmall);
+	y += 40;
+	const wchar_t* jitterLabel = doctorJitterRunning ? L"Measuring..." : L"Start";
+	doctorJitterBtn.Layout(cx + 4, y, 130, 26, jitterLabel, true);
+	if (doctorJitterBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
+		if (!doctorJitterRunning) {
+			doctorJitterRunning = true;
+			doctorJitterElapsed = 0.0f;
+			doctorJitterX.clear();
+			doctorJitterY.clear();
+			doctorJitterAvg = -1.0f;
+			doctorJitterMax = -1.0f;
+			doctorJitterCount = 0;
+			doctorJitterMoved = false;
+			doctorJitterJumpFrac = 0.0f;
+		}
+	}
+	doctorJitterBtn.Draw(renderer);
+	y += 34;
+	if (doctorJitterRunning) {
+		doctorJitterElapsed += deltaTime;
+		if (driver.penActive.load()) {
+			doctorJitterX.push_back(driver.penX.load());
+			doctorJitterY.push_back(driver.penY.load());
+		}
+		int prog = (int)Clamp(doctorJitterElapsed / 5.0f * 100.0f, 0.0f, 100.0f);
+		swprintf_s(buf, L"Measuring %d%%", prog);
+		renderer.DrawText(buf, cx + 4, y, cw - 8, 20, Theme::AccentPrimary(), renderer.pFontSmall);
+		y += 24;
+		if (doctorJitterElapsed >= 5.0f) {
+			doctorJitterRunning = false;
+			doctorJitterCount = (int)doctorJitterX.size();
+			if (doctorJitterCount >= 30) {
+				// median instead of mean: one slow drift or a few jumps should not drag the verdict
+				std::vector<float> sx(doctorJitterX), sy(doctorJitterY);
+				std::sort(sx.begin(), sx.end()); std::sort(sy.begin(), sy.end());
+				double mdx = sx[sx.size() / 2], mdy = sy[sy.size() / 2];
+				double sum = 0, peak = 0;
+				for (size_t i = 0; i < doctorJitterX.size(); i++) {
+					double dx = doctorJitterX[i] - mdx; double dy = doctorJitterY[i] - mdy;
+					double r = sqrt(dx * dx + dy * dy);
+					sum += r;
+					if (r > peak) peak = r;
+				}
+				// a twitch is a sudden sample-to-sample hop; slow hand tremor stays under the bar
+				int jumps = 0;
+				for (size_t i = 1; i < doctorJitterX.size(); i++) {
+					double dx = doctorJitterX[i] - doctorJitterX[i - 1]; double dy = doctorJitterY[i] - doctorJitterY[i - 1];
+					if (sqrt(dx * dx + dy * dy) > 0.06) jumps++;
+				}
+				doctorJitterJumpFrac = (float)jumps / (float)(doctorJitterX.size() - 1);
+				double spanX = sx.back() - sx.front(), spanY = sy.back() - sy.front();
+				doctorJitterMoved = sqrt(spanX * spanX + spanY * spanY) > 2.0;
+				doctorJitterAvg = (float)(sum / doctorJitterX.size());
+				doctorJitterMax = (float)peak;
+			} else {
+				doctorJitterAvg = -2.0f;
+			}
+		}
+	}
+	float pxPerMm = (area.tabletWidth.value > 0.5f && area.screenWidth.value > 0.0f) ? area.screenWidth.value / area.tabletWidth.value : 0.0f;
+	if (doctorJitterAvg >= 0.0f) {
+		if (pxPerMm > 0.0f)
+			swprintf_s(buf, L"Average deviation %.3f mm (~%d px) | Peak %.3f mm (~%d px) | Twitches %d%% | %d samples", doctorJitterAvg, (int)(doctorJitterAvg * pxPerMm + 0.5f), doctorJitterMax, (int)(doctorJitterMax * pxPerMm + 0.5f), (int)(doctorJitterJumpFrac * 100.0f + 0.5f), doctorJitterCount);
+		else
+			swprintf_s(buf, L"Average deviation %.3f mm | Peak %.3f mm | Twitches %d%% | %d samples", doctorJitterAvg, doctorJitterMax, (int)(doctorJitterJumpFrac * 100.0f + 0.5f), doctorJitterCount);
+		renderer.DrawText(buf, cx + 4, y, cw - 8, 20, Theme::TextSecondary(), renderer.pFontSmall);
+		y += 24;
+		// nobody holds a pen perfectly still, so we judge by the average and the twitch share, not by the peaks
+		bool solid = doctorJitterAvg < 0.05f && doctorJitterJumpFrac < 0.02f;
+		bool normal = doctorJitterAvg < 0.15f && doctorJitterJumpFrac < 0.08f;
+		bool noticeable = doctorJitterAvg < 0.35f && doctorJitterJumpFrac < 0.20f;
+		const wchar_t* verdict = doctorJitterMoved ? L"Invalid test: the pen moved - hold it still in one spot and run again."
+			: solid ? L"Verdict: excellent - the pen sits rock solid."
+			: normal ? L"Verdict: normal - slight hand tremor, nothing to fix."
+			: noticeable ? L"Verdict: noticeable jitter - try Jitter Stabilizer, Smoothing or Antichatter."
+			: L"Verdict: high jitter - enable Jitter Stabilizer, Smoothing or Antichatter, also check the USB port and cable.";
+		D2D1_COLOR_F verdictColor = doctorJitterMoved || noticeable ? Theme::Warning() : (solid || normal ? Theme::Success() : Theme::Error());
+		renderer.DrawText(verdict, cx + 4, y, cw - 8, 36, verdictColor, renderer.pFontSmall);
+		y += 40;
+		// many micro-moves in place are not always the hand: overdone filters snap in steps too
+		renderer.DrawText(L"Note: constant micro-moves in one spot are not always hand tremor - overly strong filters (Smoothing, Antichatter, Jitter Stabilizer radius) make the cursor snap in small steps. Run the test once with all filters off and compare.", cx + 4, y, cw - 8, 48, Theme::TextMuted(), renderer.pFontSmall);
+		y += 52;
+	} else if (doctorJitterAvg <= -2.0f) {
+		renderer.DrawText(L"Not enough samples - keep the pen still on the tablet for 5 seconds.", cx + 4, y, cw - 8, 24, Theme::Warning(), renderer.pFontSmall);
+		y += 28;
+	}
+	y += 12;
+
+	doctorContentH = (y + doctorScrollY) - yStart + 40;
+	ClampScrollOffsets();
+}
+
 
 void AetherApp::DrawAboutPanel() {
 	float cx = Theme::Size::SidebarWidth + Theme::Size::Padding;
@@ -7096,9 +7905,10 @@ void AetherApp::DrawStatusBar() {
 	renderer.FillRect(0, y, w, h, Theme::BgSurface());
 	renderer.DrawLine(0, y, w, y, Theme::BorderSubtle());
 
-	D2D1_COLOR_F statusColor = driver.isConnected ? Theme::Success() : Theme::TextMuted();
+	D2D1_COLOR_F statusColor = (driver.isConnected && driver.tabletConnected.load()) ? Theme::Success() : Theme::TextMuted();
 	renderer.FillCircle(18, y + h * 0.5f, 3.0f, statusColor);
-	const wchar_t* statusText = driver.isConnected ? L"Connected" : L"Not connected";
+	bool tabletOk2 = driver.isConnected && driver.tabletConnected.load();
+	const wchar_t* statusText = tabletOk2 ? L"Connected" : (driver.isConnected ? L"No Tablet" : L"Not connected");
 	renderer.DrawText(statusText, 28, y, 120, h, statusColor, renderer.pFontSmall);
 
 	if (driver.isConnected) {
@@ -7117,7 +7927,7 @@ void AetherApp::DrawStatusBar() {
 	if (w > 720.0f) {
 		wchar_t hzText[64];
 		swprintf_s(hzText, L"%.0f Hz", overclockHz.value);
-		renderer.DrawText(L"Overclock", w - 178, y, 74, h, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
+		renderer.DrawText(L"Interpolation", w - 208, y, 104, h, Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignRight);
 		renderer.DrawText(overclockEnabled.value ? hzText : L"off", w - 96, y, 82, h,
 			overclockEnabled.value ? Theme::AccentPrimary() : Theme::TextMuted(),
 			renderer.pFontSmall, Renderer::AlignLeft);

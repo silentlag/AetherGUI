@@ -102,6 +102,25 @@ public:
 	bool twinkleStarsInitialized = false;
 
 	int particleStyle = 0;
+	int accentAnimMode = 0;
+	int animSpeedMode = 0;
+	std::wstring bgImagePath;
+	ID2D1Bitmap* bgImageBitmap = nullptr;
+	bool bgImageLoaded = false;
+	bool bgImageFailed = false;
+	wchar_t bgImageErrorText[96] = L"";
+	std::thread bgReadThread;
+	std::vector<unsigned char> bgPixels;
+	std::atomic<bool> bgReadDone{ false };
+	bool bgReadOk = false;
+	UINT bgPixelW = 0, bgPixelH = 0;
+	UINT bgBitmapGen = 0;
+	UINT bgDecodeMax = 0;
+	bool bgRetriedPath = false;
+	bool bgReadWasCache = false;
+	std::chrono::steady_clock::time_point lastActivityTime{};
+	float accentAnimT = 0.0f;
+	float uiAccentBaseR = 0.498f, uiAccentBaseG = 0.608f, uiAccentBaseB = 0.831f;
 	struct Firefly {
 		float x, y;
 		float baseX, baseY;
@@ -182,6 +201,7 @@ public:
 
 	RadioGroup outputMode;
 	Slider dpiScale;
+	Slider bgImageOpacity;
 
 	CycleSelector buttonTip;
 	CycleSelector buttonBottom;
@@ -209,7 +229,14 @@ public:
 	Button updateLaterBtn;
 	Button runtimeMissingOpenBtn;
 	Button runtimeMissingLaterBtn;
+	Button vmultiMissingOpenBtn;
+	Button vmultiMissingLaterBtn;
+	Button doctorScanBtn;
+	Button doctorJitterBtn;
 	Button installPluginBtn;
+	Button installLuaPluginBtn;
+	Button bgImageBtn;
+	Button bgClearBtn;
 	Button installSourcePluginBtn;
 	Button reloadPluginBtn;
 	Button listPluginBtn;
@@ -279,8 +306,12 @@ public:
 	std::wstring updateReleaseUrl;
 	bool runtimeMissingModalOpen = false;
 	std::wstring missingRuntimeNames;
+	bool vmultiMissingModalOpen = false;
+	std::wstring vmultiMissingModeName;
 	bool CheckVCRedist();
 	void DrawRuntimeMissingModal();
+	void DrawVMultiMissingModal();
+	void CheckVMultiModeSelected();
 	float pluginCatalogScrollY = 0.0f;
 	float pluginCatalogDragStartY = 0.0f;
 	float pluginCatalogDragStartOffset = 0.0f;
@@ -340,10 +371,25 @@ public:
 	float filterScrollY = 0;
 	float settingsScrollY = 0;
 	float brushScrollY = 0;
+	float doctorScrollY = 0;
 	float areaContentH = 0;
 	float filterContentH = 0;
 	float settingsContentH = 0;
 	float brushContentH = 0;
+	float doctorContentH = 0;
+	std::vector<std::wstring> doctorConflicts;
+	bool doctorScanned = false;
+	bool doctorJitterRunning = false;
+	float doctorJitterElapsed = 0.0f;
+	std::vector<float> doctorJitterX;
+	std::vector<float> doctorJitterY;
+	float doctorJitterAvg = -1.0f;
+	float doctorJitterMax = -1.0f;
+	int doctorJitterCount = 0;
+	bool doctorJitterMoved = false;
+	float doctorJitterJumpFrac = 0.0f;
+	std::vector<float> doctorPressureHistory;
+	float doctorPeakPressure = 0.0f;
 
 	Button displayPrevBtn;
 	Button displayNextBtn;
@@ -562,12 +608,20 @@ public:
 
 	void StartCalibration();
 	void TickCalibration();
+	void UpdateAccentAnimation();
+	void DrawSegmentedRow(const wchar_t* const* names, int count, int* value, float x, float y, float w);
+	void ApplyAnimationSpeedMode();
+	bool ChooseBackgroundImage();
+	std::wstring GetBgCachePath();
+	void KickBgRead(const std::wstring& path);
+	bool NeedsFullFrameRate() const;
 	void DrawCalibrationModal();
 	void ApplyCalibrationResult();
 
 private:
 
 	bool InstallPluginWithDialog();
+	bool InstallLuaPluginWithDialog();
 
 	bool InstallPluginSourceWithDialog();
 
@@ -624,6 +678,9 @@ private:
 	void DrawSettingsPanel();
 
 	void DrawAboutPanel();
+	void DrawDoctorPanel();
+	void DoctorScanConflicts();
+	void DoctorKillProcess(const std::wstring& name);
 
 	void DrawBrushPanel();
 

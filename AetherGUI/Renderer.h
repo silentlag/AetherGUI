@@ -65,12 +65,16 @@ public:
 	void FillRoundedRectGradientH(float x, float y, float w, float h, float radius,
 		D2D1_COLOR_F leftColor, D2D1_COLOR_F rightColor);
 
+	UINT deviceGeneration = 0;
+bool LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize = 0, HRESULT* outHr = nullptr);
+	bool LoadBitmapFromMemory(const unsigned char* data, SIZE_T size, ID2D1Bitmap** bitmap, UINT maxSize = 0, HRESULT* outHr = nullptr);
+ID2D1Bitmap* CreateBitmapFromPixels(const unsigned char* pixels, UINT w, UINT h, HRESULT* outHr = nullptr);
+
 private:
 
 	void TryLoadPrivateFont();
 
 	void TryLoadLogoBitmap();
-	bool LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize = 0);
 
 	bool CreateTextFormats();
 

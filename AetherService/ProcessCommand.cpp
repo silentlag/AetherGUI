@@ -532,7 +532,6 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 	else if (cmd->is("TabletArea") || cmd->is("Area")) {
-		if (!CheckTablet()) return true;
 		mapper->areaTablet.width = cmd->GetDouble(0, mapper->areaTablet.width);
 		mapper->areaTablet.height = cmd->GetDouble(1, mapper->areaTablet.height);
 		mapper->areaTablet.x = cmd->GetDouble(2, mapper->areaTablet.x);
@@ -660,7 +659,6 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 	else if (cmd->is("ScreenArea") || cmd->is("Screen")) {
-		if (!CheckTablet()) return true;
 		mapper->areaScreen.width = cmd->GetDouble(0, mapper->areaScreen.width);
 		mapper->areaScreen.height = cmd->GetDouble(1, mapper->areaScreen.height);
 		mapper->areaScreen.x = cmd->GetDouble(2, mapper->areaScreen.x);
@@ -773,7 +771,6 @@ bool ProcessCommand(CommandLine *cmd) {
 	}
 
 	else if (cmd->is("Rotate")) {
-		if (!CheckTablet()) return true;
 		double value = cmd->GetDouble(0, 0);
 		mapper->SetRotation(value);
 		LOG_INFO("Rotation matrix = [%f,%f,%f,%f]\n",
@@ -1721,6 +1718,7 @@ void LogInformation() {
 }
 
 void LogStatus() {
+	LOG_STATUS("TABLET_STATE %d\n", tablet->isOpen ? 1 : 0);
 	LOG_STATUS("TABLET %s\n", tablet->name.c_str());
 
 	if (tablet->hidDevice != NULL) {

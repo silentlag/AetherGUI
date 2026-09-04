@@ -34,17 +34,62 @@ void Renderer::TryLoadPrivateFont() {
 	}
 }
 
-bool Renderer::LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize) {
-	if (!pWICFactory || !pRT || !bitmap)
+bool Renderer::LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize, HRESULT* outHr) {
+	if (outHr) *outHr = S_OK;
+	std::ifstream in(path.c_str(), std::ios::binary);
+	if (!in.is_open()) {
+		if (outHr) *outHr = HRESULT_FROM_WIN32(ERROR_OPEN_FAILED);
 		return false;
+	}
+	in.seekg(0, std::ios::end);
+	std::streamoff len = in.tellg();
+	in.seekg(0, std::ios::beg);
+	if (len <= 0 || len > 256 * 1024 * 1024) {
+		if (outHr) *outHr = E_INVALIDARG;
+		return false;
+	}
+	std::vector<unsigned char> bytes((size_t)len);
+	in.read((char*)bytes.data(), (std::streamsize)len);
+	if (in.gcount() != (std::streamsize)len) {
+		if (outHr) *outHr = HRESULT_FROM_WIN32(ERROR_READ_FAULT);
+		return false;
+	}
+	return LoadBitmapFromMemory(bytes.data(), (SIZE_T)len, bitmap, maxSize, outHr);
+}
 
+bool Renderer::LoadBitmapFromMemory(const unsigned char* data, SIZE_T size, ID2D1Bitmap** bitmap, UINT maxSize, HRESULT* outHr) {
+	if (outHr) *outHr = S_OK;
+	// self-heal: recreate whatever died since startup instead of giving up
+	if (!pWICFactory)
+		CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pWICFactory));
+	if ((!pRT || !pBrush) && pFactory)
+		CreateDeviceResources();
+	if (!pWICFactory || !pRT || !bitmap) {
+		if (outHr) *outHr = !pWICFactory ? (HRESULT)0x8000B001 : (!pRT ? (HRESULT)0x8000B002 : (HRESULT)0x8000B003);
+		return false;
+	}
+	if (!data || size == 0) {
+		if (outHr) *outHr = E_INVALIDARG;
+		return false;
+	}
+	HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, size);
+	if (!mem) { if (outHr) *outHr = E_OUTOFMEMORY; return false; }
+	void* dst = GlobalLock(mem);
+	if (!dst) { GlobalFree(mem); if (outHr) *outHr = E_OUTOFMEMORY; return false; }
+	memcpy(dst, data, size);
+	GlobalUnlock(mem);
+
+	IStream* stream = nullptr;
 	IWICBitmapDecoder* decoder = nullptr;
 	IWICBitmapFrameDecode* frame = nullptr;
 	IWICBitmapScaler* scaler = nullptr;
 	IWICFormatConverter* converter = nullptr;
 
-	HRESULT hr = pWICFactory->CreateDecoderFromFilename(
-		path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder);
+	HRESULT hr = CreateStreamOnHGlobal(mem, TRUE, &stream);
+	if (outHr) *outHr = hr;
+	if (SUCCEEDED(hr))
+		hr = pWICFactory->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnLoad, &decoder);
+	if (outHr) *outHr = hr;
 	if (SUCCEEDED(hr))
 		hr = decoder->GetFrame(0, &frame);
 
@@ -79,7 +124,27 @@ bool Renderer::LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap
 	SafeRelease(&scaler);
 	SafeRelease(&frame);
 	SafeRelease(&decoder);
+	SafeRelease(&stream);
+	if (outHr) *outHr = hr;
 	return SUCCEEDED(hr);
+}
+
+ID2D1Bitmap* Renderer::CreateBitmapFromPixels(const unsigned char* pixels, UINT w, UINT h, HRESULT* outHr) {
+	if (outHr) *outHr = S_OK;
+	if (!pWICFactory)
+		CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pWICFactory));
+	if ((!pRT || !pBrush) && pFactory)
+		CreateDeviceResources();
+	if (!pRT || !pixels || w == 0 || h == 0) {
+		if (outHr) *outHr = E_INVALIDARG;
+		return nullptr;
+	}
+	D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
+		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+	ID2D1Bitmap* bmp = nullptr;
+	HRESULT hr = pRT->CreateBitmap(D2D1::SizeU(w, h), pixels, (UINT32)w * 4, props, &bmp);
+	if (outHr) *outHr = hr;
+	return SUCCEEDED(hr) ? bmp : nullptr;
 }
 
 void Renderer::TryLoadLogoBitmap() {
@@ -163,6 +228,7 @@ bool Renderer::CreateDeviceResources() {
 
 	TryLoadLogoBitmap();
 
+	deviceGeneration++;
 	deviceResourcesValid = true;
 	return true;
 }

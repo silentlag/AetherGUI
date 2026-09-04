@@ -136,5 +136,6 @@ public:
 	bool Write(void *buffer, int length);
 	bool Read(void *buffer, int length);
 	void CloseDevice();
+	bool ReopenDevice();
 
 };

@@ -271,9 +271,15 @@ namespace Theme {
 	}
 
 	namespace Anim {
-		constexpr float Speed = 8.0f;
-		constexpr float SpeedFast = 14.0f;
-		constexpr float SpeedSlow = 4.0f;
+		inline float Speed = 8.0f;
+		inline float SpeedFast = 14.0f;
+		inline float SpeedSlow = 4.0f;
+
+		inline void SetAnimationScale(float mul) {
+			Speed = 8.0f * mul;
+			SpeedFast = 14.0f * mul;
+			SpeedSlow = 4.0f * mul;
+		}
 	}
 }
 

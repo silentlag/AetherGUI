@@ -83,4 +83,5 @@ public:
 	bool GetFeature(void *buffer, int length);
 	bool GetIndexedString(int stringId, string *result = NULL);
 	void CloseDevice();
+	bool Reopen();
 };

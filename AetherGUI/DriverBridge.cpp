@@ -277,6 +277,7 @@ bool DriverBridge::Start(const std::wstring& exePath, const std::string& configF
 
 	isRunning = true;
 	isConnected = true;
+	tabletConnected.store(false);
 
 	hReadThread = CreateThread(nullptr, 0, ReadThreadProc, this, 0, nullptr);
 	return true;
@@ -373,7 +374,14 @@ void DriverBridge::ReadLoop() {
 		}
 	}
 
+	isRunning = false;
 	isConnected = false;
+
+	if (hProcess) { CloseHandle(hProcess); hProcess = nullptr; }
+	if (hStdinWrite) { CloseHandle(hStdinWrite); hStdinWrite = nullptr; }
+	if (hStdoutRead) { CloseHandle(hStdoutRead); hStdoutRead = nullptr; }
+
+	DebugLog("BRIDGE", "Bridge marked stopped - Start() can relaunch the service now.");
 }
 
 void DriverBridge::ParseStatusLine(const std::string& line) {
@@ -394,6 +402,10 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 		return true;
 	};
 
+	if (match("TABLET_STATE", 12)) {
+		tabletConnected.store(atoi(p) > 0);
+		return;
+	}
 	if (match("TABLET", 6)) {
 		tabletName.assign(p, (size_t)(end - p));
 		return;

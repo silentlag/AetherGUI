@@ -376,6 +376,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		return 0;
 	}
 
+	case WM_APP + 8: {
+		if (windowHidden)
+			RestoreFromTray(hWnd);
+		else {
+			ShowWindow(hWnd, SW_RESTORE);
+			SetForegroundWindow(hWnd);
+		}
+		InvalidateRect(hWnd, nullptr, FALSE);
+		return 0;
+	}
+
 	case WM_SIZE:
 		if (wParam == SIZE_MINIMIZED) {
 			MinimizeToTray(hWnd);
@@ -506,9 +517,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 		HWND existing = FindWindowW(L"AetherDriverClass", nullptr);
 		if (existing) {
-			if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
-			ShowWindow(existing, SW_SHOW);
-			SetForegroundWindow(existing);
+			SendMessageW(existing, WM_APP + 8, 0, 0);
 		}
 		if (hMutex) CloseHandle(hMutex);
 		return 0;
@@ -586,6 +595,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 	if (!hWnd) return 1;
 
+	{
+		HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+		if (dwm) {
+			typedef HRESULT(WINAPI * PFN_DwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD);
+			PFN_DwmSetWindowAttribute pSet = (PFN_DwmSetWindowAttribute)GetProcAddress(dwm, "DwmSetWindowAttribute");
+			if (pSet) {
+				int roundPref = 2;
+				pSet(hWnd, 33, &roundPref, sizeof(roundPref));
+			}
+		}
+	}
+
 	HICON hIconBig = nullptr;
 	HICON hIconSmall = nullptr;
 	if (!logoPng.empty()) {
@@ -628,21 +649,39 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		}
 		if (!isRunning) break;
 
-		if (windowHidden || !IsWindowVisible(hWnd) || IsIconic(hWnd)) {
+		if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) {
 
 			MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			nextFrameTime = std::chrono::steady_clock::now();
 			continue;
 		}
 
-		auto now = std::chrono::steady_clock::now();
+			auto now = std::chrono::steady_clock::now();
 		if (now >= nextFrameTime) {
+			{
+				static float lastAccR = -1.0f, lastAccG = -1.0f, lastAccB = -1.0f;
+				D2D1_COLOR_F acc = Theme::AccentPrimary();
+				if (acc.r != lastAccR || acc.g != lastAccG || acc.b != lastAccB) {
+					lastAccR = acc.r; lastAccG = acc.g; lastAccB = acc.b;
+					static HMODULE dwmMod = GetModuleHandleW(L"dwmapi.dll");
+					if (dwmMod) {
+						typedef HRESULT(WINAPI * PFN_DwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD);
+						PFN_DwmSetWindowAttribute pSet = (PFN_DwmSetWindowAttribute)GetProcAddress(dwmMod, "DwmSetWindowAttribute");
+						if (pSet) {
+							COLORREF border = RGB((int)(acc.r * 255.0f + 0.5f), (int)(acc.g * 255.0f + 0.5f), (int)(acc.b * 255.0f + 0.5f));
+							pSet(hWnd, 34, &border, sizeof(border));
+						}
+					}
+				}
+			}
 			app.Tick();
 
 			HRESULT hr = DwmFlush();
 			if (SUCCEEDED(hr)) {
-
-				nextFrameTime = std::chrono::steady_clock::now();
+				// full DWM rate while interacting or animating, ~30fps when idle -
+				// an uncapped loop re-renders at the composition rate and pins the GPU 24/7
+				auto budget = app.NeedsFullFrameRate() ? std::chrono::milliseconds(0) : std::chrono::milliseconds(33);
+				nextFrameTime = std::chrono::steady_clock::now() + budget;
 			} else {
 				MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 				nextFrameTime = now + std::chrono::milliseconds(16);

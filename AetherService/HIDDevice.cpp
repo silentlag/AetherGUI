@@ -606,6 +606,13 @@ bool HIDDevice::ParseDigitizer(void *buffer, int length, DigitizerReport *out) {
 	return out->valid;
 }
 
+bool HIDDevice::Reopen() {
+	CloseDevice();
+	bool ok = OpenDevice(&_deviceHandle, vendorId, productId, usagePage, usage, inputReportLength, stringId, stringMatch, stringId2, stringMatch2);
+	isOpen = ok;
+	return ok;
+}
+
 void HIDDevice::CloseDevice() {
 	if (_preparsedData != NULL) {
 		HidD_FreePreparsedData(_preparsedData);
