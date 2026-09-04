@@ -23,13 +23,36 @@
 </p>
 
 <p>
-  <strong>Latest update (1.0.9):</strong> rebuilt action hotkeys on a low-level keyboard hook (on its own
+  <strong>Latest update (1.1.0):</strong> a stability pass on the background image (async loading that can
+  never freeze the window, a local cache so startup does not touch the network, and bitmaps that survive
+  minimize / restore and display switches), an honest jitter test (it detects movement instead of misreading it
+  as jitter, counts visible twitches in %, and warns that overdone filters can snap in steps), accent effects
+  that restore the exact base color when switched back to Static, and image errors now show a precise code.
+  The image is decoded at the window's own resolution (not a fixed 4096 px), so the GPU cost of a background
+  stays close to zero.
+</p>
+
+<p>
+  <strong>Also in 1.1.0:</strong> rebuilt action hotkeys on a low-level keyboard hook (on its own
   thread) so the bound key stays printable in every other app while the hotkey fires, fixed the unbind bug
   and the toggle that did not update the GUI, rewrote the Temporal Resampler as a faithful OTD Kalman port
   (no more jitter), brought Anti-chatter back, brought Prediction back as a standalone filter with
   instability + ban-risk warnings, made Reconstructor fully configurable (strength / smoothing / reverse
   EMA), added per-config auto-save toggles, fixed the Center Y corruption bug, reverted the service timer
   to fix freezes and input lag, and added a Visual C++ runtime self-check with a Download button.
+</p>
+
+<p>
+  <strong>Also new in 1.1.0:</strong> Lua 5.4 script filters (no compiler needed - the runtime is
+  built into the service), a <strong>Diagnostics</strong> tab with honest jitter and latency tests plus a one-click
+  vendor-driver conflict killer, automatic tablet reconnection (watchdog + reopen), a proper VMulti download
+  modal, area-mapping fixes (small tablet areas now map at full sensitivity, and the preview dot uses the
+  same center fallback as the drawn area), Overclock renamed to <strong>Interpolation</strong> in the UI,
+  smoothed-position status output (the preview dot and the jitter test now measure the filter output, not raw
+  reports), a single-instance restore fix (no more white window when reopening from the tray or exe),
+  rounded window corners + an accent-colored DWM border on Windows 11, and a visual customization pass:
+  12 built-in themes with a custom theme editor, breathing / rainbow accent effects, animation speed
+  control, and an optional background image with an opacity slider.
 </p>
 
 <p>
@@ -59,8 +82,9 @@
     <td align="center"><strong>Raw Input Fixes</strong><br/>Relative-mode resets · invalid-position handling · reduced event coalescing</td>
   </tr>
   <tr>
-    <td align="center"><strong>Native Plugin Manager</strong><br/>Aether Filters catalog · install DLL filters · build source filters</td>
-    <td align="center"><strong>Comfort things</strong><br/>Safe area bounds · themed updater · tray controls · DPI scaling · undo · autosave</td>
+    <td align="center"><strong>Native Plugin Manager</strong><br/>Aether Filters catalog · DLL and Lua 5.4 filters · one-click build &amp; install</td>
+    <td align="center"><strong>Diagnostics</strong><br/>Jitter &amp; latency tests · pen state monitor · vendor-driver conflict killer</td>
+    <td align="center"><strong>Comfort things</strong><br/>Safe area bounds · 12 themes + custom editor · background image · tray controls · DPI scaling · undo · autosave</td>
   </tr>
 </table>
 
@@ -161,7 +185,7 @@
   <tr>
     <td align="center"><strong>Wacom Intuos / Intuos Pro</strong></td>
     <td align="center">
-      CTL-4100 · CTL-4100WL · CTL-6100 · CTL-6100WL · PTK-440 · PTK-450 · PTK-650<br/>
+      CTL-4100 · CTL-4100WL · CTL-6100 · CTL-6100WL · PTK-440 · PTK-450 · PTK-470 · PTK-650<br/>
       PTH-450 · PTH-451 · PTH-460 · PTH-650 · PTH-651 · PTH-660 · PTH-850 · PTH-851 · PTH-860
     </td>
   </tr>
@@ -231,8 +255,28 @@
     <td align="center">Requires the optional <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a>.</td>
   </tr>
   <tr>
-    <td align="center"><strong>High polling / overclock</strong></td>
-    <td align="center">Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
+    <td align="center"><strong>High polling / Interpolation</strong></td>
+    <td align="center">Formerly labelled Overclock in the UI. Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Diagnostics tab</strong></td>
+    <td align="center">Built-in jitter test (average deviation in mm/px with per-verdict advice) and latency test (average / usual / worst spike), live pen state, driver status, and a one-click killer for conflicting vendor tablet drivers.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Automatic reconnection</strong></td>
+    <td align="center">The service watches the tablet handle. If the device drops (USB hiccup, sleep/wake), a watchdog reopens it and the GUI keeps polling status without a restart.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Area mapping accuracy</strong></td>
+    <td align="center">Small tablet areas keep their full sensitivity: the area center is normalized (with the same fallback the preview uses) before it is sent to the service, and area commands no longer require an already-open tablet.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Smoothed status output</strong></td>
+    <td align="center">The pen position published to the GUI (preview dot, jitter test) is the output of the timed filters, not raw reports - with a freshness fallback to raw when filters are off.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Visual customization</strong></td>
+    <td align="center">12 themes + a custom theme editor with RGB accent, breathing / rainbow accent effects, animation speed (Full / Calm / Off), and a background image with an opacity slider.</td>
   </tr>
   <tr>
     <td align="center"><strong>Pressure and pen buttons</strong></td>
@@ -287,6 +331,8 @@
 <p>
   AetherGUI includes a native plugin pipeline for custom packet filters. Plugins are installed into the local
   <code>plugins/</code> folder next to the built application and can be enabled, disabled, configured, reloaded, or removed from the GUI.
+  Two formats are supported: <strong>native DLLs</strong> (C/C++) and <strong>Lua 5.4 scripts</strong> - the Lua runtime is built into the service,
+  so script filters need no compiler or extra install. See <a href="PLUGIN_API.md">PLUGIN_API.md</a> for the full API reference and examples.
   Source filters can be added manually through <strong>Filters -> Plugins -> Build Source</strong>.
   The Plugin Manager intentionally shows only the <strong>Aether Filters</strong> catalog; OpenTabletDriver repository browsing and automatic OTD-port mapping are not used.
 </p>
@@ -299,6 +345,10 @@
   <tr>
     <td align="center"><strong>Install DLL</strong></td>
     <td align="center">Copies a native Aether plugin DLL into an isolated plugin folder and reloads filters.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Install Lua</strong></td>
+    <td align="center">Installs a <code>.lua</code> script filter the same way - no compiler required, reload included.</td>
   </tr>
   <tr>
     <td align="center"><strong>Build Source</strong></td>
@@ -338,6 +388,18 @@
   <tr>
     <td align="center"><code>AetherGUI.sln</code></td>
     <td align="center">Visual Studio solution</td>
+  </tr>
+  <tr>
+    <td align="center"><code>AetherService/lua/</code></td>
+    <td align="center">Vendored Lua 5.4 runtime used by the service and the GUI for script filters</td>
+  </tr>
+  <tr>
+    <td align="center"><code>plugins-example/</code></td>
+    <td align="center">Moving-average filter example in both C++ and Lua, with a one-click build script</td>
+  </tr>
+  <tr>
+    <td align="center"><code>PLUGIN_API.md</code></td>
+    <td align="center">Full plugin API reference (DLL + Lua)</td>
   </tr>
 </table>
 
@@ -570,7 +632,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Cursor feels jittery</strong></td>
-    <td align="center">Try Noise Reduction, Aether Smooth, Adaptive Filter, or a native smoothing plugin.</td>
+    <td align="center">Run the jitter test in the <strong>Diagnostics</strong> tab first - it measures average deviation in mm/px and names the right fix (hand tremor is normal; hardware-level noise points at the USB port or cable). Then try Smoothing, Jitter Stabilizer, Anti-chatter, or a plugin filter.</td>
   </tr>
   <tr>
     <td align="center"><strong>Game stutters at high Hz</strong></td>
@@ -601,10 +663,38 @@
     <td align="center">Use the tray icon. The tray menu can restore the GUI, start/stop the driver, open Plugins, open Console, or exit.</td>
   </tr>
   <tr>
+    <td align="center"><strong>Window reopens white / blank</strong></td>
+    <td align="center">Fixed in this build. A second launch (or the tray Open action) now asks the running instance to restore itself instead of forcing a foreign <code>ShowWindow</code>, so the render loop never stalls on a hidden-window flag.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Left mouse button stays held after an out-of-range lift (GAOMON 1060 Pro)</strong></td>
+    <td align="center">Fixed in this build. Out-of-range reports no longer keep stale button state; pen-up is released as soon as the pen leaves the tablet.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Small tablet area feels like full area</strong></td>
+    <td align="center">Fixed in this build. The area center is normalized with the same fallback the preview uses before it is sent to the service, so a small area maps at its real sensitivity. Touch any area slider to re-send if you imported an old config.</td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Plugin does not appear (Lua)</strong></td>
+    <td align="center">Install via <strong>Install Lua</strong> or place the script at <code>plugins\&lt;name&gt;\&lt;name&gt;.lua</code>, then press Reload. Check the Console for <code>[Lua]</code> error lines - a script error disables the filter and tells you why.</td>
+  </tr>
+  <tr>
     <td align="center"><strong>Plugin catalog loads slowly</strong></td>
     <td align="center">Press Refresh only when needed. The manager now loads only the Aether Filters catalog and caches GitHub responses during the session.</td>
   </tr>
 </table>
+
+<br/>
+
+<h2>· Credits ·</h2>
+
+<p>
+  Inspired by Devocub Tablet Driver.
+  <br/>
+  Community tablet metadata and testing reports helped improve device coverage.
+</p>
+
+</div>
 
 
 
@@ -627,17 +717,5 @@ AetherGUI and AetherService are unsigned and do two things antivirus heuristics 
 - The source is open &mdash; anything an AV report claims the binary does can be verified directly in the tree.
 
 Long-term the only real fix is signing the binaries with an Authenticode certificate. That is on the roadmap.
-
-<br/>
-
-<h2>· Credits ·</h2>
-
-<p>
-  Inspired by Devocub Tablet Driver.
-  <br/>
-  Community tablet metadata and testing reports helped improve device coverage.
-</p>
-
-</div>
 
 <div align="center">
