@@ -111,7 +111,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Output backends</strong></td>
-    <td align="center">Absolute / Relative / Windows Ink / SendInput, with optional VMulti for digitizer reports. Up to 2000 Hz overclock timer with high-resolution waitable timers</td>
+    <td align="center">Absolute / Relative / Windows Ink / SendInput, with optional VMulti for digitizer reports. Up to 2000 Hz interpolation timer with high-resolution waitable timers</td>
     <td align="center">Absolute / Relative / Artist mode through native platform pointers and OTD's own filter pipeline</td>
   </tr>
   <tr>
@@ -243,7 +243,7 @@
   </tr>
   <tr>
     <td align="center"><strong>High polling / Interpolation</strong></td>
-    <td align="center">Formerly labelled Overclock in the UI. Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
+    <td align="center">Formerly labelled Interpolation in the UI. Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
   </tr>
   <tr>
     <td align="center"><strong>Diagnostics tab</strong></td>
@@ -287,7 +287,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Pen Rate Limit</strong></td>
-    <td align="center">Can cap normal packet-driven output without taking over the Overclock timer, so 2000 Hz overclock remains active when both are enabled.</td>
+    <td align="center">Can cap normal packet-driven output without taking over the Interpolation timer, so 2000 Hz interpolation remains active when both are enabled.</td>
   </tr>
   <tr>
     <td align="center"><strong>GitHub plugin catalog</strong></td>
@@ -428,7 +428,7 @@
 <p>
   Build the solution · Start <code>AetherGUI.exe</code> · Select output mode and tablet area
   <br/>
-  Tune filters, overclock settings, and native/plugin filters from the GUI
+  Tune filters, interpolation settings, and native/plugin filters from the GUI
   <br/>
   <strong>Recommended:</strong> launch <code>AetherGUI.exe</code>. Directly opening <code>AetherService.exe</code> is supported for diagnostics and will auto-start after tablet detection.
 </p>
@@ -452,7 +452,7 @@
   </tr>
   <tr>
     <td align="center"><strong>4</strong></td>
-    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, overclock, Pen Rate Limit, or native plugins as needed.</td>
+    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, interpolation, Pen Rate Limit, or native plugins as needed.</td>
   </tr>
   <tr>
     <td align="center"><strong>5</strong></td>
@@ -462,8 +462,8 @@
 
 <p>
   For games that use raw input, test both Absolute and Relative modes.
-  Keep the overclock value at the highest rate your system can handle without frame-time spikes.
-  Pen Rate Limit can be used separately for normal packet output; when Overclock is enabled, Overclock remains the active high-rate output timer.
+  Keep the interpolation value at the highest rate your system can handle without frame-time spikes.
+  Pen Rate Limit can be used separately for normal packet output; when Interpolation is enabled, Interpolation remains the active high-rate output timer.
   <br/>
   Screen Width/Height/X/Y are automatically constrained to the currently selected monitor or virtual desktop. For example, on a 1920x1080 display a 400px wide area cannot be moved past X=1520.
 </p>
@@ -623,7 +623,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Game stutters at high Hz</strong></td>
-    <td align="center">Lower overclock target to 1000-1500 Hz. Pen Rate Limit can help normal output, but it no longer takes over the Overclock rate.</td>
+    <td align="center">Lower interpolation target to 1000-1500 Hz. Pen Rate Limit can help normal output, but it no longer takes over the Interpolation rate.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin does not appear</strong></td>
