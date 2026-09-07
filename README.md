@@ -26,29 +26,6 @@
   <strong>Latest update (1.1.1):</strong> kernel timer resolution is requested at 0.5 ms for the whole service lifetime and pipeline threads avoid core 0, the Jitter Test returns to Diagnostics (drift in mm, jump percentage, clean/noisy verdict) alongside a live pressure graph, the About tab gets a floating animated logo and an in-place update check, the seventh theme slot is now "Other Text" (old <code>"success"</code> themes still load), the console scrolls/wraps/copies, and the UI scale no longer multiplies the system DPI twice</p>
 
 <p>
-  <strong>Also in 1.1.0:</strong> rebuilt action hotkeys on a low-level keyboard hook (on its own
-  thread) so the bound key stays printable in every other app while the hotkey fires, fixed the unbind bug
-  and the toggle that did not update the GUI, rewrote the Temporal Resampler as a faithful OTD Kalman port
-  (no more jitter), brought Anti-chatter back, brought Prediction back as a standalone filter with
-  instability + ban-risk warnings, made Reconstructor fully configurable (strength / smoothing / reverse
-  EMA), added per-config auto-save toggles, fixed the Center Y corruption bug, reverted the service timer
-  to fix freezes and input lag, and added a Visual C++ runtime self-check with a Download button.
-</p>
-
-<p>
-  <strong>Also new in 1.1.0:</strong> Lua 5.4 script filters (no compiler needed - the runtime is
-  built into the service), a <strong>Diagnostics</strong> tab with honest jitter and latency tests plus a one-click
-  vendor-driver conflict killer, automatic tablet reconnection (watchdog + reopen), a proper VMulti download
-  modal, area-mapping fixes (small tablet areas now map at full sensitivity, and the preview dot uses the
-  same center fallback as the drawn area), Overclock renamed to <strong>Interpolation</strong> in the UI,
-  smoothed-position status output (the preview dot and the jitter test now measure the filter output, not raw
-  reports), a single-instance restore fix (no more white window when reopening from the tray or exe),
-  rounded window corners + an accent-colored DWM border on Windows 11, and a visual customization pass:
-  12 built-in themes with a custom theme editor, breathing / rainbow accent effects, animation speed
-  control, and an optional background image with an opacity slider.
-</p>
-
-<p>
   <img src="AetherGUI/assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
 </p>
 
