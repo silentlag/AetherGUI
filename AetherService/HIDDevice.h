@@ -46,6 +46,8 @@ public:
 	USHORT productId;
 	USHORT usagePage;
 	USHORT usage;
+	// USB interface number (mi_NN in the HID path), -1 = any
+	int interfaceNumber = -1;
 	int inputReportLength;
 	int outputReportLength;
 	int featureReportLength;
@@ -64,7 +66,7 @@ public:
 		bool valid;
 	};
 
-	HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT Usage, int InputReportLength = 0, int StringId = 0, string StringMatch = "", int StringId2 = 0, string StringMatch2 = "");
+	HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT Usage, int InputReportLength = 0, int StringId = 0, string StringMatch = "", int StringId2 = 0, string StringMatch2 = "", int InterfaceNumber = -1);
 	HIDDevice();
 	~HIDDevice();
 	bool OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength = 0, int stringId = 0, string stringMatch = "", int stringId2 = 0, string stringMatch2 = "");

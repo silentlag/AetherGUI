@@ -11,7 +11,6 @@
 #include "TabletFilterReconstructor.h"
 #include "TabletFilterTemporalResampler.h"
 #include "TabletFilterAetherSmooth.h"
-#include "TabletFilterClickStabilizer.h"
 #include "TabletFilterJitterStabilizer.h"
 #include "TabletFilterLazyMouse.h"
 #include "TabletFilterTrace.h"
@@ -70,7 +69,6 @@ public:
 
 	TabletFilterAetherSmooth aetherSmooth;
 
-	TabletFilterClickStabilizer clickStabilizer;
 
 	TabletFilterJitterStabilizer jitterStabilizer;
 
@@ -118,7 +116,7 @@ public:
 	int initStringCount;
 
 	Tablet(string usbGUID, int stringId, string stringMatch);
-	Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength = 0, int stringId = 0, string stringMatch = "", int stringId2 = 0, string stringMatch2 = "");
+	Tablet(USHORT vendorId, USHORT productId, USHORT usagePage, USHORT usage, int inputReportLength = 0, int stringId = 0, string stringMatch = "", int stringId2 = 0, string stringMatch2 = "", int interfaceNumber = -1);
 	Tablet();
 	~Tablet();
 

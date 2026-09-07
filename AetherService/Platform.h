@@ -29,6 +29,10 @@ int64_t MonotonicNs();
 int64_t SleepUntilNs(int64_t deadlineNs, int64_t spinThresholdNs);
 
 void GlobalInit();
+
+// Ask the kernel for its finest tick (0.5ms) for the whole process lifetime.
+// Complements GlobalInit's timeBeginPeriod(1); returns silently if unavailable.
+void RequestFineTimerResolution();
 void GlobalShutdown();
 
 void SleepMs(unsigned ms);

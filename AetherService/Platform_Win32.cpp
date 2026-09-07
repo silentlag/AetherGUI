@@ -2,6 +2,8 @@
 #include "stdafx.h"
 #if defined(_WIN32)
 #include "Platform.h"
+#define LOG_MODULE "Timer"
+#include "Logger.h"
 
 #include <windows.h>
 #include <avrt.h>
@@ -18,8 +20,9 @@ namespace platform {
 
 namespace {
 struct WinBoost {
-	HANDLE mmcss;
-	int    oldPri;
+	HANDLE    mmcss;
+	int       oldPri;
+	DWORD_PTR oldAffinity; // 0 = affinity was not changed
 };
 
 thread_local HANDLE tlsWaitTimer = nullptr;
@@ -37,9 +40,31 @@ HANDLE GetOrCreateThreadTimer() {
 }
 }
 
+// NtSetTimerResolution: undocumented but stable since XP. timeBeginPeriod(1)
+// bottoms out at ~1ms; this reaches 0.5ms where the kernel allows it.
+void RequestFineTimerResolution() {
+	typedef long (NTAPI *NtSetTimerResolution_t)(unsigned long, unsigned char, unsigned long*);
+	typedef long (NTAPI *NtQueryTimerResolution_t)(unsigned long*, unsigned long*, unsigned long*);
+	HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+	if (ntdll == NULL) return;
+	auto ntSet = (NtSetTimerResolution_t)GetProcAddress(ntdll, "NtSetTimerResolution");
+	auto ntQuery = (NtQueryTimerResolution_t)GetProcAddress(ntdll, "NtQueryTimerResolution");
+	if (ntSet == NULL) return;
+	unsigned long minRes = 0, maxRes = 0, curRes = 0;
+	if (ntQuery != NULL) ntQuery(&minRes, &maxRes, &curRes);
+	unsigned long desired = maxRes; // finest the kernel allows (typically 5000 = 0.5ms)
+	if (desired == 0) desired = 5000;
+	unsigned long actual = 0;
+	if (ntSet(desired, 1, &actual) == 0) {
+		LOG_INFO("Timer resolution: %.2f ms requested (was %.2f ms)\n",
+			actual / 10000.0, curRes / 10000.0);
+	}
+}
+
 void GlobalInit() {
 
 	timeBeginPeriod(1);
+	RequestFineTimerResolution();
 }
 
 void GlobalShutdown() {
@@ -168,6 +193,17 @@ ThreadBoostHandle BoostCurrentThread(ThreadBoostTier tier) {
 
 	SetThreadPriority(GetCurrentThread(), targetPri);
 
+	// keep pipeline threads off core 0: it services most DPCs and IRQs,
+	// and its deferred work is what our waits queue behind
+	boost->oldAffinity = 0;
+	DWORD_PTR procMask = 0, sysMask = 0;
+	if (GetProcessAffinityMask(GetCurrentProcess(), &procMask, &sysMask)) {
+		DWORD_PTR altMask = procMask & ~(DWORD_PTR)1;
+		if (altMask != 0) {
+			boost->oldAffinity = SetThreadAffinityMask(GetCurrentThread(), altMask);
+		}
+	}
+
 	DWORD taskIndex = 0;
 	HANDLE mmcss = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
 	if (mmcss != NULL) {
@@ -185,6 +221,9 @@ void RestoreCurrentThread(ThreadBoostHandle handle) {
 		AvRevertMmThreadCharacteristics(boost->mmcss);
 	}
 	SetThreadPriority(GetCurrentThread(), boost->oldPri);
+	if (boost->oldAffinity != 0) {
+		SetThreadAffinityMask(GetCurrentThread(), boost->oldAffinity);
+	}
 	delete boost;
 }
 

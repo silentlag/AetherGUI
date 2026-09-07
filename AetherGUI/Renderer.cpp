@@ -228,6 +228,12 @@ bool Renderer::CreateDeviceResources() {
 
 	TryLoadLogoBitmap();
 
+	// a fresh HWND render target presents uninitialized (often white) content
+	// on the first WM_PAINT after a device reset - clear it dark once, right here
+	pRT->BeginDraw();
+	pRT->Clear(D2D1::ColorF(0.016f, 0.016f, 0.020f));
+	pRT->EndDraw();
+
 	deviceGeneration++;
 	deviceResourcesValid = true;
 	return true;

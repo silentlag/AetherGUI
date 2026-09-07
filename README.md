@@ -23,14 +23,7 @@
 </p>
 
 <p>
-  <strong>Latest update (1.1.0):</strong> a stability pass on the background image (async loading that can
-  never freeze the window, a local cache so startup does not touch the network, and bitmaps that survive
-  minimize / restore and display switches), an honest jitter test (it detects movement instead of misreading it
-  as jitter, counts visible twitches in %, and warns that overdone filters can snap in steps), accent effects
-  that restore the exact base color when switched back to Static, and image errors now show a precise code.
-  The image is decoded at the window's own resolution (not a fixed 4096 px), so the GPU cost of a background
-  stays close to zero.
-</p>
+  <strong>Latest update (1.1.1):</strong> kernel timer resolution is requested at 0.5 ms for the whole service lifetime and pipeline threads avoid core 0, the Jitter Test returns to Diagnostics (drift in mm, jump percentage, clean/noisy verdict) alongside a live pressure graph, the About tab gets a floating animated logo and an in-place update check, the seventh theme slot is now "Other Text" (old <code>"success"</code> themes still load), the console scrolls/wraps/copies, and the UI scale no longer multiplies the system DPI twice</p>
 
 <p>
   <strong>Also in 1.1.0:</strong> rebuilt action hotkeys on a low-level keyboard hook (on its own
@@ -40,6 +33,19 @@
   instability + ban-risk warnings, made Reconstructor fully configurable (strength / smoothing / reverse
   EMA), added per-config auto-save toggles, fixed the Center Y corruption bug, reverted the service timer
   to fix freezes and input lag, and added a Visual C++ runtime self-check with a Download button.
+</p>
+
+<p>
+  <strong>Also new in 1.1.0:</strong> Lua 5.4 script filters (no compiler needed - the runtime is
+  built into the service), a <strong>Diagnostics</strong> tab with honest jitter and latency tests plus a one-click
+  vendor-driver conflict killer, automatic tablet reconnection (watchdog + reopen), a proper VMulti download
+  modal, area-mapping fixes (small tablet areas now map at full sensitivity, and the preview dot uses the
+  same center fallback as the drawn area), Overclock renamed to <strong>Interpolation</strong> in the UI,
+  smoothed-position status output (the preview dot and the jitter test now measure the filter output, not raw
+  reports), a single-instance restore fix (no more white window when reopening from the tray or exe),
+  rounded window corners + an accent-colored DWM border on Windows 11, and a visual customization pass:
+  12 built-in themes with a custom theme editor, breathing / rainbow accent effects, animation speed
+  control, and an optional background image with an opacity slider.
 </p>
 
 <p>
@@ -106,17 +112,17 @@
   </tr>
   <tr>
     <td align="center"><strong>How the tablet is read</strong></td>
-    <td align="center">Report thread runs at <code>THREAD_PRIORITY_TIME_CRITICAL</code> registered with MMCSS <em>Pro Audio</em>, packet filters share a lock-free <code>IsTimedOutputEnabled</code> snapshot, status output is written without CRT flushes</td>
+    <td align="center">Report thread runs at <code>THREAD_PRIORITY_TIME_CRITICAL</code> registered with MMCSS <em>Pro Audio</em>, kernel timer resolution requested at 0.5 ms, pipeline threads stay off the DPC-heavy core 0, packet filters share a lock-free <code>IsTimedOutputEnabled</code> snapshot, status output is written without CRT flushes</td>
     <td align="center">.NET-managed input pipeline; quality is excellent, but the language brings a garbage collector and JIT</td>
   </tr>
   <tr>
     <td align="center"><strong>Output backends</strong></td>
-    <td align="center">Absolute / Relative / Windows Ink / SendInput, with optional VMulti for digitizer reports. Up to 2000 Hz interpolation timer with high-resolution waitable timers</td>
+    <td align="center">Absolute / Relative / Windows Ink / SendInput, with optional VMulti for digitizer reports. Up to 2000 Hz overclock timer with high-resolution waitable timers and a 0.5 ms kernel tick</td>
     <td align="center">Absolute / Relative / Artist mode through native platform pointers and OTD's own filter pipeline</td>
   </tr>
   <tr>
     <td align="center"><strong>Tablet support list</strong></td>
-    <td align="center">Embedded fallback database compiled into the service — the driver works even without external config files</td>
+    <td align="center">Embedded fallback database compiled into the service — works without external config files, and <code>scripts/gen_tablets.py</code> imports anything missing from an OpenTabletDriver checkout (interface number and device-string checks included)</td>
     <td align="center">External JSON configurations shipped alongside the daemon</td>
   </tr>
   <tr>
@@ -243,7 +249,7 @@
   </tr>
   <tr>
     <td align="center"><strong>High polling / Interpolation</strong></td>
-    <td align="center">Formerly labelled Interpolation in the UI. Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
+    <td align="center">Formerly labelled Overclock in the UI. Targets up to 2000 Hz and runs independently from Pen Rate Limit. If a game stutters or frame time spikes, try 1000 Hz or 1500 Hz.</td>
   </tr>
   <tr>
     <td align="center"><strong>Diagnostics tab</strong></td>
@@ -263,7 +269,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Visual customization</strong></td>
-    <td align="center">12 themes + a custom theme editor with RGB accent, breathing / rainbow accent effects, animation speed (Full / Calm / Off), and a background image with an opacity slider.</td>
+    <td align="center">12 built-in themes, file themes from <code>themes\*.json</code>, and a custom theme editor with RGB accent, breathing / rainbow accent effects, animation speed (Full / Calm / Off), and a background image with an opacity slider.</td>
   </tr>
   <tr>
     <td align="center"><strong>Pressure and pen buttons</strong></td>
@@ -287,7 +293,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Pen Rate Limit</strong></td>
-    <td align="center">Can cap normal packet-driven output without taking over the Interpolation timer, so 2000 Hz interpolation remains active when both are enabled.</td>
+    <td align="center">Can cap normal packet-driven output without taking over the Overclock timer, so 2000 Hz overclock remains active when both are enabled.</td>
   </tr>
   <tr>
     <td align="center"><strong>GitHub plugin catalog</strong></td>
@@ -380,6 +386,9 @@
     <td align="center"><code>AetherService/lua/</code></td>
     <td align="center">Vendored Lua 5.4 runtime used by the service and the GUI for script filters</td>
   </tr>
+  <tr><td align="center"><strong>File themes</strong></td><td align="center"><code>themes/*.json</code> - drop-in color themes (<code>#RRGGBB</code> keys, loaded at startup)</td></tr>
+  <tr><td align="center"><strong>Device database generator</strong></td><td align="center"><code>scripts/gen_tablets.py</code> - imports missing tablets from an OpenTabletDriver checkout into the embedded database</td></tr>
+  <tr><td align="center"><strong>Packaging</strong></td><td align="center"><code>scripts/package.ps1</code> - Release build + zip, CI recipe in <code>.github/workflows/</code></td></tr>
   <tr>
     <td align="center"><code>plugins-example/</code></td>
     <td align="center">Moving-average filter example in both C++ and Lua, with a one-click build script</td>
@@ -428,7 +437,7 @@
 <p>
   Build the solution · Start <code>AetherGUI.exe</code> · Select output mode and tablet area
   <br/>
-  Tune filters, interpolation settings, and native/plugin filters from the GUI
+  Tune filters, overclock settings, and native/plugin filters from the GUI
   <br/>
   <strong>Recommended:</strong> launch <code>AetherGUI.exe</code>. Directly opening <code>AetherService.exe</code> is supported for diagnostics and will auto-start after tablet detection.
 </p>
@@ -452,7 +461,7 @@
   </tr>
   <tr>
     <td align="center"><strong>4</strong></td>
-    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, interpolation, Pen Rate Limit, or native plugins as needed.</td>
+    <td align="center">Enable smoothing, Aether Smooth, prediction, adaptive filtering, overclock, Pen Rate Limit, or native plugins as needed.</td>
   </tr>
   <tr>
     <td align="center"><strong>5</strong></td>
@@ -462,8 +471,8 @@
 
 <p>
   For games that use raw input, test both Absolute and Relative modes.
-  Keep the interpolation value at the highest rate your system can handle without frame-time spikes.
-  Pen Rate Limit can be used separately for normal packet output; when Interpolation is enabled, Interpolation remains the active high-rate output timer.
+  Keep the overclock value at the highest rate your system can handle without frame-time spikes.
+  Pen Rate Limit can be used separately for normal packet output; when Overclock is enabled, Overclock remains the active high-rate output timer.
   <br/>
   Screen Width/Height/X/Y are automatically constrained to the currently selected monitor or virtual desktop. For example, on a 1920x1080 display a 400px wide area cannot be moved past X=1520.
 </p>
@@ -623,7 +632,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Game stutters at high Hz</strong></td>
-    <td align="center">Lower interpolation target to 1000-1500 Hz. Pen Rate Limit can help normal output, but it no longer takes over the Interpolation rate.</td>
+    <td align="center">Lower overclock target to 1000-1500 Hz. Pen Rate Limit can help normal output, but it no longer takes over the Overclock rate.</td>
   </tr>
   <tr>
     <td align="center"><strong>Plugin does not appear</strong></td>

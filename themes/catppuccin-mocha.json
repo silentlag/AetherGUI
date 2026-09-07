@@ -1,0 +1,15 @@
+{
+  "name": "Catppuccin Mocha",
+  "bgDeep": "#11111b",
+  "bgBase": "#181825",
+  "bgSurface": "#1e1e2e",
+  "bgElevated": "#313244",
+  "bgHover": "#45475a",
+  "textPrimary": "#cdd6f4",
+  "textSecondary": "#a6adc8",
+  "textMuted": "#6c7086",
+  "borderSubtle": "#45475a",
+  "borderNormal": "#585b70",
+  "accent": "#cba6f7",
+  "othertext": "#a6e3a1"
+}

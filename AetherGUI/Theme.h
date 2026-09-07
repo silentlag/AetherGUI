@@ -83,6 +83,9 @@ namespace Theme {
 		float borderSub[4], borderNorm[4];
 
 		float accent[3];
+
+		// green "ok" indicators; warning/error stay fixed - they mean problems
+		float success[3] = { 0.439f, 0.831f, 0.627f };
 	};
 
 	inline void ApplyTheme(const ThemeData& t) {
@@ -97,6 +100,7 @@ namespace Theme {
 		Base::BorderSubR = t.borderSub[0]; Base::BorderSubG = t.borderSub[1]; Base::BorderSubB = t.borderSub[2]; Base::BorderSubA = t.borderSub[3];
 		Base::BorderNormR = t.borderNorm[0]; Base::BorderNormG = t.borderNorm[1]; Base::BorderNormB = t.borderNorm[2]; Base::BorderNormA = t.borderNorm[3];
 		Custom::SetAccent(t.accent[0], t.accent[1], t.accent[2]);
+		Base::SuccessR = t.success[0]; Base::SuccessG = t.success[1]; Base::SuccessB = t.success[2];
 	}
 
 	namespace Themes {
@@ -223,6 +227,7 @@ namespace Theme {
 		c.borderSub[0] = Base::BorderSubR; c.borderSub[1] = Base::BorderSubG; c.borderSub[2] = Base::BorderSubB; c.borderSub[3] = Base::BorderSubA;
 		c.borderNorm[0] = Base::BorderNormR; c.borderNorm[1] = Base::BorderNormG; c.borderNorm[2] = Base::BorderNormB; c.borderNorm[3] = Base::BorderNormA;
 		c.accent[0] = Custom::AccentR; c.accent[1] = Custom::AccentG; c.accent[2] = Custom::AccentB;
+		c.success[0] = Base::SuccessR; c.success[1] = Base::SuccessG; c.success[2] = Base::SuccessB;
 	}
 
 	namespace Size {
@@ -299,3 +304,141 @@ inline D2D1_COLOR_F LerpColor(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
 inline float Clamp(float v, float lo, float hi) {
 	return (v < lo) ? lo : (v > hi) ? hi : v;
 }
+
+namespace Theme {
+
+// --- file themes (themes/*.json next to the exe) ---------------------------
+// One theme per file, flat JSON object, colors as "#RRGGBB" or "#RRGGBBAA":
+//   { "name": "Solarized", "bgDeep": "#002b36", "accent": "#b58900", "othertext": "#7bd88f" }
+// Missing keys keep the Midnight defaults.
+inline std::vector<std::wstring> FileThemeNames;
+inline std::vector<ThemeData> FileThemes;
+
+inline bool ParseHexColor(const std::string& s, float* out4) {
+	if (s.size() < 7 || s[0] != '#') return false;
+	unsigned v = 0;
+	for (size_t i = 1; i < s.size(); ++i) {
+		char c = s[i];
+		int d;
+		if (c >= '0' && c <= '9') d = c - '0';
+		else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+		else return false;
+		v = (v << 4) | (unsigned)d;
+	}
+	size_t n = s.size() - 1;
+	if (n != 6 && n != 8) return false;
+	out4[0] = ((v >> 16) & 0xFF) / 255.0f;
+	out4[1] = ((v >> 8) & 0xFF) / 255.0f;
+	out4[2] = ((v >> 0) & 0xFF) / 255.0f;
+	out4[3] = n == 8 ? ((v >> 24) & 0xFF) / 255.0f : 1.0f;
+	if (n == 6) return true;
+	out4[0] = ((v >> 24) & 0xFF) / 255.0f;
+	out4[1] = ((v >> 16) & 0xFF) / 255.0f;
+	out4[2] = ((v >> 8) & 0xFF) / 255.0f;
+	out4[3] = ((v >> 0) & 0xFF) / 255.0f;
+	return true;
+}
+
+// tiny flat-object JSON reader, enough for theme files: "key": "value" pairs
+inline bool ParseThemeJson(const std::string& text, ThemeData& out, std::wstring& name) {
+	size_t i = 0;
+	auto skipWs = [&]() { while (i < text.size() && (text[i]==' '||text[i]=='\t'||text[i]=='\r'||text[i]=='\n')) ++i; };
+	auto readStr = [&](std::string& s) {
+		skipWs();
+		if (i >= text.size() || text[i] != '"') return false;
+		++i; s.clear();
+		while (i < text.size() && text[i] != '"') {
+			char c = text[i++];
+			if (c == '\\' && i < text.size()) c = text[i++];
+			s += c;
+		}
+		if (i >= text.size()) return false;
+		++i;
+		return true;
+	};
+	skipWs();
+	if (i >= text.size() || text[i] != '{') return false;
+	++i;
+	std::string key, val;
+	while (true) {
+		skipWs();
+		if (i < text.size() && text[i] == '}') return true;
+		if (!readStr(key)) return false;
+		skipWs();
+		if (i >= text.size() || text[i] != ':') return false;
+		++i;
+		if (!readStr(val)) return false;
+		float c[4];
+		if (key == "name") {
+			int wlen = MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, nullptr, 0);
+			if (wlen > 1) {
+				name.resize(wlen - 1);
+				MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, name.data(), wlen);
+			}
+		}
+		else if (ParseHexColor(val, c)) {
+			if      (key == "bgDeep")       { out.bgDeep[0]=c[0]; out.bgDeep[1]=c[1]; out.bgDeep[2]=c[2]; }
+			else if (key == "bgBase")       { out.bgBase[0]=c[0]; out.bgBase[1]=c[1]; out.bgBase[2]=c[2]; }
+			else if (key == "bgSurface")    { out.bgSurface[0]=c[0]; out.bgSurface[1]=c[1]; out.bgSurface[2]=c[2]; }
+			else if (key == "bgElevated")   { out.bgElevated[0]=c[0]; out.bgElevated[1]=c[1]; out.bgElevated[2]=c[2]; }
+			else if (key == "bgHover")      { out.bgHover[0]=c[0]; out.bgHover[1]=c[1]; out.bgHover[2]=c[2]; }
+			else if (key == "textPrimary")  { out.textPri[0]=c[0]; out.textPri[1]=c[1]; out.textPri[2]=c[2]; }
+			else if (key == "textSecondary"){ out.textSec[0]=c[0]; out.textSec[1]=c[1]; out.textSec[2]=c[2]; }
+			else if (key == "textMuted")    { out.textMut[0]=c[0]; out.textMut[1]=c[1]; out.textMut[2]=c[2]; }
+			else if (key == "borderSubtle"){ out.borderSub[0]=c[0]; out.borderSub[1]=c[1]; out.borderSub[2]=c[2]; out.borderSub[3]=c[3]; }
+			else if (key == "borderNormal"){ out.borderNorm[0]=c[0]; out.borderNorm[1]=c[1]; out.borderNorm[2]=c[2]; out.borderNorm[3]=c[3]; }
+			else if (key == "accent")       { out.accent[0]=c[0]; out.accent[1]=c[1]; out.accent[2]=c[2]; }
+			else if (key == "othertext" || key == "success") { out.success[0]=c[0]; out.success[1]=c[1]; out.success[2]=c[2]; }
+		}
+		skipWs();
+		if (i < text.size() && text[i] == ',') { ++i; continue; }
+		if (i < text.size() && text[i] == '}') return true;
+		return false;
+	}
+}
+
+inline int LoadThemesFromFolder(const std::wstring& dir) {
+	FileThemeNames.clear();
+	FileThemes.clear();
+	std::vector<ThemeData> parsed;
+	std::vector<std::wstring> names;
+	WIN32_FIND_DATAW fd;
+	HANDLE h = FindFirstFileW((dir + L"*.json").c_str(), &fd);
+	if (h != INVALID_HANDLE_VALUE) {
+		do {
+			std::wstring path = dir + fd.cFileName;
+			std::ifstream f(path, std::ios::binary);
+			if (!f.is_open()) continue;
+			std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+			ThemeData t = Themes::Midnight;
+			std::wstring name;
+			if (ParseThemeJson(text, t, name)) {
+				if (name.empty()) {
+					std::wstring fn = fd.cFileName;
+					name = fn.substr(0, fn.rfind(L'.'));
+				}
+				parsed.push_back(t);
+				names.push_back(name);
+			}
+		} while (FindNextFileW(h, &fd));
+		FindClose(h);
+	}
+	FileThemeNames = std::move(names);
+	FileThemes = std::move(parsed);
+	for (size_t i = 0; i < FileThemes.size(); ++i)
+		FileThemes[i].name = FileThemeNames[i].c_str();
+	return (int)FileThemes.size();
+}
+
+inline int LoadThemesFromExeFolder() {
+	wchar_t exe[MAX_PATH];
+	DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+	if (n == 0 || n >= MAX_PATH) return 0;
+	std::wstring dir(exe);
+	size_t slash = dir.rfind(L'\\');
+	if (slash == std::wstring::npos) return 0;
+	return LoadThemesFromFolder(dir.substr(0, slash + 1) + L"themes\\");
+}
+
+} // namespace Theme

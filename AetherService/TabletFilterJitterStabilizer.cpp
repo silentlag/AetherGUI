@@ -25,6 +25,8 @@ void TabletFilterJitterStabilizer::Reset(Vector2D pos) {
 
 void TabletFilterJitterStabilizer::SetTarget(Vector2D vector, double h) {
 	target.Set(vector);
+	if (h > 0.01 && h < 100.0)
+		lastInterval = h;
 }
 
 void TabletFilterJitterStabilizer::SetPosition(Vector2D vector, double h) {
@@ -47,17 +49,25 @@ void TabletFilterJitterStabilizer::Update() {
 
 	double speed = hasHostTiming ? hostRawSpeed : 1e9;
 
+	// glide instead of teleport on release: rate grows with speed, so fast
+	// strokes stay instant while slow drift eases out without a visible step
+	double glideRate = 0.06 + speed * 0.5;
+	double a = 1.0 - exp(-lastInterval * glideRate);
+
 	if (speed >= releaseSpeed) {
-		latched.Set(target);
-		position.Set(target);
+		position.x += (target.x - position.x) * a;
+		position.y += (target.y - position.y) * a;
+		if (target.Distance(position) < radius * 0.5)
+			latched.Set(target);
 		return;
 	}
 
 	double dist = target.Distance(latched);
 	if (dist > radius) {
-
-		latched.Set(target);
-		position.Set(target);
+		position.x += (target.x - position.x) * a;
+		position.y += (target.y - position.y) * a;
+		if (target.Distance(position) < radius * 0.5)
+			latched.Set(target);
 		return;
 	}
 

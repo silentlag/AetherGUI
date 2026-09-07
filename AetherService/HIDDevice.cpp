@@ -47,7 +47,7 @@ static bool DeviceStringMatches(const string &value, const string &pattern) {
 	}
 }
 
-HIDDevice::HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT Usage, int InputReportLength, int StringId, string StringMatch, int StringId2, string StringMatch2) : HIDDevice() {
+HIDDevice::HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT Usage, int InputReportLength, int StringId, string StringMatch, int StringId2, string StringMatch2, int InterfaceNumber) : HIDDevice() {
 	this->vendorId = VendorId;
 	this->productId = ProductId;
 	this->usagePage = UsagePage;
@@ -57,6 +57,7 @@ HIDDevice::HIDDevice(USHORT VendorId, USHORT ProductId, USHORT UsagePage, USHORT
 	this->stringMatch = StringMatch;
 	this->stringId2 = StringId2;
 	this->stringMatch2 = StringMatch2;
+	this->interfaceNumber = InterfaceNumber;
 	if (this->OpenDevice(&this->_deviceHandle, this->vendorId, this->productId, this->usagePage, this->usage, this->inputReportLength, this->stringId, this->stringMatch, this->stringId2, this->stringMatch2)) {
 		isOpen = true;
 	}
@@ -158,6 +159,11 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 			bool pathLooksVendor =
 				_tcsstr(deviceInterfaceDetailData->DevicePath, vendorLower) != NULL ||
 				_tcsstr(deviceInterfaceDetailData->DevicePath, vendorUpper) != NULL;
+			int deviceInterface = 0;
+			const TCHAR* miTag = _tcsstr(deviceInterfaceDetailData->DevicePath, _T("mi_"));
+			if (miTag != NULL)
+				deviceInterface = (int)_tcstol(miTag + 3, NULL, 16);
+			bool interfaceMatches = (this->interfaceNumber < 0) || (deviceInterface == this->interfaceNumber);
 			if (pathLooksVendor) {
 				vendorPathCount++;
 			}
@@ -270,7 +276,7 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 							DeviceStringMatches(indexedString, stringMatch2);
 					}
 
-					if (usageMatches && inputLengthMatches && stringMatches) {
+					if (usageMatches && inputLengthMatches && stringMatches && interfaceMatches) {
 						score = usageWildcard ? 50 : 100;
 						if (inputReportLength > 0) {
 							score += 20 - inputLengthDelta;
@@ -282,7 +288,7 @@ bool HIDDevice::OpenDevice(HANDLE *handle, USHORT vendorId, USHORT productId, US
 							score += 30;
 						}
 					}
-					else if (usageWildcard && inputReportLength <= 0 && hidCapabilities.InputReportByteLength > 0) {
+					else if (usageWildcard && interfaceMatches && inputReportLength <= 0 && hidCapabilities.InputReportByteLength > 0) {
 
 						score = 10;
 					}

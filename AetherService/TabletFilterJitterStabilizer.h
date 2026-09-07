@@ -24,4 +24,5 @@ private:
 	Vector2D target;
 	Vector2D latched;
 	bool     hasLatch;
+	double   lastInterval = 1.0;
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include "Framework.h"
 #include "Renderer.h"
 #include "Controls.h"
@@ -62,7 +63,8 @@ public:
 	TabBar sidebar;
 	int currentTab = 0;
 
-	float tabTransitionT = 1.0f;
+	float tabSpringT = 1.0f;
+	float tabSpringV = 0.0f;
 	int prevTab = 0;
 	float tabSlideOffset = 0.0f;
 	float tabFadeAlpha = 1.0f;
@@ -115,6 +117,8 @@ public:
 	bool bgReadOk = false;
 	UINT bgPixelW = 0, bgPixelH = 0;
 	UINT bgBitmapGen = 0;
+	std::vector<unsigned char> bgLastPixels;
+	UINT bgLastW = 0, bgLastH = 0;
 	UINT bgDecodeMax = 0;
 	bool bgRetriedPath = false;
 	bool bgReadWasCache = false;
@@ -232,6 +236,9 @@ public:
 	Button vmultiMissingOpenBtn;
 	Button vmultiMissingLaterBtn;
 	Button doctorScanBtn;
+	Button aboutUpdateBtn;
+	std::atomic<int> aboutUpdateState{0};
+	Button doctorResetBtn;
 	Button doctorJitterBtn;
 	Button installPluginBtn;
 	Button installLuaPluginBtn;
@@ -343,6 +350,12 @@ public:
 	float lastSeenTabletHeight = -1.0f;
 
 	float consoleScrollY = 0;
+	std::vector<float> consoleLineH;
+	int consoleLayoutCount = -1;
+	float consoleLayoutW = -1;
+	float consoleRectX = 0, consoleRectY = 0, consoleRectW = 0, consoleRectH = 0;
+	int consoleSelStart = -1, consoleSelEnd = -1;
+	bool consoleSelecting = false;
 	TextInput consoleInput;
 	std::vector<std::string> commandHistory;
 	int commandHistoryIdx = 0;
@@ -406,15 +419,12 @@ public:
 		Slider snappingOuter;
 	} aether;
 
-	struct {
-		Toggle enabled;
-		Slider holdMs;
-	} clickStabilize;
 
-	static const int MAX_THEMES = 14;
+	static const int MAX_THEMES = 24;
 	const Theme::ThemeData* uiThemeDefaults[MAX_THEMES];
 	Theme::ThemeData uiThemes[MAX_THEMES];
 	int uiThemeCount = 0;
+	bool themeEdited[MAX_THEMES] = {};
 	int currentTheme = 0;
 	float themeHoverT[MAX_THEMES] = {};
 
@@ -425,9 +435,9 @@ public:
 	ColorPicker slotPicker;
 	TextInput slotHexInput;
 
-	static const int THEME_SLOT_COUNT = 6;
+	static const int THEME_SLOT_COUNT = 7;
 	const wchar_t* themeSlotNames[THEME_SLOT_COUNT] = {
-		L"Deep BG", L"Base BG", L"Surface", L"Elevated", L"Text", L"Accent"
+		L"Deep BG", L"Base BG", L"Surface", L"Elevated", L"Text", L"Accent", L"Other Text"
 	};
 
 	void GetThemeSlotColor(Theme::ThemeData& t, int slot, float& r, float& g, float& b);
@@ -452,6 +462,8 @@ public:
 	void OnMouseMove(float x, float y);
 
 	void OnMouseDown();
+	int ConsoleHitTest(float x, float y);
+	void CopyConsoleSelectionToClipboard();
 
 	void OnMouseUp();
 
