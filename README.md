@@ -23,7 +23,7 @@
 </p>
 
 <p>
-  <strong>Latest update (1.1.1):</strong> kernel timer resolution is requested at 0.5 ms for the whole service lifetime and pipeline threads avoid core 0, the Jitter Test returns to Diagnostics (drift in mm, jump percentage, clean/noisy verdict) alongside a live pressure graph, the About tab gets a floating animated logo and an in-place update check, the seventh theme slot is now "Other Text" (old <code>"success"</code> themes still load), the console scrolls/wraps/copies, and the UI scale no longer multiplies the system DPI twice</p>
+  <strong>Latest update (1.1.1):</strong> kernel timer resolution is requested at 0.5 ms for the whole service lifetime and pipeline threads avoid core 0, the Jitter Test returns to Diagnostics (drift in mm, jump percentage, clean/noisy verdict) alongside a live pressure graph, the About tab gets a floating animated logo and an in-place update check, the seventh theme slot is now "Other Text" the console scrolls/wraps/copies, and the UI scale no longer multiplies the system DPI twice</p>
 
 <p>
   <img src="AetherGUI/assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
