@@ -1,4 +1,6 @@
 #include "stdafx.h"
+#include <powrprof.h>
+#pragma comment(lib, "Powrprof.lib")
 
 #include <csignal>
 
@@ -49,6 +51,9 @@ thread *tabletThread;
 chrono::high_resolution_clock::time_point timeBegin = chrono::high_resolution_clock::now();
 chrono::high_resolution_clock::time_point lastMovement = chrono::high_resolution_clock::now();
 Vector2D prevPos;
+
+atomic<bool> g_debugReports(false);
+static atomic<bool> g_forceReinit(false);
 
 static atomic<bool> timedOutputEnabledCache{false};
 
@@ -569,6 +574,9 @@ void RunTabletThread() {
 
 	while (true) {
 
+		if (g_forceReinit.exchange(false) && tablet->isOpen) {
+			tablet->CloseDevice();
+		}
 		if (!tablet->isOpen) {
 			auto sinceLast = chrono::high_resolution_clock::now() - lastReinitAttempt;
 			if (sinceLast >= reinitInterval) {
@@ -584,7 +592,33 @@ void RunTabletThread() {
 
 		status = tablet->ReadPosition();
 
+		// fine (0.5ms) timer only while reports actually flow; held forever it
+		// raises the OS tick rate 4x system-wide and throttles machines
+		{
+			static bool fineTimerOn = false;
+			static auto lastFineActivity = chrono::high_resolution_clock::now();
+			if (status == Tablet::PacketValid) {
+				lastFineActivity = chrono::high_resolution_clock::now();
+				if (!fineTimerOn) {
+					platform::RequestFineTimerResolution(true);
+					fineTimerOn = true;
+				}
+			} else if (fineTimerOn &&
+				chrono::high_resolution_clock::now() - lastFineActivity > chrono::seconds(3)) {
+				platform::RequestFineTimerResolution(false);
+				fineTimerOn = false;
+			}
+		}
+
 		if (status == Tablet::PacketValid) {
+			if (g_debugReports.load()) {
+				int n = tablet->lastReportLen;
+				if (n > 32) n = 32;
+				char hex[128];
+				int o = 0;
+				for (int i = 0; i < n; i++) o += sprintf_s(hex + o, sizeof(hex) - o, "%02X ", tablet->lastReport[i]);
+				printf("[HID] %d bytes: %s\n", tablet->lastReportLen, hex);
+			}
 			g_packetReadTimeNs.store(NowNs(), memory_order_relaxed);
 			g_packetTimingArmed.store(true, memory_order_relaxed);
 		}
@@ -1133,6 +1167,20 @@ int main(int argc, char**argv) {
 
 	mapper = new ScreenMapper(tablet);
 	mapper->SetRotation(0);
+
+	// reinit the tablet right after the system wakes up - handles sometimes survive
+	// sleep in a half-broken state and the watchdog would only catch it later
+	{
+		static DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS sleepParams = {};
+		sleepParams.Callback = [](HPOWERNOTIFY, ULONG type, PVOID) -> ULONG {
+			if (type == PBT_APMRESUMEAUTOMATIC || type == PBT_APMRESUMESUSPEND) {
+				g_forceReinit.store(true);
+			}
+			return TRUE;
+		};
+		HPOWERNOTIFY sleepNotify = nullptr;
+		PowerRegisterSuspendResumeNotification(DEVICE_NOTIFY_CALLBACK, &sleepParams, &sleepNotify);
+	}
 
 	platform::GlobalInit();
 

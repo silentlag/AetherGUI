@@ -233,6 +233,9 @@ void TabletFilterPlugin::Reset(Vector2D pos) {
 
 bool TabletFilterPlugin::SetDoubleOption(const std::string& key, double value) {
 	std::lock_guard<std::mutex> lock(pluginMutex);
+	// remember the unit scale for the clamp, still forward it to the plugin
+	if (key == "tablet.mmScaleX" && value > 0.0) hostMmScaleX = value;
+	if (key == "tablet.mmScaleY" && value > 0.0) hostMmScaleY = value;
 	if (setDoubleFn == NULL)
 		return false;
 	int result = 0;
@@ -269,9 +272,15 @@ void TabletFilterPlugin::Update() {
 	auto now = std::chrono::high_resolution_clock::now();
 	double dt = (now - lastTime).count() / 1000000000.0;
 	lastTime = now;
-	if (firstUpdate || dt <= 0 || dt > 0.1) {
-		dt = 0.001;
+	// keep the real gap: plugins like radial follow detect pen re-entry via dt
+	// (in OTD a stopwatch measures it); clamping big gaps to 1ms hid pen lifts
+	if (firstUpdate) {
+		dt = 1.0;
 		firstUpdate = false;
+	} else if (dt <= 0) {
+		dt = 0.001;
+	} else if (dt > 10.0) {
+		dt = 10.0;
 	}
 
 	AetherPluginPoint point = {};
@@ -311,7 +320,11 @@ void TabletFilterPlugin::Update() {
 	double dx = point.x - realX;
 	double dy = point.y - realY;
 	double dist = sqrt(dx * dx + dy * dy);
-	double maxR = g_pluginSecurity.clampRadiusMm;
+	// the clamp limit is in mm while positions are tablet units - convert first
+	// or every plugin that lags behind (radial follow) gets squeezed every report
+	double mmScale = 0.5 * (hostMmScaleX + hostMmScaleY);
+	if (mmScale <= 0.0) mmScale = 1.0;
+	double maxR = g_pluginSecurity.clampRadiusMm / mmScale;
 	if (maxR < 0.0) maxR = 0.0;
 	if (dist > maxR && dist > 0.0) {
 		double scale = maxR / dist;

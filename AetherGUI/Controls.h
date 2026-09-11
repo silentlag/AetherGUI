@@ -163,8 +163,10 @@ struct Toggle {
 
 	bool Update(float mx, float my, bool clicked, float dt) {
 		isHovered = PointInRect(mx, my, x, y, Theme::Size::ToggleWidth + 120, Theme::Size::ToggleHeight);
-		hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
-		animT = Lerp(animT, value ? 1.0f : 0.0f, dt * Theme::Anim::Speed);
+		if (Theme::Anim::SpeedFast <= 0.0f) hoverT = isHovered ? 1.0f : 0.0f;
+		else hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
+		if (Theme::Anim::Speed <= 0.0f) animT = value ? 1.0f : 0.0f;
+		else animT = Lerp(animT, value ? 1.0f : 0.0f, dt * Theme::Anim::Speed);
 		if (isHovered && tooltip[0]) {
 
 			Tooltip::ShowFor(x, y, Theme::Size::ToggleWidth + 120, Theme::Size::ToggleHeight,
@@ -300,8 +302,13 @@ struct Slider {
 		float thumbR = Theme::Size::SliderThumbRadius;
 		isHovered = PointInRect(mx, my, x, trackY - thumbR, width, trackH + thumbR * 2);
 		bool valueHovered = PointInRect(mx, my, x + width * 0.6f, y, width * 0.4f, 18);
-		hoverT = Lerp(hoverT, isHovered || isDragging ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
-		animValue = Lerp(animValue, value, dt * Theme::Anim::SpeedFast);
+		if (Theme::Anim::SpeedFast <= 0.0f) {
+			hoverT = (isHovered || isDragging) ? 1.0f : 0.0f;
+			animValue = value;
+		} else {
+			hoverT = Lerp(hoverT, isHovered || isDragging ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
+			animValue = Lerp(animValue, value, dt * Theme::Anim::SpeedFast);
+		}
 		editBlinkT += dt;
 		if (isHovered && tooltip[0]) Tooltip::ShowFor(x, trackY - thumbR, width, trackH + thumbR * 2,
 			mx, my, tooltip, dt);
@@ -429,7 +436,7 @@ struct Slider {
 				parseBuffer[i] = L'.';
 		}
 		float v = Clamp((float)_wtof(parseBuffer), minVal, maxVal);
-		bool changed = fabsf(v - value) > 0.0001f;
+		bool changed = fabsf(v - value) > 0.0000005f; // allow millionths
 		value = v; animValue = v; ClearSelection();
 		return changed;
 	}
@@ -543,8 +550,13 @@ struct Button {
 
 	bool Update(float mx, float my, bool clicked, float dt) {
 		isHovered = PointInRect(mx, my, x, y, width, height);
-		hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
-		pressT = Lerp(pressT, (isHovered && clicked) ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast * 2);
+		if (Theme::Anim::SpeedFast <= 0.0f) {
+			hoverT = isHovered ? 1.0f : 0.0f;
+			pressT = (isHovered && clicked) ? 1.0f : 0.0f;
+		} else {
+			hoverT = Lerp(hoverT, isHovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
+			pressT = Lerp(pressT, (isHovered && clicked) ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast * 2);
+		}
 		if (isHovered && tooltip[0]) Tooltip::ShowFor(x, y, width, height, mx, my, tooltip, dt);
 		return isHovered && clicked;
 	}
@@ -632,6 +644,19 @@ struct SectionHeader {
 		float titleW = (float)wcslen(title) * 6.0f + 16.0f;
 		D2D1_COLOR_F lineCol = Theme::BorderSubtle();
 		r.DrawLine(x + titleW, lineY, x + width, lineY, lineCol);
+		return 26.0f;
+	}
+
+	// centered variant: title in the middle with a symmetric line on both sides
+	float DrawCentered(Renderer& r) {
+		float titleW = (float)wcslen(title) * 6.0f + 16.0f;
+		float mid = x + width * 0.5f;
+		float halfT = titleW * 0.5f;
+		r.DrawText(title, mid - halfT, y, titleW, 18, Theme::AccentPrimary(), r.pFontSmall, Renderer::AlignCenter);
+		float lineY = y + 19;
+		D2D1_COLOR_F lineCol = Theme::BorderSubtle();
+		r.DrawLine(x, lineY, mid - halfT, lineY, lineCol);
+		r.DrawLine(mid + halfT, lineY, x + width, lineY, lineCol);
 		return 26.0f;
 	}
 };
@@ -825,6 +850,8 @@ struct TextInput {
 	float blinkT = 0, hoverT = 0;
 	const wchar_t* placeholder = L"";
 	bool isDraggingText = false;
+	float measuredCharW = 7.2f;
+	float textScrollX = 0.0f;
 
 	void Layout(float px, float py, float w, const wchar_t* ph) { x = px; y = py; width = w; placeholder = ph; }
 
@@ -859,7 +886,7 @@ struct TextInput {
 		hoverT = Lerp(hoverT, hovered ? 1.0f : 0.0f, dt * Theme::Anim::SpeedFast);
 		blinkT += dt;
 
-		float charW = 7.2f;
+		float charW = (measuredCharW > 0.1f) ? measuredCharW : 7.2f;
 		float pad = 8.0f;
 
 		if (clicked) {
@@ -867,7 +894,7 @@ struct TextInput {
 				bool wasFocused = focused;
 				focused = true;
 				if (!wasFocused) blinkT = 0;
-				int pos = (int)((mx - x - pad) / charW + 0.5f);
+				int pos = (int)((mx - x - pad + textScrollX) / charW + 0.5f);
 				if (pos < 0) pos = 0; if (pos > BufLen()) pos = BufLen();
 				bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 				MoveCur(pos, shift);
@@ -880,7 +907,7 @@ struct TextInput {
 		}
 
 		if (isDraggingText && mouseDown && !clicked && focused) {
-			int pos = (int)((mx - x - pad) / charW + 0.5f);
+			int pos = (int)((mx - x - pad + textScrollX) / charW + 0.5f);
 			if (pos < 0) pos = 0; if (pos > BufLen()) pos = BufLen();
 			MoveCur(pos, true);
 		}
@@ -982,21 +1009,45 @@ struct TextInput {
 			return;
 		}
 
-		float charW = 7.2f;
 		float textX = x + pad;
+		IDWriteTextFormat* textFont = focused ? r.pFontMono : r.pFontSmall;
+		// measure real pixel widths instead of a fixed char-cell guess:
+		// URLs drifted far away from the caret
+		auto widthOf = [&](int chars) -> float {
+			if (chars <= 0 || !textFont) return 0.0f;
+			wchar_t tmp[128];
+			int n = chars < 127 ? chars : 127;
+			wcsncpy_s(tmp, 128, buffer, n);
+			float w = 0.0f;
+			r.MeasureText(tmp, textFont, 4096.0f, &w, nullptr);
+			return w;
+		};
+		int len = BufLen();
+		float fullW = widthOf(len);
+		measuredCharW = (len > 0) ? (fullW / (float)len) : 7.2f;
 
+		// keep the caret inside the field: scroll long text horizontally
+		float visW = width - pad * 2;
+		float caretW = widthOf(cursor);
+		textScrollX = (caretW > visW) ? (caretW - visW) : 0.0f;
+		float drawX = textX - textScrollX;
+
+		// clip: the text must stay on its single line no matter the length
+		if (r.pRT) r.pRT->PushAxisAlignedClip(D2D1::RectF(x + 1, y + 1, x + width - 1, y + h - 1), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+		textFont->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 		if (focused) {
 			int s = 0, e = 0;
 			if (GetSelRange(s, e)) {
 				D2D1_COLOR_F sel = Theme::AccentPrimary(); sel.a = 0.3f;
-				r.FillRoundedRect(textX + s * charW, y + 4, (float)(e - s) * charW, h - 8, 2, sel);
+				r.FillRoundedRect(drawX + widthOf(s), y + 4, widthOf(e) - widthOf(s), h - 8, 2, sel);
 			}
 		}
-
-		IDWriteTextFormat* textFont = focused ? r.pFontMono : r.pFontSmall;
-		r.DrawText(buffer, textX, y, width - pad * 2, h, Theme::TextPrimary(), textFont);
-
-		if (focused && fmod(blinkT, 1.0f) < 0.5f)
-			r.DrawLine(textX + cursor * charW, y + 5, textX + cursor * charW, y + h - 5, Theme::AccentPrimary(), 1.0f);
+		r.DrawText(buffer, drawX, y, width, h, Theme::TextPrimary(), textFont);
+		textFont->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+		if (focused && fmod(blinkT, 1.0f) < 0.5f) {
+			float cx = drawX + widthOf(cursor);
+			r.DrawLine(cx, y + 5, cx, y + h - 5, Theme::AccentPrimary(), 1.0f);
+		}
+		if (r.pRT) r.pRT->PopAxisAlignedClip();
 	}
 };

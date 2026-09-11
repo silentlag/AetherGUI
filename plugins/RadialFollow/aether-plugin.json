@@ -1,0 +1,9 @@
+{
+  "Name": "Radial Follow Smoothing",
+  "Owner": "silentlag (port of AbstractQbit's RadialFollow)",
+  "Description": "Cursor follows the pen with a radial smoothing profile: inner deadzone, soft outer clamp, tunable softness and leak. Filtering runs in millimetres.",
+  "PluginVersion": "1.0.0",
+  "LicenseIdentifier": "MIT",
+  "RepositoryUrl": "https://github.com/silentlag/AetherGUI/tree/main/Plugins/RadialFollow",
+  "WikiUrl": "https://github.com/silentlag/AetherGUI"
+}

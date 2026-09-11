@@ -214,14 +214,20 @@ bool Renderer::CreateDeviceResources() {
 	if (size.width == 0)  size.width = 1;
 	if (size.height == 0) size.height = 1;
 
+	// explicit 96 DPI: with the default 0 D2D grabs the desktop DPI (120 at 125% scaling)
+	// and multiplies every DIP on its own - combined with the UiScale transform that
+	// double-scales the whole UI (1.25*1.25) and breaks hitboxes
+	D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties();
+	rtProps.dpiX = 96.0f;
+	rtProps.dpiY = 96.0f;
 	HRESULT hr = pFactory->CreateHwndRenderTarget(
-		D2D1::RenderTargetProperties(),
+		rtProps,
 		D2D1::HwndRenderTargetProperties(hWnd, size),
 		&pRT);
 	if (FAILED(hr)) { SafeRelease(&pRT); return false; }
 
-	pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-	pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
+	pRT->SetAntialiasMode(smoothRendering ? D2D1_ANTIALIAS_MODE_PER_PRIMITIVE : D2D1_ANTIALIAS_MODE_ALIASED);
+	pRT->SetTextAntialiasMode(smoothRendering ? D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE : D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
 
 	hr = pRT->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF), &pBrush);
 	if (FAILED(hr)) { SafeRelease(&pBrush); SafeRelease(&pRT); return false; }
@@ -404,6 +410,15 @@ void Renderer::DrawLine(float x1, float y1, float x2, float y2, D2D1_COLOR_F col
 
 void Renderer::DrawBitmap(ID2D1Bitmap* bitmap, float x, float y, float w, float h, float opacity) {
 	if (!pRT || !bitmap) return;
+	// cubic resampling needs the D2D1.1 device-context DrawBitmap;
+	// the legacy render-target overload only knows nearest/linear
+	ID2D1DeviceContext* ctx = nullptr;
+	if (SUCCEEDED(pRT->QueryInterface(__uuidof(ID2D1DeviceContext), (void**)&ctx)) && ctx) {
+		ctx->DrawBitmap(bitmap, D2D1::RectF(x, y, x + w, y + h), opacity,
+			D2D1_INTERPOLATION_MODE_CUBIC, nullptr, nullptr);
+		ctx->Release();
+		return;
+	}
 	pRT->DrawBitmap(bitmap, D2D1::RectF(x, y, x + w, y + h), opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 

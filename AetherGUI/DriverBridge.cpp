@@ -430,6 +430,12 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 		return;
 	}
 
+	if (match("PRESET", 6)) {
+		int v = atoi(p);
+		if (v >= 1 && v <= 9) pendingPreset.store(v);
+		return;
+	}
+
 	if (match("POS", 3)) {
 
 		if (shmemActive) return;
@@ -440,6 +446,7 @@ void DriverBridge::ParseStatusLine(const std::string& line) {
 			penPressure.store(pp);
 			if (phz > 0.1f) penHz.store(phz);
 			penActive.store(true);
+			lastPenReportMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
 
 			{
 				std::lock_guard<std::mutex> lock(trailMutex);
@@ -503,6 +510,7 @@ void DriverBridge::PollShmem() {
 		penPressure.store(lastP);
 		if (lastHz > 0.1f) penHz.store(lastHz);
 		penActive.store(true);
+			lastPenReportMs.store(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
 	}
 	(void)n;
 

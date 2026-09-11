@@ -66,6 +66,14 @@ public:
 		D2D1_COLOR_F leftColor, D2D1_COLOR_F rightColor);
 
 	UINT deviceGeneration = 0;
+	bool smoothRendering = true;
+	void SetSmoothRendering(bool on) {
+		smoothRendering = on;
+		if (pRT) {
+			pRT->SetAntialiasMode(on ? D2D1_ANTIALIAS_MODE_PER_PRIMITIVE : D2D1_ANTIALIAS_MODE_ALIASED);
+			pRT->SetTextAntialiasMode(on ? D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE : D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+		}
+	}
 bool LoadBitmapFromFile(const std::wstring& path, ID2D1Bitmap** bitmap, UINT maxSize = 0, HRESULT* outHr = nullptr);
 	bool LoadBitmapFromMemory(const unsigned char* data, SIZE_T size, ID2D1Bitmap** bitmap, UINT maxSize = 0, HRESULT* outHr = nullptr);
 ID2D1Bitmap* CreateBitmapFromPixels(const unsigned char* pixels, UINT w, UINT h, HRESULT* outHr = nullptr);

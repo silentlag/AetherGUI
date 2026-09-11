@@ -171,6 +171,9 @@ void RestoreFromTray(HWND hWnd) {
 	ShowWindow(hWnd, SW_RESTORE);
 	SetForegroundWindow(hWnd);
 	windowHidden = false;
+	// draw the first frame synchronously so DWM never composites
+	// an empty (white) surface between restore and the next loop tick
+	if (app.renderer.pRT) app.Tick();
 }
 
 void ShowTrayMenu(HWND hWnd) {
@@ -471,8 +474,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 
 	case WM_ACTIVATE:
-		if (LOWORD(wParam) != WA_INACTIVE)
-			app.renderer.InvalidateResources();
+		// releasing D2D resources here clears the window surface for one frame
+		// (visible as a background-image flash when restoring from tray);
+		// D2D handles device loss via error codes on the next draw instead
 		InvalidateRect(hWnd, nullptr, FALSE);
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 
@@ -568,6 +572,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 
 	int winW = (int)Theme::Size::WindowWidth;
 	int winH = (int)Theme::Size::WindowHeight;
+	// scale the default window with the system DPI or 125% systems get a cramped 96dpi box
+	{
+		HDC dc = GetDC(nullptr);
+		float sysScale = dc ? (GetDeviceCaps(dc, LOGPIXELSX) / 96.0f) : 1.0f;
+		if (dc) ReleaseDC(nullptr, dc);
+		if (sysScale < 0.75f) sysScale = 0.75f;
+		if (sysScale > 2.0f) sysScale = 2.0f;
+		winW = (int)(winW * sysScale);
+		winH = (int)(winH * sysScale);
+	}
 
 	RECT wr = { 0, 0, winW, winH };
 	AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
@@ -680,7 +694,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 			if (SUCCEEDED(hr)) {
 				// full DWM rate while interacting or animating, ~30fps when idle -
 				// an uncapped loop re-renders at the composition rate and pins the GPU 24/7
-				auto budget = app.NeedsFullFrameRate() ? std::chrono::milliseconds(0) : std::chrono::milliseconds(33);
+				auto budget = app.NeedsFullFrameRate() ? std::chrono::milliseconds(0) : std::chrono::milliseconds(16);
 				nextFrameTime = std::chrono::steady_clock::now() + budget;
 			} else {
 				MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);

@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "Framework.h"
 
 namespace Theme {
@@ -86,6 +87,9 @@ namespace Theme {
 
 		// green "ok" indicators; warning/error stay fixed - they mean problems
 		float success[3] = { 0.439f, 0.831f, 0.627f };
+
+		// optional background image URL carried by file themes
+		std::wstring bgUrl;
 	};
 
 	inline void ApplyTheme(const ThemeData& t) {
@@ -375,6 +379,15 @@ inline bool ParseThemeJson(const std::string& text, ThemeData& out, std::wstring
 			if (wlen > 1) {
 				name.resize(wlen - 1);
 				MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, name.data(), wlen);
+			}
+		}
+		else if (key == "bgUrl") {
+			int wlen = MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, nullptr, 0);
+			if (wlen > 1) {
+				std::wstring w;
+				w.resize(wlen - 1);
+				MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, w.data(), wlen);
+				out.bgUrl = w;
 			}
 		}
 		else if (ParseHexColor(val, c)) {

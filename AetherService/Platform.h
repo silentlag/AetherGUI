@@ -32,7 +32,7 @@ void GlobalInit();
 
 // Ask the kernel for its finest tick (0.5ms) for the whole process lifetime.
 // Complements GlobalInit's timeBeginPeriod(1); returns silently if unavailable.
-void RequestFineTimerResolution();
+void RequestFineTimerResolution(bool enable);
 void GlobalShutdown();
 
 void SleepMs(unsigned ms);

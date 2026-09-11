@@ -49,4 +49,7 @@ protected:
 	double hoverDistance;
 	bool firstUpdate;
 	std::chrono::high_resolution_clock::time_point lastTime;
+	// host unit scale (tablet units -> mm) for the security clamp
+	double hostMmScaleX = 1.0;
+	double hostMmScaleY = 1.0;
 };

@@ -302,6 +302,103 @@ Width 152.0
 Height 95.0
 Type Wacom4100
 
+# Fansjoy FJ-S1
+Tablet 0x2D80 0x3011 0x0000 0x0000 64
+Name "Fansjoy FJ-S1"
+ReportLength 64
+MaxX 15200
+MaxY 9500
+MaxPressure 8191
+Width 152.0
+Height 95.0
+InitFeature 0x20 0x01
+Type XENX
+
+# Gaomon M5 V2
+Tablet 0x256C 0x200E 0x0000 0x0000 12 201 "GM001_T238_\d{6}$"
+Name "Gaomon M5 V2"
+ReportLength 12
+MaxX 35560
+MaxY 22000
+MaxPressure 16383
+Width 177.8
+Height 110.0
+InitString 200
+Type UCLogicV2
+
+# Gaomon WH851
+Tablet 0x256C 0x2003 0x0000 0x0000 12 201 "GM001_T21f_\d{6}$"
+Name "Gaomon WH851"
+ReportLength 12
+MaxX 40640
+MaxY 25400
+MaxPressure 16383
+Width 203.2
+Height 127.0
+InitString 200
+Type Giano
+
+# Parblo Ninos N10B
+Tablet 0x0483 0xA21B 0x0000 0x0000 10
+Name "Parblo Ninos N10B"
+ReportLength 10
+MaxX 25200
+MaxY 15750
+MaxPressure 8191
+Width 252.0
+Height 157.5
+InitReport 0x02 0xB0 0x04
+Type XPPen
+
+# Wacom Cintiq 13HD Touch (DTH-1300)
+Tablet 0x056A 0x0333 0x0000 0x0000 10
+Name "Wacom Cintiq 13HD Touch (DTH-1300)"
+ReportLength 10
+MaxX 59552
+MaxY 33848
+MaxPressure 2047
+Width 297.76
+Height 169.24
+InitFeature 0x02 0x02
+Type WacomIntuos
+
+# Wacom Cintiq 22HD (DTK-2200, boot protocol)
+Tablet 0x056A 0x00F9 0x0000 0x0000 5
+Name "Wacom Cintiq 22HD (DTK-2200, boot protocol)"
+ReportLength 5
+MaxX 95040
+MaxY 54260
+MaxPressure 2047
+Width 475.2
+Height 271.3
+InitFeature 0x02 0x02
+Type WacomCintiqV1
+
+# Wacom Cintiq Pro 32 (DTH-3220)
+Tablet 0x056A 0x0352 0x0000 0x0000 192
+Name "Wacom Cintiq Pro 32 (DTH-3220)"
+ReportLength 192
+DetectMask 0x20
+MaxX 140384
+MaxY 79316
+MaxPressure 8191
+Width 701.92
+Height 396.58
+InitFeature 0x02 0x02
+Type WacomIntuosV2
+
+# XP-Pen Artist Ultra 16
+Tablet 0x28BD 0x095D 0x0000 0x0000 14
+Name "XP-Pen Artist Ultra 16"
+ReportLength 14
+MaxX 69001
+MaxY 38795
+MaxPressure 16383
+Width 345.005
+Height 193.975
+InitReport 0x02 0xB0 0x04
+Type XPPenGen2
+
 )CFG";
 
 	const char* configDataWacomExtended = R"CFG(

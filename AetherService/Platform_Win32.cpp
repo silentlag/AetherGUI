@@ -42,7 +42,7 @@ HANDLE GetOrCreateThreadTimer() {
 
 // NtSetTimerResolution: undocumented but stable since XP. timeBeginPeriod(1)
 // bottoms out at ~1ms; this reaches 0.5ms where the kernel allows it.
-void RequestFineTimerResolution() {
+void RequestFineTimerResolution(bool enable) {
 	typedef long (NTAPI *NtSetTimerResolution_t)(unsigned long, unsigned char, unsigned long*);
 	typedef long (NTAPI *NtQueryTimerResolution_t)(unsigned long*, unsigned long*, unsigned long*);
 	HMODULE ntdll = GetModuleHandleA("ntdll.dll");
@@ -50,12 +50,19 @@ void RequestFineTimerResolution() {
 	auto ntSet = (NtSetTimerResolution_t)GetProcAddress(ntdll, "NtSetTimerResolution");
 	auto ntQuery = (NtQueryTimerResolution_t)GetProcAddress(ntdll, "NtQueryTimerResolution");
 	if (ntSet == NULL) return;
+	if (!enable) {
+		// Set=FALSE cancels this process's request; the kernel restores
+		// the previous system-wide resolution
+		unsigned long actual = 0;
+		ntSet(0, FALSE, &actual);
+		return;
+	}
 	unsigned long minRes = 0, maxRes = 0, curRes = 0;
 	if (ntQuery != NULL) ntQuery(&minRes, &maxRes, &curRes);
 	unsigned long desired = maxRes; // finest the kernel allows (typically 5000 = 0.5ms)
 	if (desired == 0) desired = 5000;
 	unsigned long actual = 0;
-	if (ntSet(desired, 1, &actual) == 0) {
+	if (ntSet(desired, TRUE, &actual) == 0) {
 		LOG_INFO("Timer resolution: %.2f ms requested (was %.2f ms)\n",
 			actual / 10000.0, curRes / 10000.0);
 	}
@@ -64,7 +71,9 @@ void RequestFineTimerResolution() {
 void GlobalInit() {
 
 	timeBeginPeriod(1);
-	RequestFineTimerResolution();
+	// fine (0.5 ms) timer resolution is requested on demand by the tablet
+	// thread while reports are actually flowing - a permanent request keeps
+	// the whole OS at a 4x higher tick rate and throttles laptops
 }
 
 void GlobalShutdown() {

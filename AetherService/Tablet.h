@@ -95,6 +95,9 @@ public:
 
 	string name = "Unknown";
 	bool isOpen;
+	// raw bytes of the last report (for the DebugReports console dump)
+	unsigned char lastReport[64] = { 0 };
+	int lastReportLen = 0;
 	bool debugEnabled;
 	int skipPackets;
 
@@ -129,6 +132,7 @@ public:
 	bool IsConfigured();
 
 	void EnableDigitizerFallback();
+	void PushPluginUnitScales();
 
 	int ReadPosition();
 	bool Write(void *buffer, int length);

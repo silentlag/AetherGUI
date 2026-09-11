@@ -105,6 +105,7 @@ public:
 
 	int particleStyle = 0;
 	int accentAnimMode = 0;
+	int perfMode = 0;
 	int animSpeedMode = 0;
 	std::wstring bgImagePath;
 	ID2D1Bitmap* bgImageBitmap = nullptr;
@@ -113,6 +114,15 @@ public:
 	wchar_t bgImageErrorText[96] = L"";
 	std::thread bgReadThread;
 	std::vector<unsigned char> bgPixels;
+
+	// animated GIF background
+	struct GifFrame { std::vector<unsigned char> px; UINT w = 0, h = 0; UINT delayMs = 100; };
+	std::vector<GifFrame> bgGifFramesBuf;
+	std::vector<ID2D1Bitmap*> bgGifBitmaps;
+	std::vector<UINT> bgGifDelays;
+	int bgGifFrame = 0;
+	double bgGifElapsed = 0.0;
+	bool bgIsGif = false;
 	std::atomic<bool> bgReadDone{ false };
 	bool bgReadOk = false;
 	UINT bgPixelW = 0, bgPixelH = 0;
@@ -240,10 +250,29 @@ public:
 	std::atomic<int> aboutUpdateState{0};
 	Button doctorResetBtn;
 	Button doctorJitterBtn;
+	Button doctorRawBtn;
+	Button doctorExportBtn;
+	Button presetSaveBtn[3];
+	Button presetLoadBtn[3];
+	bool rawReportsOn = false;
+	std::wstring doctorExportStatus;
 	Button installPluginBtn;
 	Button installLuaPluginBtn;
 	Button bgImageBtn;
 	Button bgClearBtn;
+	Button bgUrlBtn;
+	Button bgUrlOkBtn;
+	Button bgUrlCancelBtn;
+	bool bgUrlModalOpen = false;
+	bool bgUrlStatusIsError = false;
+	std::wstring bgImageUrl;
+	std::wstring bgUrlStatus;
+	std::wstring bgUrlLastUrl;
+	std::wstring bgUrlResultPath;
+	std::wstring bgUrlResultError;
+	std::atomic<bool> bgUrlBusy{ false };
+	std::atomic<bool> bgUrlDone{ false };
+	TextInput bgUrlInput;
 	Button installSourcePluginBtn;
 	Button reloadPluginBtn;
 	Button listPluginBtn;
@@ -287,6 +316,7 @@ public:
 			Kind kind = SliderOption;
 			std::string key;
 			std::wstring label;
+			std::wstring format;
 			Slider slider;
 			Toggle toggle;
 		};
@@ -407,6 +437,8 @@ public:
 	Button displayPrevBtn;
 	Button displayNextBtn;
 
+	Toggle perfToggle{ false };
+	Toggle aaToggle{ true };
 	ColorPicker accentPicker;
 
 	struct {
@@ -443,12 +475,14 @@ public:
 	void GetThemeSlotColor(Theme::ThemeData& t, int slot, float& r, float& g, float& b);
 	void SetThemeSlotColor(Theme::ThemeData& t, int slot, float r, float g, float b);
 	void ResetThemeToDefault(int themeIndex);
+	void ExportThemeToFile(int themeIndex);
 
 	float liveCursorAnimT = 0;
 	float liveCursorPulseT = 0;
 
 	bool showVisualizer = false;
 	Toggle visualizerToggle;
+	Button themeReloadBtn;
 	float vizAnimT = 0;
 
 	float measuredHz = 0;
@@ -623,6 +657,7 @@ public:
 	void UpdateAccentAnimation();
 	void DrawSegmentedRow(const wchar_t* const* names, int count, int* value, float x, float y, float w);
 	void ApplyAnimationSpeedMode();
+	void ApplyPerfTweaks();
 	bool ChooseBackgroundImage();
 	std::wstring GetBgCachePath();
 	void KickBgRead(const std::wstring& path);
@@ -660,6 +695,12 @@ private:
 	void DrawPluginManagerModal();
 
 	void DrawPluginSourceModal();
+	void DrawBgUrlModal();
+	bool ConfigHasPreset(int n);
+	void SavePresetIntoConfig(int n);
+	bool LoadPresetFromConfig(int n);
+	void MigrateLegacyPreset(int n);
+	void StartBgUrlDownload(const std::wstring& url);
 
 	void DrawUpdateModal();
 
@@ -691,6 +732,7 @@ private:
 
 	void DrawAboutPanel();
 	void DrawDoctorPanel();
+	void ExportDiagnostics();
 	void DoctorScanConflicts();
 	void DoctorKillProcess(const std::wstring& name);
 

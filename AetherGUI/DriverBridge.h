@@ -1,6 +1,7 @@
 #pragma once
 #include "Framework.h"
 #include <cstdio>
+#include <chrono>
 #include <cstdarg>
 
 class DriverBridge {
@@ -33,7 +34,18 @@ public:
 	std::atomic<float> penY{0};
 	std::atomic<float> penPressure{0};
 	std::atomic<float> penHz{0};
+	std::atomic<int> pendingPreset{0};	// service relayed a Preset hotkey, GUI applies it on Tick
 	std::atomic<bool> penActive{false};
+	std::atomic<long long> lastPenReportMs{ 0 };
+	// reports may stop when the pen leaves the tablet - "active" means a
+	// report within the last second, otherwise the GUI would render at full
+	// rate forever after the first hover
+	bool PenActiveNow() const {
+		long long last = lastPenReportMs.load();
+		if (!last) return false;
+		auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+		return (nowMs - last) < 1000;
+	}
 
 	std::atomic<float> latencyAvgMs{0};
 	std::atomic<float> latencyP99Ms{0};
