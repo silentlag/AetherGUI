@@ -22,10 +22,6 @@
   output modes, smoothing filters, native plugin filters, profiles, and performance tuning.
 </p>
 
-<p>
-  <strong>Latest update (1.1.1):</strong> kernel timer resolution is requested at 0.5 ms for the whole service lifetime and pipeline threads avoid core 0, the Jitter Test returns to Diagnostics (drift in mm, jump percentage, clean/noisy verdict) alongside a live pressure graph, the About tab gets a floating animated logo and an in-place update check, the seventh theme slot is now "Other Text" the console scrolls/wraps/copies, and the UI scale no longer multiplies the system DPI twice</p>
-
-<p>
   <img src="AetherGUI/assets/screenshots/main.png" width="780" alt="AetherGUI main window"/>
 </p>
 
@@ -45,7 +41,7 @@
   </tr>
   <tr>
     <td align="center"><strong>High Polling Rate</strong><br/>Sub-millisecond scheduling with targets up to 2000 Hz</td>
-    <td align="center"><strong>Advanced Filters</strong><br/>Smoothing · Anti-chatter · Noise reduction · Prediction · Reconstructor · Temporal Resampler · Jitter Stabilizer · Aether Smooth · Aether Trace · Lazy Mouse</td>
+    <td align="center"><strong>Advanced Filters</strong><br/>Smoothing · Anti-chatter · Noise reduction · Prediction · Reconstructor · Temporal Resampler · Jitter Stabilizer · Aether Glide · Aether Trace · Lazy Mouse · Radial Follow (plugin)</td>
   </tr>
   <tr>
     <td align="center"><strong>Built-in Tablet List</strong><br/>Knows your tablet out of the box, even if no external config files are present</td>
@@ -54,7 +50,7 @@
   <tr>
     <td align="center"><strong>Native Plugin Manager</strong><br/>Aether Filters catalog · DLL and Lua 5.4 filters · one-click build &amp; install</td>
     <td align="center"><strong>Diagnostics</strong><br/>Jitter &amp; latency tests · pen state monitor · vendor-driver conflict killer</td>
-    <td align="center"><strong>Comfort things</strong><br/>Safe area bounds · 12 themes + custom editor · background image · tray controls · DPI scaling · undo · autosave</td>
+    <td align="center"><strong>Comfort things</strong><br/>Safe area bounds · 12 themes + custom editor + export/reload · background image (PNG/JPEG/GIF) · tray controls · per-monitor DPI · undo · autosave</td>
   </tr>
 </table>
 
@@ -99,7 +95,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Tablet support list</strong></td>
-    <td align="center">Embedded fallback database compiled into the service — works without external config files, and <code>scripts/gen_tablets.py</code> imports anything missing from an OpenTabletDriver checkout (interface number and device-string checks included)</td>
+    <td align="center">Embedded fallback database compiled into the service — works without external config files (interface number and device-string checks included)</td>
     <td align="center">External JSON configurations shipped alongside the daemon</td>
   </tr>
   <tr>
@@ -246,7 +242,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Visual customization</strong></td>
-    <td align="center">12 built-in themes, file themes from <code>themes\*.json</code>, and a custom theme editor with RGB accent, breathing / rainbow accent effects, animation speed (Full / Calm / Off), and a background image with an opacity slider.</td>
+    <td align="center">12 built-in themes, file themes from <code>themes\*.json</code>, and a custom theme editor with RGB accent, breathing / wave accent effects, animation speed (Full / Calm / Off), and a background image (PNG / JPEG / animated GIF, file or URL) with an opacity slider. Themes can be exported to <code>themes\*.json</code> with the background URL included, reloaded without a restart, and shared.</td>
   </tr>
   <tr>
     <td align="center"><strong>Pressure and pen buttons</strong></td>
@@ -274,7 +270,7 @@
   </tr>
   <tr>
     <td align="center"><strong>GitHub plugin catalog</strong></td>
-    <td align="center">The Plugin Manager now uses a single Aether Filters catalog from the configurable repository source. OTD catalog loading and automatic OTD-port mapping were removed to keep plugin management manual and predictable.</td>
+    <td align="center">The Plugin Manager uses a single Aether Filters catalog from the configurable repository source, keeping plugin management manual and predictable.</td>
   </tr>
   <tr>
     <td align="center"><strong>Screen area safety</strong></td>
@@ -304,7 +300,7 @@
   Two formats are supported: <strong>native DLLs</strong> (C/C++) and <strong>Lua 5.4 scripts</strong> - the Lua runtime is built into the service,
   so script filters need no compiler or extra install. See <a href="PLUGIN_API.md">PLUGIN_API.md</a> for the full API reference and examples.
   Source filters can be added manually through <strong>Filters -> Plugins -> Build Source</strong>.
-  The Plugin Manager intentionally shows only the <strong>Aether Filters</strong> catalog; OpenTabletDriver repository browsing and automatic OTD-port mapping are not used.
+  The Plugin Manager intentionally shows only the <strong>Aether Filters</strong> catalog from the configured repository source.
 </p>
 
 <table align="center">
@@ -364,7 +360,6 @@
     <td align="center">Vendored Lua 5.4 runtime used by the service and the GUI for script filters</td>
   </tr>
   <tr><td align="center"><strong>File themes</strong></td><td align="center"><code>themes/*.json</code> - drop-in color themes (<code>#RRGGBB</code> keys, loaded at startup)</td></tr>
-  <tr><td align="center"><strong>Device database generator</strong></td><td align="center"><code>scripts/gen_tablets.py</code> - imports missing tablets from an OpenTabletDriver checkout into the embedded database</td></tr>
   <tr><td align="center"><strong>Packaging</strong></td><td align="center"><code>scripts/package.ps1</code> - Release build + zip, CI recipe in <code>.github/workflows/</code></td></tr>
   <tr>
     <td align="center"><code>plugins-example/</code></td>
@@ -692,3 +687,10 @@ AetherGUI and AetherService are unsigned and do two things antivirus heuristics 
 Long-term the only real fix is signing the binaries with an Authenticode certificate. That is on the roadmap.
 
 <div align="center">
+<h3>Windows Defender reports "Trojan:Win32/Sabsik.TE.A!ml"</h3>
+<p>This is a machine-learning false positive (<code>!ml</code>), not a signature match. The service looks unusual to heuristics: it installs a low-level keyboard hook, reads HID tablets, writes to the VMulti virtual device and changes thread priority. The same class of false positives affects other tablet drivers too. Three ways to deal with it:</p>
+<ul>
+<li><strong>Restore and allow:</strong> Windows Security – Protection history – pick the detection – Actions – <em>Allow</em>.</li>
+<li><strong>Exclude the install folder</strong> (admin PowerShell): <code>Add-MpPreference -ExclusionPath "C:\path	o\AetherGUI"</code></li>
+<li><strong>For every release</strong> the build is submitted to <a href="https://www.microsoft.com/wdsi/filesubmission">Microsoft's false positive form</a>; a whitelisted hash usually clears within days. Verify downloads against the SHA-256 in the release notes.</li>
+</ul>
