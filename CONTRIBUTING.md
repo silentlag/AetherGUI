@@ -1,3 +1,5 @@
+<div align="center">
+
 # AetherGUI Contribution Guidelines
 
 Thanks for your interest in improving AetherGUI! This document covers the
@@ -46,3 +48,5 @@ rules for contributing code, plugins, and themes.
 Include: AetherGUI version, Windows version, tablet model, and the log
 (console tab or `AetherGUI.log`). Export Diagnostics (Diagnostics tab)
 collects most of this for you.
+
+<div align="center">
