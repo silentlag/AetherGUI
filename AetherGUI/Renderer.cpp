@@ -250,7 +250,7 @@ bool Renderer::CreateTextFormats() {
 
 	hr = pDWriteFactory->CreateTextFormat(
 		Theme::Font::FamilyBrand, nullptr,
-		DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+		DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
 		Theme::Font::SizeTitle, L"", &pFontTitle);
 	if (FAILED(hr)) {
 		hr = pDWriteFactory->CreateTextFormat(
@@ -426,7 +426,15 @@ void Renderer::DrawBitmapTinted(ID2D1Bitmap* bitmap, float x, float y, float w, 
 	if (!bitmap || !pRT || !pBrush) return;
 
 	D2D1_RECT_F destRect = D2D1::RectF(x, y, x + w, y + h);
-	pRT->DrawBitmap(bitmap, destRect, opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+	// the cubic-interpolation overload lives on ID2D1DeviceContext, not the base target
+	ID2D1DeviceContext* logoCtx = nullptr;
+	if (SUCCEEDED(pRT->QueryInterface(__uuidof(ID2D1DeviceContext), (void**)&logoCtx)) && logoCtx) {
+		logoCtx->DrawBitmap(bitmap, destRect, opacity, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+		logoCtx->Release();
+	}
+	else {
+		pRT->DrawBitmap(bitmap, destRect, opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+	}
 
 	ID2D1BitmapBrush* pBmpBrush = nullptr;
 	HRESULT hr = pRT->CreateBitmapBrush(bitmap, &pBmpBrush);

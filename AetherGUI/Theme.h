@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <deque>
 #include "Framework.h"
 
 namespace Theme {
@@ -269,7 +270,7 @@ namespace Theme {
 	}
 
 	namespace Font {
-		constexpr wchar_t FamilyBrand[] = L"badcache";
+		constexpr wchar_t FamilyBrand[] = L"Segoe UI Light";
 		constexpr wchar_t Family[] = L"Segoe UI";
 		constexpr wchar_t FamilyMono[] = L"Consolas";
 		constexpr float SizeTitle = 22.0f;
@@ -317,6 +318,9 @@ namespace Theme {
 // Missing keys keep the Midnight defaults.
 inline std::vector<std::wstring> FileThemeNames;
 inline std::vector<ThemeData> FileThemes;
+// append-only: pointers into these stay valid across reloads forever
+inline std::deque<std::wstring> StableThemeNames;
+inline std::deque<ThemeData> StableThemeDefaults;
 
 inline bool ParseHexColor(const std::string& s, float* out4) {
 	if (s.size() < 7 || s[0] != '#') return false;
@@ -437,10 +441,13 @@ inline int LoadThemesFromFolder(const std::wstring& dir) {
 		} while (FindNextFileW(h, &fd));
 		FindClose(h);
 	}
-	FileThemeNames = std::move(names);
+	size_t poolBase = StableThemeNames.size();
+	for (auto& nm : names)
+		StableThemeNames.push_back(std::move(nm));
+	FileThemeNames.clear();
 	FileThemes = std::move(parsed);
 	for (size_t i = 0; i < FileThemes.size(); ++i)
-		FileThemes[i].name = FileThemeNames[i].c_str();
+		FileThemes[i].name = StableThemeNames[poolBase + i].c_str();
 	return (int)FileThemes.size();
 }
 

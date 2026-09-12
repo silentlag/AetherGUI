@@ -1359,7 +1359,7 @@ void AetherApp::InitControls() {
 	// file themes from themes/*.json next to the exe
 	int fileThemeCount = Theme::LoadThemesFromExeFolder();
 	if (fileThemeCount > 0)
-		driver.DebugLog("THEME", "file themes loaded: %d (first: %S)", fileThemeCount, Theme::FileThemeNames[0].c_str());
+		driver.DebugLog("THEME", "file themes loaded: %d (first: %S)", fileThemeCount, Theme::FileThemes[0].name);
 	for (int i = 0; i < fileThemeCount && uiThemeCount < MAX_THEMES; i++) {
 		// update-in-place: a re-exported theme with the same name replaces the old one
 		int existing = -1;
@@ -1368,11 +1368,13 @@ void AetherApp::InitControls() {
 		}
 		if (existing >= 0) {
 			uiThemes[existing] = Theme::FileThemes[i];
-			uiThemeDefaults[existing] = &Theme::FileThemes[i];
+			Theme::StableThemeDefaults.push_back(Theme::FileThemes[i]);
+			uiThemeDefaults[existing] = &Theme::StableThemeDefaults.back();
 			themeEdited[existing] = false;
 		} else {
 			uiThemes[uiThemeCount] = Theme::FileThemes[i];
-			uiThemeDefaults[uiThemeCount] = &Theme::FileThemes[i];
+			Theme::StableThemeDefaults.push_back(Theme::FileThemes[i]);
+			uiThemeDefaults[uiThemeCount] = &Theme::StableThemeDefaults.back();
 			themeEdited[uiThemeCount] = false;
 			uiThemeCount++;
 		}
@@ -1989,7 +1991,10 @@ void AetherApp::SendStartupSettingsToDriver() {
 		area.screenWidth.value, area.screenHeight.value,
 		actualScreenX, actualScreenY);
 	driver.SendCommand(cmd);
-	ClampTabletAreaToFull((driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f, (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f);
+	// unknown tablet dims (fresh connect): the 95mm fallback clamp would corrupt
+	// a Center Y saved for a larger tablet - skip until real dims arrive
+	if (driver.tabletWidth > 1.0f && driver.tabletHeight > 1.0f)
+		ClampTabletAreaToFull(driver.tabletWidth, driver.tabletHeight);
 	sprintf_s(cmd, "TabletArea %.2f %.2f %.2f %.2f",
 		area.tabletWidth.value, area.tabletHeight.value,
 		area.tabletX.value, area.tabletY.value);
@@ -2841,13 +2846,19 @@ void AetherApp::Tick() {
 
 	renderer.BeginFrame();
 	DrawBackground();
+
+	// any modal overlay blocks ALL input to the UI behind it (header included)
+	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen || calibrationOpen ||
+		vmultiMissingModalOpen || bgUrlModalOpen || runtimeMissingModalOpen;
+	bool frameClick = mouseClicked;
+	bool frameDown = mouseDown;
+	if (modalOpen) {
+		mouseClicked = false;
+		mouseDown = false; // block drags through the overlay too
+	}
 	DrawHeader();
 
 	int oldTab = sidebar.activeIndex;
-	bool modalOpen = pluginManagerOpen || pluginSourceEditorOpen || updateModalOpen || calibrationOpen || vmultiMissingModalOpen;
-	bool frameClick = mouseClicked;
-	if (modalOpen)
-		mouseClicked = false;
 	sidebar.Update(mouseX, mouseY, mouseClicked, deltaTime);
 	sidebar.Draw(renderer);
 
@@ -2905,8 +2916,7 @@ void AetherApp::Tick() {
 
 	if (renderer.pRT) renderer.pRT->SetTransform(oldTransform);
 	EndClipContent();
-	if (modalOpen)
-		mouseClicked = frameClick;
+	// input stays blocked until after the scrollbar; modals restore it below
 
 	{
 		float contentH = 0, scrollY = 0;
@@ -2977,12 +2987,19 @@ void AetherApp::Tick() {
 			renderer.DrawBitmap(bgDraw, (winW - dw) * 0.5f, (winH - dh) * 0.5f, dw, dh, bgImageOpacity.value / 100.0f);
 		}
 	}
+	// restore input for ALL modals - must be BEFORE any modal draws
+	if (modalOpen) {
+		mouseClicked = frameClick;
+		mouseDown = frameDown;
+		Tooltip::visible = false; Tooltip::text = nullptr; // no tooltips through the overlay
+	}
 	if (pluginManagerOpen)
 		DrawPluginManagerModal();
 	if (pluginSourceEditorOpen)
 		DrawPluginSourceModal();
 	if (updateModalOpen)
 		DrawUpdateModal();
+
 	if (runtimeMissingModalOpen)
 		DrawRuntimeMissingModal();
 	if (bgUrlModalOpen)
@@ -2991,7 +3008,8 @@ if (vmultiMissingModalOpen)
 		DrawVMultiMissingModal();
 	if (calibrationOpen)
 		DrawCalibrationModal();
-	Tooltip::Draw(renderer);
+	if (!modalOpen)
+		Tooltip::Draw(renderer);
 	renderer.EndFrame();
 
 	mouseClicked = false;
@@ -3022,7 +3040,10 @@ void AetherApp::ApplyAllSettings() {
 		driver.SendCommand(cmd);
 	}
 
-	ClampTabletAreaToFull((driver.tabletWidth > 1.0f) ? driver.tabletWidth : 152.0f, (driver.tabletHeight > 1.0f) ? driver.tabletHeight : 95.0f);
+	// unknown tablet dims (fresh connect): the 95mm fallback clamp would corrupt
+	// a Center Y saved for a larger tablet - skip until real dims arrive
+	if (driver.tabletWidth > 1.0f && driver.tabletHeight > 1.0f)
+		ClampTabletAreaToFull(driver.tabletWidth, driver.tabletHeight);
 	sprintf_s(cmd, "TabletArea %.2f %.2f %.2f %.2f",
 		area.tabletWidth.value, area.tabletHeight.value,
 		area.tabletX.value, area.tabletY.value);
@@ -4001,8 +4022,9 @@ void AetherApp::ApplyCalibrationResult() {
 	float h = maxY - minY;
 	if (w < 5.0f || h < 5.0f) return;
 
-	area.tabletX.value      = minX;
-	area.tabletY.value      = minY;
+	// areaTablet.x/y are CENTER coords, not corners - midpoint of the two taps
+	area.tabletX.value      = (minX + maxX) * 0.5f;
+	area.tabletY.value      = (minY + maxY) * 0.5f;
 	area.tabletWidth.value  = w;
 	area.tabletHeight.value = h;
 	ApplyAllSettings();
@@ -4313,8 +4335,9 @@ void AetherApp::RefreshPluginList() {
 				entry.key = std::wstring(folderData.cFileName) + L"\\" + dllData.cFileName;
 				entry.name = folderData.cFileName;
 				entry.dllName = dllData.cFileName;
-				entry.enabled.value = true;
-				entry.enabled.animT = 1.0f;
+				// a newly dropped plugin starts disabled; the user enables it manually
+				entry.enabled.value = false;
+				entry.enabled.animT = 0.0f;
 				for (const PluginEntry& previous : previousEntries) {
 					if (_wcsicmp(previous.key.c_str(), entry.key.c_str()) == 0) {
 						entry.enabled.value = previous.enabled.value;
@@ -4472,22 +4495,40 @@ bool AetherApp::RefreshPluginCatalog() {
 
 	std::string sourceTreeJson;
 	bool sourceTreeLoaded = HttpGetUtf8(L"api.github.com", sourceTreePath, sourceTreeJson);
+	if (!sourceTreeLoaded) {
+		driver.DebugLog("CATALOG", "tree fetch failed: owner=%S name=%S ref=%S body_len=%u",
+			sourceOwner.c_str(), sourceName.c_str(), sourceRef.c_str(), (unsigned)sourceTreeJson.size());
+	}
 	if (!sourceTreeLoaded && pluginEntries.empty()) {
-		pluginCatalogStatus = L"Failed to load GitHub repository tree";
+		pluginCatalogStatus = L"Failed to load GitHub repository tree (rate limit? try again in a minute)";
 		return false;
 	}
 
-	std::string sourcePrefix = "Plugins/";
+	// GitHub API paths are case-sensitive - accept Plugins/ and plugins/
+	std::string sourcePrefix = "Plugins/"; // canonical casing
 	std::vector<std::string> allPaths = sourceTreeLoaded ? JsonTreePaths(sourceTreeJson, false) : std::vector<std::string>();
 	std::set<std::string> sourceFolders;
+	auto startsWithCI = [](const std::string& s, const char* prefix) {
+		size_t n = strlen(prefix);
+		if (s.size() < n) return false;
+		for (size_t i = 0; i < n; i++) {
+			char a = s[i]; char b = prefix[i];
+			if (a >= 'A' && a <= 'Z') a += 32;
+			if (b >= 'A' && b <= 'Z') b += 32;
+			if (a != b) return false;
+		}
+		return true;
+	};
 	for (const std::string& path : allPaths) {
-		if (path.find(sourcePrefix) != 0)
+		if (!startsWithCI(path, "Plugins/"))
 			continue;
-		size_t nextSlash = path.find('/', sourcePrefix.size());
-		if (nextSlash == std::string::npos || nextSlash == sourcePrefix.size())
+		// remember the actual casing from the repo (GitHub is case-sensitive)
+		sourcePrefix = path.substr(0, 8); // "Plugins/" or "plugins/"
+		size_t nextSlash = path.find('/', 8);
+		if (nextSlash == std::string::npos || nextSlash == 8)
 			continue;
 
-		std::string topFolder = path.substr(sourcePrefix.size(), nextSlash - sourcePrefix.size());
+		std::string topFolder = path.substr(8, nextSlash - 8);
 		sourceFolders.insert(topFolder);
 
 	}
@@ -5021,6 +5062,10 @@ void AetherApp::StartBgUrlDownload(const std::wstring& url) {
 			bool png = body.size() > 4 && (unsigned char)body[0] == 0x89 && body[1] == 'P' && body[2] == 'N';
 			bool jpg = body.size() > 3 && (unsigned char)body[0] == 0xFF && (unsigned char)body[1] == 0xD8;
 			bool gif = body.size() > 6 && body[0] == 'G' && body[1] == 'I' && body[2] == 'F' && body[3] == '8';
+			driver.DebugLog("BGURL", "magic: png=%d jpg=%d gif=%d size=%u first=%02X %02X %02X %02X",
+				(int)png, (int)jpg, (int)gif, (unsigned)body.size(),
+				(unsigned char)(body.size()>0?body[0]:0), (unsigned char)(body.size()>1?body[1]:0),
+				(unsigned char)(body.size()>2?body[2]:0), (unsigned char)(body.size()>3?body[3]:0));
 			if (png || jpg || gif) {
 				// unique name per download: the RAM/disk caches key off the path,
 				// reusing one name kept showing the previous image
@@ -5279,6 +5324,7 @@ static bool DecodeGifFrames(const std::wstring& path, std::vector<AetherApp::Gif
 		UINT count = 0;
 		if (FAILED(dec->GetFrameCount(&count)) || count == 0) break;
 		if (count > 256) count = 256;
+		OutputDebugStringA(("GIFDEC: frameCount=" + std::to_string(count)).c_str());
 		for (UINT i = 0; i < count; i++) {
 			IWICBitmapFrameDecode* frame = nullptr;
 			IWICFormatConverter* conv = nullptr;
@@ -5315,6 +5361,9 @@ static bool DecodeGifFrames(const std::wstring& path, std::vector<AetherApp::Gif
 					WICRect rc = { 0, 0, (INT)cw, (INT)ch };
 					if (SUCCEEDED(conv->CopyPixels(&rc, stride, (UINT)gf.px.size(), gf.px.data()))) {
 						gf.w = cw; gf.h = ch; gf.delayMs = delayMs;
+						char dbg[96];
+						snprintf(dbg, sizeof(dbg), "GIFDEC: frame %u %ux%u delay=%ums", i, cw, ch, delayMs);
+						OutputDebugStringA(dbg);
 						frames.push_back(std::move(gf));
 					}
 				}
@@ -5628,15 +5677,15 @@ void AetherApp::DrawHeader() {
 	
 	float titleX = Theme::Size::SidebarWidth + 16;
 	DrawLogoBadge(titleX, 10);
-	renderer.DrawText(L"AETHER", titleX + 42, -1, 170, h, Theme::TextPrimary(), renderer.pFontTitle);
+	renderer.DrawText(L"AETHER", titleX + 44, -1, 170, h, Theme::TextPrimary(), renderer.pFontTitle);
 
 	
 	if (w > 480.0f) {
 		float badgeW = 62.0f;
 		float badgeH = 22.0f;
-		renderer.FillRoundedRect(titleX + 126, 13, badgeW, badgeH, 4, Theme::BgElevated());
-		renderer.DrawRoundedRect(titleX + 126, 13, badgeW, badgeH, 4, Theme::BorderSubtle(), 1.0f);
-		renderer.DrawText(AETHERGUI_VERSION_W, titleX + 126, 13, badgeW, badgeH,
+		renderer.FillRoundedRect(titleX + 129, 13, badgeW, badgeH, 4, Theme::BgElevated());
+		renderer.DrawRoundedRect(titleX + 129, 13, badgeW, badgeH, 4, Theme::BorderSubtle(), 1.0f);
+		renderer.DrawText(AETHERGUI_VERSION_W, titleX + 129, 13, badgeW, badgeH,
 			Theme::TextMuted(), renderer.pFontSmall, Renderer::AlignCenter);
 	}
 
@@ -6453,6 +6502,9 @@ void AetherApp::DrawSettingsPanel() {
 		bgClearBtn.Layout(cx + (bgBtnW + 8.0f) * 2.0f, y, bgBtnW, 26, L"Clear Image", false);
 		if (bgClearBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 			if (bgImageBitmap) { bgImageBitmap->Release(); bgImageBitmap = nullptr; }
+			for (ID2D1Bitmap* b : bgGifBitmaps) if (b) b->Release();
+			bgGifBitmaps.clear(); bgGifDelays.clear(); bgGifFramesBuf.clear();
+			bgIsGif = false; bgGifFrame = 0; bgGifElapsed = 0.0;
 			bgLastPixels.clear(); bgLastPixels.shrink_to_fit(); bgLastW = bgLastH = 0;
 			bgImagePath.clear();
 			bgImageUrl.clear();
@@ -7197,14 +7249,14 @@ void AetherApp::DrawBgUrlModal() {
 	renderer.DrawText(L"Supported: imgur.com, imgbb.com, discord.com (direct PNG/JPEG/GIF links)", x + 18, y + 88, w - 36, 16, Theme::TextAccent(), renderer.pFontSmall);
 
 	bgUrlInput.x = x + 18;
-	bgUrlInput.y = y + 96;
+	bgUrlInput.y = y + 112;
 	bgUrlInput.width = w - 36;
 	if (!bgUrlBusy.load())
 		bgUrlInput.Update(mouseX, mouseY, mouseDown, mouseClicked, deltaTime);
 	bgUrlInput.Draw(renderer);
 
 	if (!bgUrlStatus.empty())
-		renderer.DrawText(bgUrlStatus.c_str(), x + 18, y + 130, w - 36, 44,
+		renderer.DrawText(bgUrlStatus.c_str(), x + 18, y + 148, w - 36, 44,
 			bgUrlStatusIsError ? Theme::Error() : Theme::TextMuted(), renderer.pFontSmall);
 
 	float btnW = 120.0f;
@@ -7281,7 +7333,7 @@ void AetherApp::DrawVMultiMissingModal() {
 
 	vmultiMissingOpenBtn.Layout(x + w - 140, btnY, 122, 30, L"Download", true);
 	if (vmultiMissingOpenBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
-		OpenExternalUrl(L"https://silentlag.s-ul.eu/rWK8xAqA");
+		OpenExternalUrl(L"https://github.com/silentlag/AetherGUI/tree/main/driver_vmulti");
 	}
 	vmultiMissingOpenBtn.Draw(renderer);
 }
@@ -8993,8 +9045,7 @@ void AetherApp::ExportThemeToFile(int themeIndex) {
 			<< "\"textPrimary\": \"" << rgb(t.textPri) << "\", \"textSecondary\": \"" << rgb(t.textSec) << "\",\r\n"
 			<< "\"textMuted\": \"" << rgb(t.textMut) << "\",\r\n"
 			<< "\"borderSubtle\": \"" << rgba(t.borderSub) << "\", \"borderNormal\": \"" << rgba(t.borderNorm) << "\",\r\n"
-			<< "\"accent\": \"" << rgb(t.accent) << "\", \"success\": \"" << rgb(t.success) << "\""
-			<< "\", \"bgUrl\": \"" << bgUrlUtf8 << "\"}\r\n";
+			<< "\"accent\": \"" << rgb(t.accent) << "\", \"success\": \"" << rgb(t.success) << "\", \"bgUrl\": \"" << bgUrlUtf8 << "\"}\r\n";
 
 		std::ofstream out(dir + L"\\" + file + L".json", std::ios::binary);
 		if (!out.is_open())
@@ -9159,6 +9210,50 @@ void AetherApp::DrawThemeSelector(float x, float& y, float w) {
 		themeReloadBtn.height = 26;
 		if (themeReloadBtn.Update(mouseX, mouseY, mouseClicked, deltaTime)) {
 			int fileThemeCount2 = Theme::LoadThemesFromExeFolder();
+			// removal pass: drop themes whose file is gone, restore overwritten built-ins
+			static const Theme::ThemeData* builtinDefaults[12] = {
+				&Theme::Themes::Midnight, &Theme::Themes::Abyss, &Theme::Themes::Nord, &Theme::Themes::Void,
+				&Theme::Themes::Rose, &Theme::Themes::Ember, &Theme::Themes::Matcha, &Theme::Themes::Lavender,
+				&Theme::Themes::Snow, &Theme::Themes::Linen, &Theme::Themes::Frost, &Theme::Themes::Blossom
+			};
+			for (int j = uiThemeCount - 1; j >= 0; j--) {
+				bool stillInFiles = false;
+				for (int i = 0; i < fileThemeCount2; i++) {
+					if (_wcsicmp(uiThemes[j].name, Theme::FileThemes[i].name) == 0) { stillInFiles = true; break; }
+				}
+				if (stillInFiles)
+					continue;
+				// the visible background came from this theme - drop it with the theme
+				if (!uiThemes[j].bgUrl.empty() && _wcsicmp(uiThemes[j].bgUrl.c_str(), bgImageUrl.c_str()) == 0) {
+					if (bgImageBitmap) { bgImageBitmap->Release(); bgImageBitmap = nullptr; }
+					for (ID2D1Bitmap* b : bgGifBitmaps) if (b) b->Release();
+					bgGifBitmaps.clear(); bgGifDelays.clear(); bgGifFramesBuf.clear();
+					bgIsGif = false; bgGifFrame = 0; bgGifElapsed = 0.0;
+					bgLastPixels.clear(); bgLastPixels.shrink_to_fit(); bgLastW = bgLastH = 0;
+					bgImagePath.clear(); bgImageUrl.clear(); bgImageLoaded = false;
+					DeleteFileW(GetBgCachePath().c_str());
+				}
+				if (j < 12) {
+					// file theme had overwritten this built-in slot - restore it
+					if (uiThemeDefaults[j] != builtinDefaults[j]) {
+						uiThemes[j] = *builtinDefaults[j];
+						uiThemeDefaults[j] = builtinDefaults[j];
+						themeEdited[j] = false;
+					}
+				} else {
+					// appended file theme - delete the slot
+					for (int k = j; k < uiThemeCount - 1; k++) {
+						uiThemes[k] = uiThemes[k + 1];
+						uiThemeDefaults[k] = uiThemeDefaults[k + 1];
+						themeEdited[k] = themeEdited[k + 1];
+					}
+					uiThemeCount--;
+					if (currentTheme == j) currentTheme = 0;
+					else if (currentTheme > j) currentTheme--;
+					if (editingTheme == j) { editingTheme = -1; editingSlot = -1; }
+					else if (editingTheme > j) editingTheme--;
+				}
+			}
 			for (int i = 0; i < fileThemeCount2; i++) {
 				int existing = -1;
 				for (int j = 0; j < uiThemeCount; j++) {
@@ -9166,11 +9261,13 @@ void AetherApp::DrawThemeSelector(float x, float& y, float w) {
 				}
 				if (existing >= 0) {
 					uiThemes[existing] = Theme::FileThemes[i];
-					uiThemeDefaults[existing] = &Theme::FileThemes[i];
+					Theme::StableThemeDefaults.push_back(Theme::FileThemes[i]);
+					uiThemeDefaults[existing] = &Theme::StableThemeDefaults.back();
 					themeEdited[existing] = false;
 				} else if (uiThemeCount < MAX_THEMES) {
 					uiThemes[uiThemeCount] = Theme::FileThemes[i];
-					uiThemeDefaults[uiThemeCount] = &Theme::FileThemes[i];
+					Theme::StableThemeDefaults.push_back(Theme::FileThemes[i]);
+					uiThemeDefaults[uiThemeCount] = &Theme::StableThemeDefaults.back();
 					themeEdited[uiThemeCount] = false;
 					uiThemeCount++;
 				}
