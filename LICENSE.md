@@ -1,5 +1,3 @@
-<div align="center">
-
 Copyright (c) 2025 silentlag. All rights reserved.
 
 ## 1. Permitted use
@@ -18,12 +16,12 @@ in-app credits, or the repository link is not allowed.
 
 You may **not**, without prior written permission from the author:
 
- redistribute this project, or a substantial part of it, under your own
+- redistribute this project, or a substantial part of it, under your own
   name or as part of another product;
- borrow, copy, or relicense code, assets, or design from this project in
+- borrow, copy, or relicense code, assets, or design from this project in
   another project;
- sell, sublicense, or commercially distribute the software or derivatives;
- upload the software to stores, driver packs, or bundle it with other
+- sell, sublicense, or commercially distribute the software or derivatives;
+- upload the software to stores, driver packs, or bundle it with other
   distributions.
 
 ## 4. Contributions
@@ -49,6 +47,3 @@ OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
 
 For permission to reuse or redistribute beyond the terms above, open an
 issue in the official repository or contact the author directly.
-
-<div align="center">
-

@@ -85,7 +85,7 @@
   </tr>
   <tr>
     <td align="center"><strong>How the tablet is read</strong></td>
-    <td align="center">Report thread runs at <code>THREAD_PRIORITY_TIME_CRITICAL</code> registered with MMCSS <em>Pro Audio</em>, kernel timer resolution requested at 0.5 ms, pipeline threads stay off the DPC-heavy core 0, packet filters share a lock-free <code>IsTimedOutputEnabled</code> snapshot, status output is written without CRT flushes</td>
+    <td align="center">Report thread runs at <code>THREAD_PRIORITY_TIME_CRITICAL</code> registered with MMCSS <em>Pro Audio</em>, kernel timer resolution requested at 0.5 ms only while pen reports flow (released after 3 s idle), pipeline threads stay off the DPC-heavy core 0, packet filters share a lock-free <code>IsTimedOutputEnabled</code> snapshot, status output is written without CRT flushes</td>
     <td align="center">.NET-managed input pipeline; quality is excellent, but the language brings a garbage collector and JIT</td>
   </tr>
   <tr>
@@ -218,7 +218,7 @@
   </tr>
   <tr>
     <td align="center"><strong>Windows Ink / Digitizer</strong></td>
-    <td align="center">Requires the optional <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a>.</td>
+    <td align="center">Requires the optional <a href="https://github.com/silentlag/AetherGUI/tree/main/driver_vmulti">VMulti driver</a>.</td>
   </tr>
   <tr>
     <td align="center"><strong>High polling / Interpolation</strong></td>
@@ -378,7 +378,7 @@
 <p>
   Windows 10 / 11 · Visual Studio 2022 or newer · Windows SDK
   <br/>
-  Optional: <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a> for Windows Ink / Digitizer output
+  Optional: <a href="https://github.com/silentlag/AetherGUI/tree/main/driver_vmulti">VMulti driver</a> for Windows Ink / Digitizer output
 </p>
 
 <br/>
@@ -590,7 +590,7 @@
     &bull; Visual C++ 2015-2022 Redistributable (x64) &mdash; ships <code>MSVCP140.dll</code>, <code>VCRUNTIME140.dll</code>, <code>VCRUNTIME140_1.dll</code><br/>
     &bull; Universal CRT (UCRT) &mdash; built into Windows 10 / 11, also installed by the VC++ redist<br/>
     &bull; <code>HID.DLL</code>, <code>SETUPAPI.dll</code>, <code>WINUSB.DLL</code>, <code>AVRT.dll</code>, <code>WINMM.dll</code>, <code>ole32.dll</code>, <code>bcrypt.dll</code> &mdash; all part of Windows, no extra install needed<br/>
-    &bull; Optional: <a href="https://silentlag.s-ul.eu/rWK8xAqA">VMulti driver</a> only if you use Windows Ink / Digitizer output<br/><br/>
+    &bull; Optional: <a href="https://github.com/silentlag/AetherGUI/tree/main/driver_vmulti">VMulti driver</a> only if you use Windows Ink / Digitizer output<br/><br/>
     <strong>How to install:</strong> grab the <a href="https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/">Visual C++ Redistributable Runtimes All-in-One</a> pack from TechPowerUp (it bundles every x86 + x64 version from 2005 to 2015-2022), run <code>install_all.bat</code> or just install the <strong>Visual C++ 2015-2022 x64</strong> redist, then reboot and restart AetherGUI. After that the service should start and report <code>Tablet found!</code> in the Console tab.<br/><br/>
     A fast check: open the install folder in File Explorer, right-click <code>AetherService.exe</code> &rarr; Properties &rarr; Details; if Windows immediately pops <em>"This app can't run on your PC"</em> or <em>"The code execution cannot proceed because MSVCP140.dll was not found"</em>, it is a runtime dependency, not a bug in the driver. A <code>[BRIDGE] CreateProcess failed with error 0x000000C1</code> / <code>0x0000007E</code> line in <code>AetherGUI.log</code> usually means the same thing.</td>
   </tr>
@@ -665,29 +665,28 @@
 </div>
 
 
-<div align="center">
-  
-<h2> Antivirus false positives </h2>
+
+## Antivirus false positives
 
 AetherGUI and AetherService are unsigned and do two things antivirus heuristics dislike: hook input and talk to HID devices. That is the entire job of a tablet driver, so generic ML detectors (Wacatac, Bearfoos, Wacapew, etc.) sometimes flag the binaries even when nothing malicious is happening.
 
 **If your AV quarantines AetherGUI or AetherService:**
 
- **Check the detection name.** Anything starting with `Wacatac`, `Bearfoos`, `Wacapew`, `Trojan:Script/...`, or labelled `Generic` / `Heuristic` / `ML.Detection` is almost certainly a false positive. Real malware is named specifically (for example `Trojan:Win32/Emotet!gen`).
- **Verify the download.** Only trust binaries from the official GitHub Releases page, and compare the file's SHA-256 against what the release notes list.
- **Add an exclusion.** Windows Security &rarr; Virus & threat protection &rarr; Manage settings &rarr; Exclusions &rarr; add the AetherGUI install folder.
- **Submit it as a false positive.** Microsoft accepts submissions at <https://www.microsoft.com/en-us/wdsi/filesubmission>. Each report makes future releases less likely to be flagged.
+1. **Check the detection name.** Anything starting with `Wacatac`, `Bearfoos`, `Wacapew`, `Trojan:Script/...`, or labelled `Generic` / `Heuristic` / `ML.Detection` is almost certainly a false positive. Real malware is named specifically (for example `Trojan:Win32/Emotet!gen`).
+2. **Verify the download.** Only trust binaries from the official GitHub Releases page, and compare the file's SHA-256 against what the release notes list.
+3. **Add an exclusion.** Windows Security &rarr; Virus & threat protection &rarr; Manage settings &rarr; Exclusions &rarr; add the AetherGUI install folder.
+4. **Submit it as a false positive.** Microsoft accepts submissions at <https://www.microsoft.com/en-us/wdsi/filesubmission>. Each report makes future releases less likely to be flagged.
 
 **What the project already does to minimise this:**
 
-Both binaries ship a populated `VS_VERSION_INFO` block (CompanyName, ProductName, FileDescription, version numbers).
-Linker flags `/GUARD:CF` (Control Flow Guard) and `/CETCOMPAT` are enabled on both `AetherGUI.exe` and `AetherService.exe`. Many heuristics treat the absence of these as a suspicious signal.
-No packing, no obfuscation, no anti-debug tricks. The binaries are exactly what they look like: a regular Win32 application and a console helper.
-The source is open &mdash; anything an AV report claims the binary does can be verified directly in the tree.
+- Both binaries ship a populated `VS_VERSION_INFO` block (CompanyName, ProductName, FileDescription, version numbers).
+- Linker flags `/GUARD:CF` (Control Flow Guard) and `/CETCOMPAT` are enabled on both `AetherGUI.exe` and `AetherService.exe`. Many heuristics treat the absence of these as a suspicious signal.
+- No packing, no obfuscation, no anti-debug tricks. The binaries are exactly what they look like: a regular Win32 application and a console helper.
+- The source is open &mdash; anything an AV report claims the binary does can be verified directly in the tree.
 
 Long-term the only real fix is signing the binaries with an Authenticode certificate. That is on the roadmap.
 
-
+<div align="center">
 <h3>Windows Defender reports "Trojan:Win32/Sabsik.TE.A!ml"</h3>
 <p>This is a machine-learning false positive (<code>!ml</code>), not a signature match. The service looks unusual to heuristics: it installs a low-level keyboard hook, reads HID tablets, writes to the VMulti virtual device and changes thread priority. The same class of false positives affects other tablet drivers too. Three ways to deal with it:</p>
 <ul>
